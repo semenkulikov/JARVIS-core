@@ -1,0 +1,2 @@
+# Optional alternative TTS engine. Not needed for default Silero setup.
+piper-tts==1.8.0

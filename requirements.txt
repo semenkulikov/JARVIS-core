@@ -1,0 +1,14 @@
+# Direct runtime dependencies, pinned to the tested Windows Python 3.12 environment.
+# Models are downloaded separately. This is not a full transitive lockfile.
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy==2.5.4
+scipy==1.18.1
+sounddevice==0.5.6
+torch==2.15.0+cpu
+vosk==0.3.45
+openwakeword==0.6.0
+onnxruntime==1.31.1
+ruaccent==1.5.8.3
+watchdog==7.1.0
+RapidFuzz==3.14.6
+keyring==25.7.0; sys_platform == "win32"

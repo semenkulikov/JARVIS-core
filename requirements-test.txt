@@ -1,0 +1,5 @@
+# Intentionally excludes Torch, models, microphones, cloud and Windows audio dependencies.
+numpy==2.5.4
+RapidFuzz==3.14.6
+watchdog==7.1.0
+pytest==9.2.0
