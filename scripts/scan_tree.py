@@ -15,7 +15,7 @@ SECRET_PATTERNS={
  'absolute_windows_user_path':r'(?i)\b[A-Z]:[\\/]+Users[\\/]+[^\\/\s]+',
  'ipv4_literal':r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])',
 }
-OFFICIAL_HOSTS={'github.com','download.pytorch.org','alphacephei.com','platform.fatsecret.com','www.google.com','www.youtube.com','example.invalid'}
+OFFICIAL_HOSTS={'github.com','download.pytorch.org','alphacephei.com','platform.fatsecret.com','www.google.com','www.youtube.com','example.invalid','img.shields.io','keepachangelog.com','semver.org'}
 BAD_NAMES=['*.bak*','.env','.env.*','*.env','config.json','config.legacy.json','notes.md','*.log','*.wav','*.mp3','*.ogg','*.pt','*.pth','*.onnx','*.tflite','*.zip','*.pem','*.key']
 def entropy(text):
  return -sum(n/len(text)*math.log2(n/len(text)) for n in collections.Counter(text).values())

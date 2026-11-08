@@ -1,0 +1,31 @@
+name: Ошибка
+description: Помощник сделал не то или завершился с ошибкой
+title: "Ошибка: "
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что произошло
+      description: Какую фразу вы сказали и что помощник ответил или записал в журнал. Без секретов, без config.json и без текста из буфера обмена.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что должно было произойти
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Windows и Python
+      placeholder: Windows 11, Python 3.12
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Проверка
+      options:
+        - label: Я не приложил настройки, секреты, модели и журнал с личными фразами
+          required: true

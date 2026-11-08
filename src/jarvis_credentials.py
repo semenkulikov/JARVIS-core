@@ -16,9 +16,17 @@ def backend():
   # FatSecret CLI may use system Python. Reuse this app's installed pure-Python keyring.
   site=Path(__file__).resolve().parent.parent/'.venv'/'Lib'/'site-packages'
   if not site.is_dir():return None
-  sys.path.insert(0,str(site))
-  try:from keyring.backends.Windows import WinVaultKeyring
-  except ImportError:return None
+  site_s=str(site)
+  sys.path.insert(0,site_s)
+  try:
+   from keyring.backends.Windows import WinVaultKeyring
+   _BACKEND=WinVaultKeyring()
+   return _BACKEND
+  except ImportError:
+   return None
+  finally:
+   try:sys.path.remove(site_s)
+   except ValueError:pass
  _BACKEND=WinVaultKeyring();return _BACKEND
 
 def service(name):

@@ -1,7 +1,7 @@
-# Jarvis Russian voice assistant — portable source export based on v3.12.
+# Jarvis voice assistant 3.12.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
-import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib
+import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib, shlex, urllib.parse
 from logging.handlers import RotatingFileHandler
 import ctypes
 from ctypes import wintypes
@@ -446,8 +446,8 @@ def quick_facts(cfg):
     return s
 
 def placeholder(cfg):
-    u = str(cfg.get("webhook_url", "")); a = str(cfg.get("webhook_auth_header", ""))
-    return (not u.startswith("http")) or "PASTE" in u or "PASTE" in a
+    u = str(cfg.get("webhook_url", "")).strip(); a = str(cfg.get("webhook_auth_header", ""))
+    return urllib.parse.urlparse(u).scheme not in ("http", "https") or "PASTE" in u or "PASTE" in a
 
 def clean_auth(h):
     h = str(h or "").replace("\ufeff", "").strip().strip('"').strip("'").strip()
@@ -457,6 +457,8 @@ def clean_auth(h):
 def post(cfg, payload):
     import urllib.request
     url = str(cfg["webhook_url"]).replace("\ufeff", "").strip().strip('"').strip("'").strip()
+    if urllib.parse.urlparse(url).scheme not in ("http", "https"):
+        raise ValueError("webhook_url_scheme")
     req = urllib.request.Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                                  headers={"Content-Type": "application/json", "Authorization": clean_auth(cfg["webhook_auth_header"])})
     with urllib.request.urlopen(req, timeout=25) as r:
@@ -469,6 +471,7 @@ def post_retry(cfg, payload, total=30, independent=False):
         try: return post(cfg, payload)
         except Exception as e:
             err = e; log.warning("webhook attempt failed: %s code=%s", type(e).__name__, getattr(e, "code", None))
+            if isinstance(e, ValueError): break
             code = getattr(e, "code", None)
             if code and 400 <= int(code) < 500 and int(code) != 429: break
             time.sleep(3)
@@ -804,8 +807,10 @@ def run_alias(al, text, cfg, trig, test):
         subprocess.Popen(["rundll32.exe", "user32.dll,LockWorkStation"])
     elif act == "shell":
         ack()
-        if test: log.info("TEST: would run %s", al.get("target")); return
-        subprocess.Popen(al.get("target", ""), shell=True)
+        target = str(al.get("target", "")).strip()
+        if test: log.info("TEST: would run %s", target); return
+        if not target: return
+        subprocess.Popen(shlex.split(target, posix=False), shell=False)
     elif act == "webhook":
         free_phrase(al.get("target") or text, cfg, trig, test, ack=reply or None)
     else:
@@ -1215,7 +1220,7 @@ def main():
     dev = pick_device(cfg)
     stream = sd.InputStream(device=dev, samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=cb)
     stream.start()
-    log.info("listening (v3.12) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+    log.info("listening (v3.12.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0

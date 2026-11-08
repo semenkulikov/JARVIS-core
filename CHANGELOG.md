@@ -1,38 +1,20 @@
-# История
+# История изменений
 
-Все записи ниже — функциональная история ветки 3.x, без приватных логов и диалогов.
+Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
+Номера версий — [семантические](https://semver.org/lang/ru/).
 
-## Portable export (based on v3.12)
-- Отдельный `src/`, portable runtime paths, `.venv`, нейтральный example config.
-- Личные сценарии opt-in, отдельный credential namespace, никакой миграции live-данных.
-- Документация, model-free pytest/CI, MIT, privacy guardrails и pinned direct dependencies.
-- Это source export, не автоматическая переустановка работающего экземпляра.
+## [3.12.0] — 2026-11-08
 
-## v3.12 — Надёжность
-- User-level supervisor, singleton mutex, intentional stop, crash-loop backoff.
-- Scoped Windows Credential Manager и локальный fallback; таблицы pytest.
+Первый опубликованный выпуск. Номера 3.0–3.11 были черновиками на одной машине и отдельными версиями в репозиторий не входили.
 
-## v3.11 — Проактивность
-- Queued proactive outbox, expiry, quiet hours, persistent DND/dedup.
-- Calendar, configurable training/protein reminders, presence morning webhook.
-- Приоритет новой wake-команды; speaker verification только оценивалась, не включена.
+### Добавлено
 
-## v3.10 — Быстрые команды
-- Repeat/slower, stateful mute, volume, screenshot/disk/window/clipboard.
-- Persistent timers/reminders, notes, Todoist/food/clipboard payload kinds.
-- Focus/sleep/workout, read-only Git, shutdown с отдельным подтверждением.
+- Голосовой помощник для Windows: активация по имени «Джарвис» и двум хлопкам, локальные команды, таймеры и напоминания, режимы фокуса, сна и тренировки.
+- Выключение компьютера с задержкой и отдельным голосовым подтверждением.
+- Очередь объявлений без команды: тихие часы, «не беспокоить», напоминания календаря. Тренировки, питание и утренний брифинг выключены, пока их не включат.
+- Наблюдатель перезапускает процесс после сбоя с паузой от 2 до 300 секунд. Секреты хранятся в диспетчере учётных данных Windows.
+- Вызов своего сервера и ответ текстовыми файлами в `outbox/`. Контракт описан в `docs/PAYLOADS.md` и `docs/PROACTIVE_CONTRACT.md`.
+- Тесты без моделей, звука и сети. Проверка запускается на Windows и Linux.
+- Документация на русском, README на двух языках, шаблоны задач, `pyproject.toml` с версией и ruff.
 
-## v3.9 — Скорость
-- Per-request PERF metrics, sentence-level TTS pipeline, cached parallel ack.
-- Watchdog + polling fallback, bounded template cache, background warmup, fuzzy router.
-
-## v3.8 — Статус и речь
-- Единые ударения local/webhook, падежи чисел и status vocabulary.
-- Dated stale-cache reading и устранение повторяющихся waiting fillers.
-
-## v3.5–3.7 — Разговор
-- Local small talk, natural status aliases, улучшение capture/stop ack.
-- Follow-up после речи, echo/confidence guards, словарь разговорного произношения.
-
-## v3.0–3.4 — Основа
-- Vosk, wake/claps, offline TTS/FX, локальные aliases, webhook/outbox replies.
+[3.12.0]: https://github.com/semenkulikov/JARVIS-core/releases/tag/v3.12.0

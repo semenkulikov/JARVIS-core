@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Уязвимость
+    url: mailto:saifutdinov2006@mail.ru
+    about: Не создавайте публичную задачу. Напишите на почту. Подробности в SECURITY.md.

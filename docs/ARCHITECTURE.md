@@ -2,81 +2,73 @@
 
 ```mermaid
 flowchart TD
-    MIC[Микрофон 16 kHz] --> WAKE[openWakeWord / Vosk / два хлопка]
-    WAKE --> CAP[Запись фразы + confidence + prebuffer]
-    CAP --> ROUTER[Локальный router: exact + conservative fuzzy]
-    ROUTER --> LOCAL[Команды / small talk / кэш статуса]
-    ROUTER --> POST[HTTP webhook + cached ack параллельно]
-    POST --> SERVER[Внешний AI-сервис и его инструменты]
-    SERVER --> OUTBOX[UTF-8 outbox: части + финал]
-    OUTBOX --> WATCH[Watchdog + polling fallback]
-    LOCAL --> TEXT[Числа / время / RUAccent / словарь ударений]
+    MIC[Микрофон 16 кГц] --> WAKE[Имя, openWakeWord или два хлопка]
+    WAKE --> CAP[Фраза, уверенность, буфер до имени]
+    CAP --> ROUTER[Разбор: точное и осторожное нечёткое совпадение]
+    ROUTER --> LOCAL[Команды, короткие реплики, кэш статуса]
+    ROUTER --> POST[Запрос на ваш сервер и короткая реплика параллельно]
+    POST --> SERVER[Ваш сервер и его инструменты]
+    SERVER --> OUTBOX[Текст UTF-8 в outbox: части и конец]
+    OUTBOX --> WATCH[События файлов и запасной опрос]
+    LOCAL --> TEXT[Числа, время, ударения]
     WATCH --> TEXT
-    TEXT --> TTS[Silero / optional Piper + FX]
-    TTS --> SPEAKER[Первое предложение сразу; следующее синтезируется параллельно]
-    SPEAKER --> FOLLOW[Follow-up 7–10 s + echo guard]
+    TEXT --> TTS[Silero или Piper и обработка голоса]
+    TTS --> SPEAKER[Первое предложение сразу, следующее готовится параллельно]
+    SPEAKER --> FOLLOW[Продолжение 7–10 с, защита от эха]
     FOLLOW --> CAP
-    CACHE[status.json + persistent timer/proactive state] --> LOCAL
-    CACHE --> PRO[Проактивная очередь: тихие часы / DND / expiry]
+    CACHE[status.json, таймеры, состояние объявлений] --> LOCAL
+    CACHE --> PRO[Очередь: тихие часы, не беспокоить, срок]
     PRO --> TEXT
-    SUP[User-level supervisor + named mutex] --> WAKE
+    SUP[Наблюдатель и блокировка одной копии] --> WAKE
 ```
 
 ## Компоненты
 
-| Файл в `src/` | Ответственность |
+| Файл в `src/` | Что делает |
 |---|---|
-| `jarvis_voice.py` | Микрофон, wake/claps, capture, router, follow-up, TTS, HTTP/outbox |
-| `jarvis_text.py` | Русские числа/падежи/время, транслитерация, RUAccent и словарь |
-| `jarvis_speed.py` | PERF-трейсы, события outbox, fuzzy intent, шаблоны предсинтеза |
-| `jarvis_fx.py` | Обработка тембра через NumPy/SciPy |
-| `jarvis_commands.py` | Парсер быстрых команд, OS adapter, persistent timers, подтверждение shutdown |
+| `jarvis_voice.py` | Микрофон, активация, запись фразы, разбор, продолжение, синтез, запрос и `outbox` |
+| `jarvis_text.py` | Русские числа, падежи, время, латиница, RUAccent и словарь ударений |
+| `jarvis_speed.py` | Замеры задержек, события `outbox`, нечёткий разбор команды, заготовки фраз |
+| `jarvis_fx.py` | Тембр через NumPy и SciPy |
+| `jarvis_commands.py` | Быстрые команды, действия Windows, таймеры на диске, подтверждение выключения |
 | `laptop.py` | Клавиши, экран, батарея, температура, поиск проектов |
-| `jarvis_proactive.py` | Очередь, расписания, присутствие, календарь, DND, dedup |
-| `jarvis_runtime.py` | Singleton mutex, intentional stop, crash-loop backoff |
-| `jarvis_supervisor.py` | Один worker, восстановление после сбоя, без admin |
-| `jarvis_credentials.py` | Только собственные scoped записи Windows Credential Manager |
-| `jarvis_paths.py` | Портативные пути, не создаёт файлов на import |
-| `fatsecret_call.py` | Необязательный stdlib OAuth1 adapter для внешней интеграции |
+| `jarvis_proactive.py` | Очередь, расписания, присутствие, календарь, «не беспокоить», без повторов |
+| `jarvis_runtime.py` | Одна копия, намеренная остановка, нарастающая пауза после сбоев |
+| `jarvis_supervisor.py` | Один рабочий процесс, перезапуск после сбоя, без прав администратора |
+| `jarvis_credentials.py` | Только свои записи в диспетчере учётных данных Windows |
+| `jarvis_paths.py` | Пути рабочего каталога. При импорте файлы не создаёт |
+| `fatsecret_call.py` | Необязательный клиент OAuth1 для FatSecret |
 
-## Что находится только локально
+## Что лежит только на диске
 
-`JARVIS_HOME` (по умолчанию `runtime/` рядом с `src/`):
+`JARVIS_HOME` по умолчанию — каталог `runtime/` рядом с `src/`:
 
 ```text
 runtime/
   config.json
-  models/                 # отдельно скачанные Vosk / Silero / wake weights
-  cache/status.json       # данные внешнего сервиса
+  models/                 # отдельно скачанные Vosk, Silero и модель имени
+  cache/status.json       # данные вашего сервера
   cache/status.txt        # необязательный текстовый снимок
-  cache/tts/              # синтезированные WAV
+  cache/tts/              # готовые WAV
   cache/timers.json
   cache/proactive_state.json
-  outbox/                 # только текст; done/ — архив обработанных файлов
+  outbox/                 # только текст; done/ — уже озвученные файлы
   screenshots/
   notes.md
   logs/jarvis_voice.log
   logs/supervisor.log
-  stop                    # запрос намеренной остановки
-  cache/intentional_stop  # supervisor не перезапускает вручную остановленный worker
+  stop                    # просьба остановиться
+  cache/intentional_stop  # наблюдатель не поднимает процесс, остановленный вручную
 ```
 
-Никаких runtime-данных, моделей, аудио или credentials в Git.
-Пути поиска проектов задаются через `projects_dir` / `JARVIS_PROJECTS`.
+Этих файлов, моделей и звука в Git нет. Каталог проектов задаётся ключом `projects_dir` или переменной `JARVIS_PROJECTS`.
 
-## Скорость и память
+## Скорость
 
-Небольшая Vosk-модель общая для command/free recognizers; команды дополнительно ограничены
-грамматикой. В фоне прогреваются Vosk, TTS и RUAccent. Частые фразы/acks и ограниченный набор
-временных шаблонов кешируются целыми WAV, не склейкой отдельных цифр.
-Синтез защищён lock; producer подготавливает следующую фразу во время playback текущей.
-Outbox использует события с резервным опросом; стабильность файла проверяется отдельно.
+Одна небольшая модель Vosk служит и командам, и свободным вопросам. Для команд словарь дополнительно сужен. В фоне заранее готовятся Vosk, синтез и RUAccent. Частые фразы и короткий набор шаблонов времени хранятся целыми WAV, а не склейкой цифр.
 
-События `PERF event`/`PERF summary` содержат request ID и временные точки:
-wake → speech_end → recognized → route → ack_start → post_start → first_server_file →
-first_reply_audio → done. Отсутствующие точки допустимы для локальных команд.
-`scripts/latency_summary.py` считает интервалы, median и p95; серверное время отдельно
-не наблюдается и входит в ожидание файла. Рабочий набор RAM меняется после trim;
-private committed memory и working set — разные показатели, не обещается фиксированная RAM.
+Синтез идёт под замком: пока играет текущая фраза, готовится следующая. Папка `outbox` читается по событиям файловой системы, а если событий нет — коротким опросом. Перед чтением проверяется, что запись файла закончилась.
 
-Полноценный аудиопрогон и воспроизводимость скачивания моделей не входят в model-free CI.
+Строки `PERF event` и `PERF summary` содержат номер запроса и точки: пробуждение, конец речи, распознавание, маршрут, начало реплики, отправка, первый файл сервера, первый звук ответа, конец. У локальной команды части точек нет. `scripts/latency_summary.py` считает интервалы, медиану и 95-й перцентиль. Время сервера отдельно не измеряется: оно входит в ожидание файла.
+
+Модели Vosk, Silero и RUAccent остаются в памяти процесса. Проверка на GitHub не включает микрофон и не скачивает модели.

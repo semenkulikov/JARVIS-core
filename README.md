@@ -1,64 +1,185 @@
-# Jarvis Voice Assistant
+# Jarvis
 
-**English:** A Windows-first Russian voice assistant with offline speech recognition and
-TTS, fast local commands, follow-up conversations and an optional streaming AI webhook.
-No cloud account is needed for local commands. Models and private data are not bundled.
+**English** · [Русский](README.ru.md)
 
-Русскоязычный голосовой дворецкий для Windows: отвечает «сэр», быстро выполняет
-локальные команды и передаёт свободные вопросы внешнему AI-сервису.
+[![Tests](https://github.com/semenkulikov/JARVIS-core/actions/workflows/tests.yml/badge.svg)](https://github.com/semenkulikov/JARVIS-core/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
+![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-## Возможности
+Current release: [3.12.0](https://github.com/semenkulikov/JARVIS-core/releases/tag/v3.12.0)
 
-- **Активация:** «Джарвис» / hey Jarvis или два хлопка; защита от части ложных срабатываний.
-- **Разговор без повторного имени:** окно продолжения 7 секунд, после вопроса — 10 секунд;
-  защита от эха и низкой уверенности распознавания.
-- **Короткий разговор локально:** приветствия, «как дела», благодарности и прощания —
-  13 групп, 34 варианта ответов, без обращения к серверу.
-- **Статус:** задачи, планы на сегодня, питание и проекты из внешнего кэша;
-  устаревшие данные озвучиваются с временем, затем запрашивается обновление.
-- **Быстрые команды:** время, заряд, температура, браузер/приложения, проекты и Git;
-  громкость, mute/unmute, медиа, экран и блокировка.
-- **Повседневные действия:** скриншот, свободное место, закрытие окна, чтение буфера,
-  заметки, таймеры и повторяющиеся напоминания с сохранением на диск.
-- **Контекст:** «повтори», «что ты сказал», «помедленнее»; режимы фокуса, сна и тренировки.
-- **Безопасное выключение:** задержка + отдельное голосовое подтверждение;
-  команда «отмени выключение» отменяет запланированное выключение.
-- **Внешний AI:** свободные вопросы, календарь, Todoist, питание/FatSecret, перевод
-  и краткий пересказ буфера — при наличии совместимого сервера.
-- **Проактивность:** очередь объявлений, тихие часы, «не беспокоить», напоминания
-  о событиях; персональные сценарии тренировок/питания/утреннего брифинга выключены по умолчанию.
-- **Прерывание:** «замолчи», «заткнись», «стоп»; новая команда с именем имеет приоритет.
+An offline Russian-language voice assistant for Windows. Say "Джарвис" (or clap twice),
+give a command, hear the answer. Speech recognition and speech synthesis run on your
+machine, so local commands need no network and no account. Free-form questions can be
+forwarded to your own AI server through a simple webhook.
 
-## Как устроено
+## Features
 
-Vosk распознаёт речь; openWakeWord и детектор хлопков активируют прослушивание.
-Нечёткий router сначала ищет безопасный локальный intent. Остальное отправляется
-в webhook; ответ приходит частями через текстовый outbox. Silero `eugene` озвучивает
-предложения по мере готовности, RUAccent + словарь исправляют ударения, FX оформляет голос.
-Watchdog следит за файлами; stdlib-supervisor перезапускает listener после падения.
-Windows Credential Manager хранит секреты; runtime-данные отделены от исходников.
+- **Activation:** wake word "Джарвис" / "hey Jarvis" (openWakeWord + Vosk) or two claps.
+- **Follow-ups without the wake word:** the microphone stays open for 7 seconds after a
+  reply and 10 seconds after a question, with echo and low-confidence filtering.
+- **Local commands:** time, battery, temperature, volume and media keys, screenshots,
+  free disk space, screen off and lock, close window, read clipboard, quick notes,
+  read-only Git status, open apps and projects.
+- **Timers and recurring reminders** that survive restarts.
+- **Modes:** focus, sleep, workout.
+- **Shutdown with a safety step:** a delay plus a separate spoken confirmation; can be cancelled.
+- **Interruption:** "стоп", "замолчи" and similar phrases cut the speech; a new command
+  with the wake word takes priority.
+- **Streaming answers:** replies from the server are spoken sentence by sentence while the
+  next one is being synthesized.
+- **Proactive announcements:** queue, quiet hours, do-not-disturb, calendar reminders.
+  Personal scenarios (training, nutrition, morning briefing) are off by default.
+- **Reliability:** a supervisor restarts the listener after a crash with backoff; secrets
+  live in Windows Credential Manager; every request produces a latency trace.
 
-## Начать
+## How it works
 
-- [Установка на Windows](docs/SETUP_WINDOWS.md)
-- [Полный список команд](docs/COMMANDS.md) · [Настройки](docs/CONFIGURATION.md)
-- [Архитектура](docs/ARCHITECTURE.md) · [Webhook/outbox API](docs/PAYLOADS.md)
-- [Проактивные уведомления и кэш](docs/PROACTIVE_CONTRACT.md)
-- [Безопасность](SECURITY.md) · [История](CHANGELOG.md)
+```mermaid
+flowchart LR
+    MIC[Microphone] --> WAKE[Wake word / claps]
+    WAKE --> STT[Vosk speech recognition]
+    STT --> ROUTER{Local intent?}
+    ROUTER -- yes --> CMD[Local command]
+    ROUTER -- no --> HOOK[Webhook to your server]
+    HOOK --> OUTBOX[Text files in outbox/]
+    CMD --> TTS[RUAccent stress + Silero TTS + voice FX]
+    OUTBOX --> TTS
+    TTS --> SPK[Speakers]
+```
 
-**Тесты без моделей, звука, сети и системных действий:**
+A conservative fuzzy router matches the phrase against known commands first. Anything
+else goes to the webhook; the server answers by writing plain-text files into the local
+`outbox/` folder, and the listener speaks them as they appear.
+
+## Requirements
+
+- Windows 10 or 11, Python 3.12 (x64), a microphone and speakers. No admin rights needed.
+- CPU only; no GPU is required.
+- Three models downloaded separately (they are not bundled): a small Vosk Russian model,
+  Silero `v5_6_ru`, and the openWakeWord `hey_jarvis` model. RUAccent downloads its own
+  weights on first start.
+
+## Quick start
+
+```powershell
+git clone https://github.com/semenkulikov/JARVIS-core.git
+cd JARVIS-core
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+New-Item -ItemType Directory -Force .\runtime | Out-Null
+Copy-Item .\config.example.json .\runtime\config.json
+```
+
+Download the models into `runtime\models\` as described in
+[docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md), then start the assistant:
+
+```powershell
+wscript.exe .\start_jarvis.vbs
+```
+
+The listener runs hidden and **may speak out loud**. To stop it, create the file
+`runtime\stop`. Logs are in `runtime\logs\jarvis_voice.log`.
+
+## Example commands
+
+The assistant understands Russian only. Say "Джарвис" first; during a conversation the
+name can be skipped.
+
+| Say | Result |
+|---|---|
+| «который час» | Current time |
+| «таймер на пять минут» | Timer that survives a restart |
+| «каждые сорок пять минут напоминай встать» | Recurring reminder |
+| «громкость на тридцать» | Volume to 30% |
+| «сделай скриншот» | Screenshot saved to `runtime/screenshots/` |
+| «сколько свободно на диске» | Free space on the system drive |
+| «прочитай буфер» | Reads the clipboard aloud |
+| «запиши идею …» | Appends a note to `runtime/notes.md` |
+| «последний коммит проекта …» | Last commit of a project in your projects folder |
+| «режим фокуса» | Pauses music and starts a break timer |
+| «выключи через десять минут» | Asks for confirmation; say «да» to schedule shutdown |
+| «не беспокоить» | Silences proactive announcements |
+| «повтори», «помедленнее» | Repeats the last reply, optionally slower |
+
+The full list is in [docs/COMMANDS.md](docs/COMMANDS.md) (Russian).
+
+## Connecting your own server (optional)
+
+Leave `webhook_url` empty to use local commands only. To enable free-form questions,
+set it in `runtime/config.json` and store the `Authorization` value in Credential Manager:
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\credentials.py set webhook_auth_header
+```
+
+The listener sends an HTTP POST with JSON:
+
+```json
+{
+  "request_id": "generated-uuid",
+  "text": "what the user said",
+  "trigger": "wake_word",
+  "listener_ack": "Сейчас, сэр.",
+  "kind": "free"
+}
+```
+
+The server replies by writing `outbox/<request_id>.1.txt`, `.2.txt`, … and finally
+`<request_id>.txt`. Each file is plain UTF-8 text, written to a temporary name and then
+renamed. The server is not part of this repository. The full contract, including
+request kinds and proactive announcements, is in [docs/PAYLOADS.md](docs/PAYLOADS.md)
+and [docs/PROACTIVE_CONTRACT.md](docs/PROACTIVE_CONTRACT.md) (Russian).
+
+## Tests
+
+The test suite needs no models, audio, network or system access and runs on Windows and Linux:
 
 ```powershell
 python -m pip install -r requirements-test.txt
 python -m pytest -q
-# Или: .\run_tests.ps1 -Python .\.venv\Scripts\python.exe
 ```
 
-Структура: `src/` — приложение, `tests/` — pytest, `scripts/` — утилиты,
-`docs/` — документация, `config.example.json` — обезличенный пример.
-Локальный `runtime/` и `.venv/` никогда не коммитятся.
+Latency statistics from the log: `python scripts/latency_summary.py --last 20`.
 
-**Ограничения:** полноценный listener рассчитан на Windows; серверные routines не входят
-в репозиторий. Speaker verification не реализована: это не голосовая аутентификация.
-Точность Vosk и ударений не абсолютна; свежая установка с моделями требует отдельной проверки.
-Модели и сторонние библиотеки имеют собственные лицензии; MIT относится к коду проекта.
+## Limitations
+
+- The listener works on Windows only; CI covers the model-free logic on Linux too.
+- Russian only: commands, speech recognition and synthesis.
+- Recognition and stress placement are not perfect.
+- The wake word and the spoken shutdown confirmation are not authentication. A video
+  or another person can trigger the assistant. Speaker verification is not implemented.
+- The server side is not included, so free-form questions need your own backend.
+- Models and third-party libraries have their own licenses.
+
+## Documentation
+
+All documents except this README are in Russian.
+
+- [Windows setup](docs/SETUP_WINDOWS.md)
+- [Commands](docs/COMMANDS.md) · [Configuration](docs/CONFIGURATION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Webhook and outbox](docs/PAYLOADS.md) · [Proactive announcements](docs/PROACTIVE_CONTRACT.md)
+- [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+
+## Roadmap
+
+- Speaker verification, so a recording or another person cannot run system commands.
+- A Windows installer for the environment and the three speech models.
+- Piper as a packaged second voice next to Silero.
+
+## Contributing
+
+Issues and pull requests are welcome in Russian or English. How to run the tests and what not to commit: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security
+
+Report a vulnerability by email, not in a public issue: [saifutdinov2006@mail.ru](mailto:saifutdinov2006@mail.ru). Rules for secrets, the clipboard and shutdown are in [SECURITY.md](SECURITY.md).
+
+## License
+
+The project code is released under the [MIT License](LICENSE). Speech models and
+third-party libraries are covered by their own licenses.
+
+Author: Semen Saifutdinov.
