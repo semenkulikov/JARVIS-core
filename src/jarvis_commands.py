@@ -4,6 +4,7 @@ No actions happen on import. Every OS-facing operation lives behind SystemBacken
 import base64,ctypes,datetime,json,logging,math,os,re,shutil,subprocess,threading,time,uuid
 from pathlib import Path
 import jarvis_paths as PATHS
+import jarvis_codemode as CODE
 log=logging.getLogger('jarvis')
 
 NUM={'ноль':0,'один':1,'одна':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'одиннадцать':11,'двенадцать':12,'тринадцать':13,'четырнадцать':14,'пятнадцать':15,'шестнадцать':16,'семнадцать':17,'восемнадцать':18,'девятнадцать':19,'двадцать':20,'тридцать':30,'сорок':40,'пятьдесят':50,'шестьдесят':60,'семьдесят':70,'восемьдесят':80,'девяносто':90,'сто':100,'двести':200,'триста':300,'четыреста':400,'пятьсот':500,'шестьсот':600,'семьсот':700,'восемьсот':800,'девятьсот':900,'полтора':1.5,'полторы':1.5}
@@ -34,7 +35,7 @@ def duration(t):
   return int(n*60) if n is not None and n>0 else None
  return int(total) if total>0 else None
 
-PHRASES=['повтори','повтори ответ','еще раз','помедленнее','еще раз помедленнее','повтори помедленнее','что ты сказал','включи звук','верни звук','выключи звук','без звука','сделай скриншот','снимок экрана','скриншот','сделай снимок экрана','сколько свободно на диске','свободное место на диске','закрой окно','закрой активное окно','прочитай буфер','прочитай буфер обмена','переведи буфер','кратко перескажи буфер','отмени выключение','отмена выключения','отключи выключение','отмени таймер','отключи таймер','убери таймер','отмени напоминания','отключи напоминания','отмени все таймеры и напоминания','режим фокуса','режим сна','режим тренировки']
+PHRASES=CODE.PHRASES+['повтори','повтори ответ','еще раз','помедленнее','еще раз помедленнее','повтори помедленнее','что ты сказал','включи звук','верни звук','выключи звук','без звука','сделай скриншот','снимок экрана','скриншот','сделай снимок экрана','сколько свободно на диске','свободное место на диске','закрой окно','закрой активное окно','прочитай буфер','прочитай буфер обмена','переведи буфер','кратко перескажи буфер','отмени выключение','отмена выключения','отключи выключение','отмени таймер','отключи таймер','убери таймер','отмени напоминания','отключи напоминания','отмени все таймеры и напоминания','режим фокуса','режим сна','режим тренировки']
 
 CACHED_REPLIES = ["Звук включён, сэр.","Скриншот сохранён, сэр.","Буфер обмена пуст, сэр.","Идея записана, сэр.","Отправил запрос на закрытие окна, сэр.","Выключение отменено, сэр.","Запланированного выключения нет, сэр.","Выключение не подтверждено, сэр.","Не удалось выполнить команду, сэр.","Пока нечего повторить, сэр.","Назовите проект полной командой, сэр.","Назовите громкость от нуля до ста процентов, сэр.","Назовите полный интервал таймера, сэр.","Активных таймеров или напоминаний нет, сэр.","Режим сна, сэр. Гашу экран и блокирую ноутбук.","Режим тренировки, сэр. Музыка, таймер подхода и напоминание о воде.","Сэр, пора выпить воды.","Сэр, время сделать перерыв."]
 STRESS = {w.replace("+",""):w for w in ["гр+омкость","скринш+от","б+уфер","обм+ена","п+олный","п+олной","интерв+ал","напомин+ание","напомин+ания","напомин+аний","сохранен+о","своб+одно","гигаб+айта","д+иске","отпр+авил","закр+ытие","окн+а","подтвержд+аете","подтвержд+аю","подтвержден+о","выключ+ение","в+ыключить","д+анные","м+огут","пот+еряны","скаж+ите","зад+ержку","с+уток","отменен+о","ф+окуса","м+узыка","п+аузе","гаш+у","ноутб+ук","тренир+овки","подх+ода","перер+ыв","в+ыпить","вод+ы","ид+ея","зап+исана","повтор+ить","н+ечего","уд+алось","ком+анду","ком+андой","реж+им","нул+я","т+аймера","+или","заплан+ированного","пол+учено","вод+е","выключ+ения","в+ыполнить","назов+ите","пор+а","сд+елать"]}
@@ -50,6 +51,8 @@ def duration_label(secs):
 def match(text,cfg=None):
  t=norm(text).strip(' .');cfg=cfg or {}
  def a(cmd,**kw):return {'name':'quick_'+cmd,'action':'quick2','cmd':cmd,**kw}
+ sub=CODE.match(t)
+ if sub:return sub
  if t in ('повтори','повтори ответ','еще раз','что ты сказал'):return a('repeat',slow=False)
  if t in ('помедленнее','еще раз помедленнее','повтори помедленнее','говори медленнее'):return a('repeat',slow=True)
  if t in ('включи звук','верни звук'):return a('mute',muted=False)
@@ -182,6 +185,11 @@ class SystemBackend:
    finally:k.GlobalUnlock(h)
    return text[:limit],len(text)>limit
   finally:u.CloseClipboard()
+ def window_ocr(self,limit):
+  r=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',base64.b64encode(CODE.WINDOW_OCR_PS.encode('utf-16le')).decode()],capture_output=True,timeout=30,creationflags=0x08000000 if os.name=='nt' else 0)
+  if r.returncode:raise OSError('ocr_failed')
+  text='\n'.join(x.strip() for x in r.stdout.decode('utf-8','replace').splitlines() if x.strip())
+  return text[:limit],len(text)>limit
  def screenshot(self,folder):
   folder=Path(folder);folder.mkdir(parents=True,exist_ok=True);target=folder/('jarvis_'+datetime.datetime.now().strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:6]+'.png')
   q=str(target).replace("'","''")
@@ -237,6 +245,14 @@ class SystemBackend:
 class Controller:
  def __init__(self,base,backend=None,clock=time.monotonic):
   self.base=Path(base);self.backend=backend or SystemBackend();self.clock=clock;self.pending_shutdown=None;self.notes_lock=threading.Lock();self.timers=PersistentTimers(self.base/'cache'/'timers.json')
+ def explain_error(self,cfg,say,forward):
+  limit=int(cfg.get('explain_error_max_chars',6000));text,truncated=self.backend.clipboard(limit);source='clipboard'
+  if not text.strip() and cfg.get('explain_error_ocr',True):
+   try:text,truncated=self.backend.window_ocr(limit);source='window_ocr'
+   except Exception as e:log.info('window OCR unavailable (%s)',type(e).__name__);text=''
+  if not text.strip():say('Не вижу текста ошибки, сэр. Скопируйте его в буфер обмена.',cfg);return True
+  log.info('explain_error source=%s chars=%d truncated=%s',source,len(text),truncated)
+  forward(CODE.EXPLAIN_INSTRUCTION,kind=CODE.EXPLAIN_KIND,extra_payload=CODE.explain_payload(text,truncated,source));return True
  def clear_pending(self):self.pending_shutdown=None
  def confirmation(self,text,trigger,confidence,heard_at=None):
   pending=self.pending_shutdown
@@ -295,6 +311,8 @@ class Controller:
      with (self.base/'notes.md').open('a',encoding='utf-8') as f:f.write('- '+datetime.datetime.now().astimezone().isoformat(timespec='seconds')+' — '+note+'\n')
     say('Идея записана, сэр.',cfg);return True
    if cmd=='todoist_add':forward(a['task_text'],kind='todoist_add',extra_payload={'task_text':a['task_text']});return True
+   if cmd==CODE.EXPLAIN_KIND:return self.explain_error(cfg,say,forward)
+   if cmd==CODE.CONFIRM_KIND:forward(CODE.confirm_text(text),kind=CODE.CONFIRM_KIND,extra_payload=CODE.confirm_payload(a));return True
    if cmd=='food_log':forward(a['food_text'],kind='food_log',extra_payload={'food_text':a['food_text'],'confirmation_policy':'chat_if_ambiguous'});return True
    if cmd=='shutdown_prepare':
     secs=a.get('seconds')

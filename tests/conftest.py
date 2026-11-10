@@ -25,7 +25,7 @@ def guards(monkeypatch):
  import jarvis_credentials as C,jarvis_commands as Q,laptop
  monkeypatch.setattr(urllib.request,'urlopen',forbidden)
  monkeypatch.setattr(C,'backend',lambda:None)
- for name in ('_run','mute','volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk'):
+ for name in ('_run','mute','volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk','window_ocr'):
   monkeypatch.setattr(Q.SystemBackend,name,forbidden)
  monkeypatch.setattr(laptop,'press',forbidden)
  monkeypatch.setattr(laptop,'monitor_off',forbidden)

@@ -36,6 +36,7 @@ import jarvis_audio as AUDIO
 import jarvis_speaker as SPEAKER
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
+import jarvis_codemode as CODE
 CMDS = None
 def command_controller():
     global CMDS
@@ -144,6 +145,7 @@ _CFG = {"m": None, "c": None}
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE,): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 def load_cfg():
     p = os.path.join(BASE, "config.json")
@@ -502,7 +504,7 @@ def post_retry(cfg, payload, total=30, independent=False):
 
 def call_webhook(rid, text, trigger, cfg, test, listener_ack="", kind="free", trace=None, extra_payload=None):
     payload = {"request_id": rid, "text": text, "trigger": trigger, "listener_ack": listener_ack, "kind": kind}
-    allowed = {"task_text","clipboard_text","clipboard_truncated","context_source","target_language","food_text","confirmation_policy","local_date","timezone","reply_mode","outbox_file","presence_at","idle_seconds","expires_iso"}
+    allowed = {"task_text","clipboard_text","clipboard_truncated","context_source","target_language","food_text","confirmation_policy","local_date","timezone","reply_mode","outbox_file","presence_at","idle_seconds","expires_iso"} | CODE.PAYLOAD_FIELDS
     payload.update({k:v for k,v in (extra_payload or {}).items() if k in allowed})
     if placeholder(cfg):
         log.warning("webhook not configured; request_id=%s kind=%s",rid,kind)
@@ -577,7 +579,7 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
         if listener_ack and not real_data_seen and pure_wait_filler(txt):
             log.info("skipped redundant server filler rid=%s: %r", rid, txt); return
         real_data_seen = True
-        if kind.startswith("clipboard_"): say_reply(txt,cfg,private=True)
+        if kind.startswith("clipboard_") or kind in CODE.PRIVATE_KINDS: say_reply(txt,cfg,private=True)
         else: say_reply(txt, cfg)
     final = os.path.join(OUTBOX, f"{rid}.txt")
     while time.time() - t0 < cfg["reply_timeout_s"]:
