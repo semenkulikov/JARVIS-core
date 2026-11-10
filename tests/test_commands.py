@@ -103,3 +103,9 @@ def test_modes_do_not_duplicate_owned_timers(harness):
  assert len(c.timers.items)==3
  execute('режим фокуса');assert len(c.timers.items)==2
  execute('режим сна');assert len(c.timers.items)==1 and b.calls[-1][0]=='lock'
+
+
+@pytest.mark.parametrize('heard,cmd', [('отмени выключения', 'shutdown_cancel'), ('кратко перескажу буфер', 'clipboard_summary'),
+                                       ('сколько свободно на диски', 'disk'), ('проверь сервере', 'server_health')])
+def test_common_asr_variants(heard, cmd):
+    assert Q.match(heard)['cmd'] == cmd

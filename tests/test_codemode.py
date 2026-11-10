@@ -99,3 +99,10 @@ def test_new_kinds_pass_transport_allowlist(listener, cfg, monkeypatch, kind, ex
 
 def test_explain_replies_are_private(listener):
     assert 'explain_error' in listener.CODE.PRIVATE_KINDS
+
+
+@pytest.mark.parametrize('heard,cmd', [('объяснения эту ошибку', 'explain_error'), ('объясни этого ошибку', 'explain_error'),
+                                       ('открой по рик вест', 'confirm_in_chat'), ('запусти миграцией', 'confirm_in_chat'),
+                                       ('создай ветку для задача авторизация', 'confirm_in_chat')])
+def test_common_asr_variants(heard, cmd):
+    assert Q.match(heard)['cmd'] == cmd
