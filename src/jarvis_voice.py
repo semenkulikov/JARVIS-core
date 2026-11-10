@@ -946,17 +946,42 @@ def only_wake_heard(words, partial):
     toks = [w.get("word", "") for w in words] + (partial or "").split()
     return bool(toks) and all(WAKE_TOK.match(t) for t in toks)
 
+# The Vosk wake path starts the capture this far before the end of «Джарвис»; what Vosk makes
+# of that tail («крыс», «есть», «то есть») is not the command and must not end the capture.
+VOSK_WAKE_TAIL_S = 0.3
+VOSK_WAKE_SKIP_S = VOSK_WAKE_TAIL_S + 0.1
+
+def heard_after(words, partial_words, partial, skip_s):
+    """Tokens recognised so far that end after skip_s; without partial timings the partial counts."""
+    toks = [w.get("word", "") for w in words if w.get("end", 99) > skip_s]
+    if partial_words is not None: toks += [w.get("word", "") for w in partial_words if w.get("end", 99) > skip_s]
+    elif partial: toks += partial.split()
+    return toks
+
+def phrase_finished(now, t0, heard, last_change, acoustic_last, nospeech_s, sil, wake_pause_s=None, skip_s=0.0):
+    """End of the utterance: enough silence after speech, or no speech at all within the wait."""
+    quiet = lambda d: acoustic_last is None or now - acoustic_last > d
+    if not heard:
+        wait, need = nospeech_s, 0.5
+        if wake_pause_s is not None and skip_s > 0:  # only the wake tail so far: answer a bare «Джарвис» soon
+            wait, need = min(nospeech_s, skip_s + wake_pause_s), max(0.5, wake_pause_s)
+        return now - t0 > wait and quiet(need)
+    lim = wake_pause_s if wake_pause_s is not None and all(WAKE_TOK.match(t) for t in heard) else sil
+    return bool(last_change) and now - last_change > lim and quiet(lim)
+
 def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=None):
     """returns (text, avg_conf, grammar_text); wake_pause_s ends a bare «Джарвис» sooner."""
     from vosk import KaldiRecognizer
     rec = KaldiRecognizer(STATE["model"], SR); rec.SetWords(True)
+    try: rec.SetPartialWords(True)
+    except Exception: pass
     grec = None
     if cfg.get("grammar_hint", True):
         try: grec = KaldiRecognizer(STATE["model"], SR, json.dumps(grammar_phrases(cfg), ensure_ascii=False)); grec.SetWords(True)
         except Exception as e: log.info("grammar recognizer failed: %s", e)
     agc = AGC(cfg)
     max_s = max_s or float(cfg["phrase_max_s"]); sil = float(cfg["phrase_silence_s"])
-    words = []; gwords = []; t0 = time.time(); last_change = None; partial = ""; cut = True
+    words = []; gwords = []; t0 = time.time(); last_change = None; partial = ""; pwords = None; cut = True
     acoustic_last = None; noise_floor = 0.001; samples = 0
     try:
         while time.time() - t0 < max_s:
@@ -975,15 +1000,14 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=No
                     if ws and not partial: last_change = time.time()
                     partial = ""
                 else:
-                    p = json.loads(rec.PartialResult()).get("partial", "")
+                    pr = json.loads(rec.PartialResult()); p = pr.get("partial", "")
+                    pwords = pr.get("partial_result") if "partial_result" in pr else (None if p else pwords)
                     if p != partial:
                         partial = p
                         if p: last_change = time.time()
                 if not cap.q.empty(): continue
-            has = bool(words) or bool(partial)
-            if not has and time.time() - t0 > nospeech_s and (acoustic_last is None or time.time() - acoustic_last > 0.5): cut = False; break
-            lim = wake_pause_s if wake_pause_s is not None and only_wake_heard(words, partial) else sil
-            if has and last_change and time.time() - last_change > lim and (acoustic_last is None or time.time() - acoustic_last > lim): cut = False; break
+            heard = heard_after(words, pwords if partial else [], partial, skip_s)
+            if phrase_finished(time.time(), t0, heard, last_change, acoustic_last, nospeech_s, sil, wake_pause_s, skip_s): cut = False; break
         words += json.loads(rec.FinalResult()).get("result", [])
         if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
     finally:
@@ -1086,7 +1110,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
             say(notice.get("label") or "Сэр, время вышло.", cfg); return
         ok = True
         if text is None:
-            pause = float(cfg.get("wake_ack_after_s", DIALOG.DEFAULTS["wake_ack_after_s"])) if trig in ("wake_word", "clap") else None
+            pause = float(cfg.get("wake_ack_after_s", DIALOG.DEFAULTS["wake_ack_after_s"])) if trig == "wake_word" else None
             text, conf, g = ("", 0, "") if cap is None else capture_phrase(cap, cfg, float(cfg["phrase_wait_s"]), skip_s, wake_pause_s=pause)
             text, ok = choose(text, conf, g, cfg)
             if STATE["dropped"]: return
@@ -1541,12 +1565,12 @@ def main():
                             log.info("vosk wake candidate conf %.2f", ws[0]["conf"])
                             wake_check = {"a": wbase + int((ws[0]["start"] - float(GATE.setting(cfg, "wake_verify_pre_s"))) * SR),
                                           "b": wbase + int((ws[-1]["end"] + float(GATE.setting(cfg, "wake_verify_post_s"))) * SR),
-                                          "frm": wbase + int(ws[-1]["end"] * SR) - int(0.3 * SR), "src": "vosk"}
+                                          "frm": wbase + int(ws[-1]["end"] * SR) - int(VOSK_WAKE_TAIL_S * SR), "src": "vosk"}
                     elif ws: log.info("vosk wake rejected conf %.2f", ws[0].get("conf", 0))
                 if not trig and wake_check is not None and pos >= wake_check["b"]:
                     wc, wake_check = wake_check, None
                     if verify_wake(model, ring, wc["a"], wc["b"], cfg) and speaker_ok(ring, wc["b"], cfg):
-                        trig = "wake_word"; frm = wc["frm"]; skip = 0.0
+                        trig = "wake_word"; frm = wc["frm"]; skip = VOSK_WAKE_SKIP_S if wc["src"] == "vosk" else 0.0
             if trig and time.time() - last_end > cfg["cooldown_s"]:
                 barge_armed = False
                 if trig == "clap": start("clap", text="")
