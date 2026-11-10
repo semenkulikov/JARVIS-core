@@ -157,3 +157,9 @@ def test_listener_runs_until_the_stop_file(app, cfg, monkeypatch, caplog):
     assert c.state.model == "model:vosk-model-small-ru" and c.mic.queue.empty()
     assert f"listening (v{__version__}) on device None: Fake mic" in caplog.text and "stop file -> intentional exit" in caplog.text
     assert "main loop error" not in caplog.text
+
+
+def test_adapters_are_seen_through_the_ports(app):
+    from jarvis.app.context import ports_of
+    speech, synth, asr, transport, status = ports_of(app.c)
+    assert speech.say is not None and synth.get_audio and asr.capture and transport.call and status.cached_status

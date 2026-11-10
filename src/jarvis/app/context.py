@@ -25,6 +25,7 @@ from jarvis.app.listener import Listener
 from jarvis.app.warmup import Warmup
 from jarvis.core.lazy import Lazy
 from jarvis.core.phrases import Picker
+from jarvis.core.ports import PhraseRecognizer, ServerTransport, SpeechOutput, StatusSource, Synthesizer
 from jarvis.core.routing import Router
 from jarvis.core.state import ListenerFSM, ListenerState, RequestLedger, Signals
 
@@ -64,3 +65,8 @@ def build_app(home: str | Path, sd: Any = None) -> App:
     conversation = Conversation(c)
     warmup = Warmup(c)
     return App(c, conversation, warmup, Listener(c, conversation, warmup, sd))
+
+
+def ports_of(c: Components) -> tuple[SpeechOutput, Synthesizer, PhraseRecognizer, ServerTransport, StatusSource]:
+    """The wired adapters seen through the core ports; mypy checks that each one implements its port."""
+    return c.voice, c.voice, c.asr, c.transport, c.status

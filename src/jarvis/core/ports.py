@@ -22,6 +22,13 @@ class Synthesizer(Protocol):
     def get_audio(self, text: str, cfg: Config) -> tuple[Audio, int]: ...
 
 
+class PhraseRecognizer(Protocol):
+    """Records one phrase from a capture queue: (text, average confidence, grammar text)."""
+
+    def capture(self, cap: Any, cfg: Config, nospeech_s: float, skip_s: float = 0.0, max_s: float | None = None,
+                wake_pause_s: float | None = None) -> tuple[str, float, str]: ...
+
+
 class ServerTransport(Protocol):
     """Delivers one request to the user's server; replies arrive later through the outbox."""
 
