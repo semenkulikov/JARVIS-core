@@ -38,6 +38,7 @@ import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 import jarvis_codemode as CODE
 import jarvis_projects as PROJECTS
+import jarvis_food as FOOD
 CMDS = None
 def command_controller():
     global CMDS
@@ -146,7 +147,7 @@ _CFG = {"m": None, "c": None}
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
-for _mod in (CODE, PROJECTS): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE, PROJECTS, FOOD): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 def load_cfg():
     p = os.path.join(BASE, "config.json")

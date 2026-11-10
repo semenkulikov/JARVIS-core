@@ -6,6 +6,7 @@ from pathlib import Path
 import jarvis_paths as PATHS
 import jarvis_codemode as CODE
 import jarvis_projects as PROJECTS
+import jarvis_food as FOOD
 log=logging.getLogger('jarvis')
 
 NUM={'ноль':0,'один':1,'одна':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'одиннадцать':11,'двенадцать':12,'тринадцать':13,'четырнадцать':14,'пятнадцать':15,'шестнадцать':16,'семнадцать':17,'восемнадцать':18,'девятнадцать':19,'двадцать':20,'тридцать':30,'сорок':40,'пятьдесят':50,'шестьдесят':60,'семьдесят':70,'восемьдесят':80,'девяносто':90,'сто':100,'двести':200,'триста':300,'четыреста':400,'пятьсот':500,'шестьсот':600,'семьсот':700,'восемьсот':800,'девятьсот':900,'полтора':1.5,'полторы':1.5}
@@ -36,7 +37,7 @@ def duration(t):
   return int(n*60) if n is not None and n>0 else None
  return int(total) if total>0 else None
 
-PHRASES=CODE.PHRASES+PROJECTS.PHRASES+['повтори','повтори ответ','еще раз','помедленнее','еще раз помедленнее','повтори помедленнее','что ты сказал','включи звук','верни звук','выключи звук','без звука','сделай скриншот','снимок экрана','скриншот','сделай снимок экрана','сколько свободно на диске','свободное место на диске','закрой окно','закрой активное окно','прочитай буфер','прочитай буфер обмена','переведи буфер','кратко перескажи буфер','отмени выключение','отмена выключения','отключи выключение','отмени таймер','отключи таймер','убери таймер','отмени напоминания','отключи напоминания','отмени все таймеры и напоминания','режим фокуса','режим сна','режим тренировки']
+PHRASES=CODE.PHRASES+PROJECTS.PHRASES+FOOD.PHRASES+['повтори','повтори ответ','еще раз','помедленнее','еще раз помедленнее','повтори помедленнее','что ты сказал','включи звук','верни звук','выключи звук','без звука','сделай скриншот','снимок экрана','скриншот','сделай снимок экрана','сколько свободно на диске','свободное место на диске','закрой окно','закрой активное окно','прочитай буфер','прочитай буфер обмена','переведи буфер','кратко перескажи буфер','отмени выключение','отмена выключения','отключи выключение','отмени таймер','отключи таймер','убери таймер','отмени напоминания','отключи напоминания','отмени все таймеры и напоминания','режим фокуса','режим сна','режим тренировки']
 
 CACHED_REPLIES = ["Звук включён, сэр.","Скриншот сохранён, сэр.","Буфер обмена пуст, сэр.","Идея записана, сэр.","Отправил запрос на закрытие окна, сэр.","Выключение отменено, сэр.","Запланированного выключения нет, сэр.","Выключение не подтверждено, сэр.","Не удалось выполнить команду, сэр.","Пока нечего повторить, сэр.","Назовите проект полной командой, сэр.","Назовите громкость от нуля до ста процентов, сэр.","Назовите полный интервал таймера, сэр.","Активных таймеров или напоминаний нет, сэр.","Режим сна, сэр. Гашу экран и блокирую ноутбук.","Режим тренировки, сэр. Музыка, таймер подхода и напоминание о воде.","Сэр, пора выпить воды.","Сэр, время сделать перерыв."]
 STRESS = {w.replace("+",""):w for w in ["гр+омкость","скринш+от","б+уфер","обм+ена","п+олный","п+олной","интерв+ал","напомин+ание","напомин+ания","напомин+аний","сохранен+о","своб+одно","гигаб+айта","д+иске","отпр+авил","закр+ытие","окн+а","подтвержд+аете","подтвержд+аю","подтвержден+о","выключ+ение","в+ыключить","д+анные","м+огут","пот+еряны","скаж+ите","зад+ержку","с+уток","отменен+о","ф+окуса","м+узыка","п+аузе","гаш+у","ноутб+ук","тренир+овки","подх+ода","перер+ыв","в+ыпить","вод+ы","ид+ея","зап+исана","повтор+ить","н+ечего","уд+алось","ком+анду","ком+андой","реж+им","нул+я","т+аймера","+или","заплан+ированного","пол+учено","вод+е","выключ+ения","в+ыполнить","назов+ите","пор+а","сд+елать"]}
@@ -52,7 +53,7 @@ def duration_label(secs):
 def match(text,cfg=None):
  t=norm(text).strip(' .');cfg=cfg or {}
  def a(cmd,**kw):return {'name':'quick_'+cmd,'action':'quick2','cmd':cmd,**kw}
- sub=CODE.match(t) or PROJECTS.match(t)
+ sub=CODE.match(t) or PROJECTS.match(t) or FOOD.match(t,cfg)
  if sub:return sub
  if t in ('повтори','повтори ответ','еще раз','что ты сказал'):return a('repeat',slow=False)
  if t in ('помедленнее','еще раз помедленнее','повтори помедленнее','говори медленнее'):return a('repeat',slow=True)
@@ -255,9 +256,14 @@ def with_ack(fn,say,cfg,ack):
  return box.get('value')
 
 class Controller:
- def __init__(self,base,backend=None,clock=time.monotonic,tools=None):
+ def __init__(self,base,backend=None,clock=time.monotonic,food_call=None,tools=None):
   self.base=Path(base);self.backend=backend or SystemBackend();self.clock=clock;self.pending_shutdown=None;self.notes_lock=threading.Lock();self.timers=PersistentTimers(self.base/'cache'/'timers.json')
-  self.tools=tools or PROJECTS.ProjectTools(self.base)
+  self.food_call=food_call;self.tools=tools or PROJECTS.ProjectTools(self.base)
+ def food(self,cfg):
+  call=self.food_call
+  if call is None:
+   import fatsecret_call;call=fatsecret_call.call
+  return FOOD.FoodLogger(self.base,call,cfg)
  def announce(self,text):
   """Spoken later by the listener loop, like a fired timer (respects quiet hours and sleep)."""
   try:self.timers.add(1,text,kind='notice')
@@ -332,6 +338,14 @@ class Controller:
    if cmd==CODE.CONFIRM_KIND:forward(CODE.confirm_text(text),kind=CODE.CONFIRM_KIND,extra_payload=CODE.confirm_payload(a));return True
    if cmd=='server_health':say(with_ack(lambda:self.tools.health_reply(a.get('target',''),cfg),say,cfg,'Проверяю, сэр.'),cfg);return True
    if cmd=='project_tests':say(self.tools.start_tests(a.get('project',''),cfg,lambda run:self.announce(PROJECTS.tests_phrase(run))),cfg);return True
+   if cmd=='nutrition_left':
+    try:say(with_ack(lambda:self.food(cfg).remaining(a.get('focus','protein')),say,cfg,'Смотрю дневник, сэр.'),cfg)
+    except Exception as e:log.warning('local nutrition read failed (%s)',type(e).__name__);forward(text,kind='free')
+    return True
+   if cmd=='food_log' and cfg.get('food_local_enabled'):
+    res=with_ack(lambda:self.food(cfg).log_text(a['food_text']),say,cfg,'Записываю, сэр.')
+    if res.status in ('logged','duplicate','failed'):say(res.spoken,cfg);return True
+    log.info('food_log local fallback to server (%s)',res.reason or res.status)
    if cmd=='food_log':forward(a['food_text'],kind='food_log',extra_payload={'food_text':a['food_text'],'confirmation_policy':'chat_if_ambiguous'});return True
    if cmd=='shutdown_prepare':
     secs=a.get('seconds')

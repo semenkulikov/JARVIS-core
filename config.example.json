@@ -429,5 +429,7 @@
   },
   "mic_name_contains": "",
   "servers": [],
-  "projects": {}
+  "projects": {},
+  "food_local_enabled": false,
+  "nutrition_targets": {}
 }
