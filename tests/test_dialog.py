@@ -1,9 +1,11 @@
+import datetime
 import threading
 
 import pytest
 
 import jarvis_commands as Q
 import jarvis_dialog as D
+from jarvis.core import phrases as P
 from jarvis.core import wake as W
 from test_commands import FakeBackend
 
@@ -93,8 +95,20 @@ def test_only_wake_heard():
     assert not W.only_wake_heard([], "")
 
 
-def test_wake_ack_phrases_precached(listener, cfg):
-    assert "Я здесь, сэр." in listener.all_phrases(cfg)
+def test_wake_ack_phrases_precached(cfg):
+    assert "Я здесь, сэр." in P.all_phrases(cfg)
+
+
+def test_picker_never_repeats_and_falls_back_to_defaults():
+    picker = P.Picker({"ack": ["а", "б"]})
+    picks = [picker.pick({}, "ack") for _ in range(10)]
+    assert all(a != b for a, b in zip(picks, picks[1:], strict=False)) and set(picks) == {"а", "б"}
+    assert picker.pick({"ack": "один"}, "ack") == "один"
+
+
+def test_smalltalk_reply_fills_the_daypart():
+    al = {"name": "chat_bye", "replies": ["До свидания, сэр. Хорошего {daypart}."]}
+    assert P.smalltalk_reply(al, P.Picker({}), datetime.datetime(2026, 1, 1, 20)) == "До свидания, сэр. Хорошего вечера."
 
 
 def test_ack_and_sleep_words_are_stressed(cfg):
