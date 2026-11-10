@@ -5,10 +5,11 @@ import numpy as np
 import pytest
 
 from jarvis.core import gate as GATE
-import jarvis_sleep as SLEEP
+from jarvis.core import sleep as SLEEP
 from jarvis.core.followup import FollowupSettings, followup_seconds
 from jarvis.core import routing as ROUTING
 from jarvis.adapters import audio as AUDIO_IN
+from jarvis.adapters.sleep_store import SleepState
 
 
 def words(text, conf):
@@ -96,19 +97,19 @@ def test_sleep_clamped():
 
 def test_sleep_state_persists_and_expires(tmp_path):
     now = [1000.0]
-    st = SLEEP.SleepState(tmp_path / "sleep.json", clock=lambda: now[0])
+    st = SleepState(tmp_path / "sleep.json", clock=lambda: now[0])
     st.start(600)
-    again = SLEEP.SleepState(tmp_path / "sleep.json", clock=lambda: now[0])
+    again = SleepState(tmp_path / "sleep.json", clock=lambda: now[0])
     assert again.active() and again.remaining() == 600
     now[0] += 599
     assert again.poll() is None
     now[0] += 2
     assert again.poll() == "timeout" and not again.active() and again.poll() is None
-    assert not SLEEP.SleepState(tmp_path / "sleep.json", clock=lambda: now[0]).active()
+    assert not SleepState(tmp_path / "sleep.json", clock=lambda: now[0]).active()
 
 
 def test_wake_file_ends_sleep(tmp_path):
-    st = SLEEP.SleepState(tmp_path / "sleep.json")
+    st = SleepState(tmp_path / "sleep.json")
     st.start(3600)
     wake = tmp_path / "wake_up"
     wake.write_text("")
@@ -117,7 +118,7 @@ def test_wake_file_ends_sleep(tmp_path):
 
 def test_corrupt_state_means_awake(tmp_path):
     (tmp_path / "sleep.json").write_text("{oops", encoding="utf-8")
-    assert not SLEEP.SleepState(tmp_path / "sleep.json").active()
+    assert not SleepState(tmp_path / "sleep.json").active()
 
 
 @pytest.mark.parametrize("text", ["джарвис проснись", "Проснись Джарвис"])
@@ -150,7 +151,7 @@ def test_legacy_sleep_mode_unchanged(app, cfg):
 
 
 def test_run_sleep_alias_starts_sleep(app, cfg, said, monkeypatch, tmp_path):
-    st = SLEEP.SleepState(tmp_path / "sleep.json")
+    st = SleepState(tmp_path / "sleep.json")
     app.c.sleep.set(st)
     al = ROUTING.match_alias("спящий режим на тридцать минут", cfg)
     app.conversation.run_alias(al, "спящий режим на тридцать минут", cfg, "wake_word", False)
@@ -159,7 +160,7 @@ def test_run_sleep_alias_starts_sleep(app, cfg, said, monkeypatch, tmp_path):
 
 
 def test_run_sleep_alias_test_mode_no_state(app, cfg, said, monkeypatch, tmp_path):
-    st = SLEEP.SleepState(tmp_path / "sleep.json")
+    st = SleepState(tmp_path / "sleep.json")
     app.c.sleep.set(st)
     app.conversation.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 60}, "засни", cfg, "wake_word", True)
     assert not st.active()
@@ -323,7 +324,7 @@ def test_hint_phrase_rounds_remaining_minutes():
 
 
 def test_sleep_alias_announces_how_to_wake(app, cfg, said, monkeypatch, tmp_path):
-    app.c.sleep.set(SLEEP.SleepState(tmp_path / "sleep.json"))
+    app.c.sleep.set(SleepState(tmp_path / "sleep.json"))
     app.conversation.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 3600}, "засни", cfg, "wake_word", True)
     assert said == ["Ухожу в спящий режим на час, сэр. Разбудить: Джарвис, проснись."]
 

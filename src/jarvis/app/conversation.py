@@ -14,7 +14,7 @@ from typing import Any
 from jarvis.core import codemode as CODE
 from jarvis.core import dialog as DIALOG
 from jarvis.core import gate as GATE
-import jarvis_sleep as SLEEP
+from jarvis.core import sleep as SLEEP
 from jarvis.adapters.audio import Capture
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.app.components import Components

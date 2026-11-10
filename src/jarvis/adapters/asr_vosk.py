@@ -10,7 +10,7 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from jarvis.core import gate as GATE
-import jarvis_sleep as SLEEP
+from jarvis.core import sleep as SLEEP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ring_audio
 from jarvis.core.matching import norm_phrase
 from jarvis.core.routing import grammar_phrases

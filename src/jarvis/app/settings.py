@@ -16,7 +16,7 @@ import jarvis_food as FOOD
 from jarvis.core import gate as GATE
 import jarvis_proactive as PROACTIVE
 import jarvis_projects as PROJECTS
-import jarvis_sleep as SLEEP
+from jarvis.core import sleep as SLEEP
 import jarvis_speaker as SPEAKER
 from jarvis.core import text as JT
 import laptop as LP

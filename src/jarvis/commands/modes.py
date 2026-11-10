@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 import jarvis_proactive as PROACTIVE
-import jarvis_sleep as SLEEP
+from jarvis.core import sleep as SLEEP
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles
 

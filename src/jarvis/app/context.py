@@ -10,11 +10,11 @@ from typing import Any
 import jarvis_audio as AUDIO
 import jarvis_commands as QUICK
 import jarvis_proactive as PROACTIVE
-import jarvis_sleep as SLEEP
 from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.audio import MicInput
 from jarvis.adapters.outbox import Outbox
+from jarvis.adapters.sleep_store import SleepState
 from jarvis.adapters.speaker import SpeakerGate
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.adapters.transport import WebhookTransport
@@ -61,7 +61,7 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         voice=Voice(paths.home, state, signals, fsm, player, accent),
         outbox=outbox, status=StatusCache(os.path.join(paths.cache, "status.json")),
         controller=controller,
-        sleep=Lazy(lambda: SLEEP.SleepState(os.path.join(paths.cache, "sleep.json"))),
+        sleep=Lazy(lambda: SleepState(os.path.join(paths.cache, "sleep.json"))),
         proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),
     )
     conversation = Conversation(c)

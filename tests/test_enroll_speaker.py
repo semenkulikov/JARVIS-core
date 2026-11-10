@@ -6,7 +6,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import enroll_speaker as E  # noqa: E402
 import jarvis_commands as Q  # noqa: E402
-import jarvis_sleep as SLEEP  # noqa: E402
+from jarvis.core import sleep as SLEEP  # noqa: E402
 from jarvis.core import routing as ROUTING
 
 

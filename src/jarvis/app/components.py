@@ -66,5 +66,5 @@ class Components:
     outbox: Outbox
     status: StatusCache
     controller: Lazy[Any]       # jarvis_commands.Controller
-    sleep: Lazy[Any]            # jarvis_sleep.SleepState
+    sleep: Lazy[Any]            # jarvis.adapters.sleep_store.SleepState
     proactive: Lazy[Any]        # jarvis_proactive.Manager
