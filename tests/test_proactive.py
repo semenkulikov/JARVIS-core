@@ -48,6 +48,7 @@ def test_calendar_contract_stale_and_cancelled(tmp_path):
  write();m.tick(cfg,True);assert m.state['pending'][0]['kind']=='calendar'
  write(cancelled=True);m.tick(cfg,True);assert not m.state['pending']
  write(age=10800);m.tick(cfg,True);assert not m.state['pending']
+ write(age=-180);m.tick(cfg,True);assert m.state['pending'][0]['kind']=='calendar'  # writer clock a little ahead
 
 def test_configurable_training_and_protein(tmp_path):
  now=[local(12)];day=datetime.datetime.fromtimestamp(now[0]).weekday()

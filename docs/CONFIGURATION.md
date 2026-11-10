@@ -34,6 +34,7 @@
 | `intent_fuzzy_threshold` / `intent_fuzzy_margin` | 88 / 7. Осторожный локальный разбор. Не для произвольных действий системы |
 | `template_precache` / `time_preload_minutes` | true / 3. Ограниченный набор целых фраз в кэше |
 | `cache_max_age_h` / `cache_stale_read_max_age_h` | 2,5 / 3. До какого возраста читать снимок с датой |
+| `cache_future_skew_min` | 15. Снимок с временем чуть впереди часов ноутбука (до стольких минут) считается только что записанным |
 | `reply_timeout_s` / `wait_filler_s` | 240 / 12. После первой реплики вторая «минуту» не нужна |
 | `clipboard_max_chars` / `clipboard_translate_target` | 8000 / `ru` |
 | `shutdown_confirm_window_s` | 10. Годится только отдельное «да» или «подтверждаю», уверенность не ниже 0,8 |

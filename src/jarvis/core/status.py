@@ -20,6 +20,9 @@ CACHE_HINTS = {
 }
 
 
+FUTURE_SKEW_MIN = 15.0  # snapshots stamped up to this far ahead still count as fresh
+
+
 def cache_age_policy(updated: str, cfg: Mapping[str, Any], now: datetime.datetime | None = None) -> tuple[str, float]:
     """("fresh" | "stale" | "old", age in hours); data from another day is always old."""
     now = now or datetime.datetime.now().astimezone()
@@ -27,6 +30,8 @@ def cache_age_policy(updated: str, cfg: Mapping[str, Any], now: datetime.datetim
     if dt.tzinfo is None: dt = dt.astimezone()
     local_dt = dt.astimezone(now.tzinfo)
     age = (now - dt).total_seconds() / 3600
+    skew_h = float(cfg.get("cache_future_skew_min", FUTURE_SKEW_MIN)) / 60
+    if -skew_h <= age < 0: age = 0.0  # the writer's clock runs a little ahead: treat it as just written
     if age < 0 or local_dt.date() != now.date(): return "old", age
     fresh_h = float(cfg.get("cache_max_age_h", 2.5))
     stale_h = max(fresh_h, float(cfg.get("cache_stale_read_max_age_h", 3)))

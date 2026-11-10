@@ -80,7 +80,7 @@ DEFAULTS: dict[str, Any] = {
     "clap_enabled": True, "clap_min_peak": 0.2, "clap_ratio": 10.0, "clap_attack": 4.0, "clap_max_len_s": 0.15,
     "clap_decay": 0.25, "clap_gap_min_s": 0.12, "clap_gap_max_s": 0.9, "clap_quiet_s": 0.5, "clap_peak_similarity": 4.0,
     "clap_log_min_peak": 0.08, "clap_tail_s": 0.25, "clap_noise_rel": 0.35, "clap_noise_attack": 2.0,
-    "cooldown_s": 1.0, "reply_timeout_s": 240, "server_notice_s": 90.0, "server_down_wait_s": 45.0, "server_down_ttl_s": 1800.0, "cache_max_age_h": 2.5,
+    "cooldown_s": 1.0, "reply_timeout_s": 240, "server_notice_s": 90.0, "server_down_wait_s": 45.0, "server_down_ttl_s": 1800.0, "cache_max_age_h": 2.5, "cache_future_skew_min": 15.0,
     "workout_days": [], "workout_time": "12:00",
     "projects_dir": "",
     "level_log_interval_s": 300, "memory_log_interval_s": 1800, "memory_restart_mb": 4096, "memory_trim_idle_s": 900,

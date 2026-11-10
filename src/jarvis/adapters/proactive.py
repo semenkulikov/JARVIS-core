@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from jarvis.core import status as STATUS
 from jarvis.core import text as jt
 from jarvis.core.proactive import REPLIES, hm, parse_iso, quiet, wall
 
@@ -72,7 +73,7 @@ class Manager:
         try:
             data=json.loads((self.base/'cache'/'status.json').read_text(encoding='utf-8-sig'))
             if not isinstance(data,dict):return None
-            age=now-parse_iso(data.get('updated'));events=data.get('events',[]);events=events if isinstance(events,list) else [];valid=0
+            age=now-parse_iso(data.get('updated'));skew=float(cfg.get('cache_future_skew_min',STATUS.FUTURE_SKEW_MIN))*60;age=0.0 if -skew<=age<0 else age;events=data.get('events',[]);events=events if isinstance(events,list) else [];valid=0
             for e in events[:200]:
                 try:
                     if isinstance(e,dict) and e.get('title') and not e.get('all_day') and not e.get('cancelled'):parse_iso(e['start_iso']);valid+=1
