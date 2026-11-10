@@ -5,7 +5,7 @@ description = "Офлайн-голосовой помощник для Windows �
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-authors = [{ name = "Semen Saifutdinov", email = "saifutdinov2006@mail.ru" }]
+authors = [{ name = "Semyon Saifutdinov", email = "saifutdinov2006@mail.ru" }]
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Operating System :: Microsoft :: Windows",

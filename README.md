@@ -182,4 +182,4 @@ Report a vulnerability by email, not in a public issue: [saifutdinov2006@mail.ru
 The project code is released under the [MIT License](LICENSE). Speech models and
 third-party libraries are covered by their own licenses.
 
-Author: Semen Saifutdinov.
+Author: Semyon Saifutdinov.
