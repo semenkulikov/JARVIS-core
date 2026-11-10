@@ -22,6 +22,13 @@ outbox/
 notes*.md
 screenshots/
 models/
+# Runtime data of a home that sits next to the code: voice profile, reports, ASR evaluation.
+speaker/
+reports/
+eval/
+hf_cache/
+*.npy
+*.bundle
 *.wav
 *.mp3
 *.ogg
