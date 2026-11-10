@@ -40,6 +40,7 @@ import jarvis_codemode as CODE
 import jarvis_projects as PROJECTS
 import jarvis_food as FOOD
 import jarvis_dialog as DIALOG
+import jarvis_vocab as VOCAB
 CMDS = None
 def command_controller():
     global CMDS
@@ -939,7 +940,7 @@ def grammar_phrases(cfg):
             if p and al.get("action") not in ("timer", "open_project"): ph.append(p)
     ph += ["расскажи статус по задачам", "что там по задачам", "что там статус по задачам", "статус моих задач", "какие у меня задачи", "что по делам", "что у меня на сегодня", "дай отчет по задачам", "статус питания", "статус по проектам"]
     ph += QUICK.PHRASES + PROACTIVE.PHRASES
-    return sorted(set(ph)) + ["[unk]"]
+    return sorted({VOCAB.vosk_spelling(p) for p in ph if p}) + ["[unk]"]
 
 def only_wake_heard(words, partial):
     """True while everything recognised so far is the wake name (plus «хей» and the like)."""
