@@ -14,7 +14,7 @@ import jarvis_credentials as CREDS
 from jarvis.core import dialog as DIALOG
 import jarvis_food as FOOD
 from jarvis.core import gate as GATE
-import jarvis_proactive as PROACTIVE
+from jarvis.core import proactive as PROACTIVE
 import jarvis_projects as PROJECTS
 from jarvis.core import sleep as SLEEP
 import jarvis_speaker as SPEAKER

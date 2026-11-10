@@ -30,7 +30,8 @@ def guards(monkeypatch):
  if hasattr(os,'startfile'):monkeypatch.setattr(os,'startfile',forbidden)
 @pytest.fixture
 def cfg(app,monkeypatch):
- import jarvis_commands as Q, jarvis_proactive as P
+ import jarvis_commands as Q
+ from jarvis.core import proactive as P
  from jarvis.core import dialog as D
  from jarvis.app.settings import DEFAULTS
  from jarvis.core.phrases import SMALLTALK_ALIASES

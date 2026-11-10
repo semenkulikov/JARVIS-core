@@ -9,7 +9,7 @@ from typing import Any
 
 import jarvis_audio as AUDIO
 import jarvis_commands as QUICK
-import jarvis_proactive as PROACTIVE
+from jarvis.adapters import proactive as PROACTIVE
 from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.audio import MicInput

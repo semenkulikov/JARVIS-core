@@ -34,7 +34,7 @@ class Services(Protocol):
     def pick(self, cfg: Config, key: str) -> str: ...
     def controller(self) -> Any: ...      # jarvis_commands.Controller
     def sleep(self) -> Any: ...           # jarvis.adapters.sleep_store.SleepState
-    def proactive(self) -> Any: ...       # jarvis_proactive.Manager
+    def proactive(self) -> Any: ...       # jarvis.adapters.proactive.Manager
 
 
 @dataclass(frozen=True)

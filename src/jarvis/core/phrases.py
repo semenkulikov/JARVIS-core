@@ -8,7 +8,7 @@ from typing import Any, Mapping
 import jarvis_commands as QUICK
 from jarvis.core import dialog as DIALOG
 from jarvis.core import text as JT
-import jarvis_proactive as PROACTIVE
+from jarvis.core import proactive as PROACTIVE
 
 # Local conversation: whole short utterances only, never a substring in a request.
 SMALLTALK: list[tuple[str, list[str], list[str]]] = [

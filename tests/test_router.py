@@ -1,6 +1,6 @@
 import pytest
 from jarvis.core import routing as ROUTING
-import jarvis_proactive as PROACTIVE
+from jarvis.core import proactive as PROACTIVE
 @pytest.mark.parametrize('text,action',[('статус по задачам','cache_field'),('что у меня на сегодня','cache_field'),('чё по планам','cache_field'),('сколько белка','cache_field'),('как дела','smalltalk'),('доброе утро','smalltalk'),('спасибо','smalltalk'),('который час','time'),('не беспокоить','proactive_dnd'),('можно беспокоить','proactive_dnd'),('повтори','quick2'),('помедленнее','quick2'),('громкость на тридцать','quick2'),('сделай скриншот','quick2'),('закрой активное окно','quick2'),('прочитай буфер','quick2'),('переведи буфер','quick2'),('таймер на пять минут','quick2'),('каждые сорок пять минут напоминай встать','quick2'),('запиши идею помощник','quick2'),('добавь задачу купить хлеб','quick2'),('отмени выключение','quick2'),('режим сна','quick2')])
 def test_routes(app,cfg,text,action):
  al=ROUTING.match_alias(text,cfg);assert al and al['action']==action

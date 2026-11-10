@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 import jarvis_commands as QUICK
 from jarvis.core import gate as GATE
-import jarvis_proactive as PROACTIVE
+from jarvis.core import proactive as PROACTIVE
 from jarvis.core import sleep as SLEEP
 from jarvis.core.fuzzy import fuzzy_alias
 from jarvis.core import tasks as TASKS

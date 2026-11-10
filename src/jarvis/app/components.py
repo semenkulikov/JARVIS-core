@@ -67,4 +67,4 @@ class Components:
     status: StatusCache
     controller: Lazy[Any]       # jarvis_commands.Controller
     sleep: Lazy[Any]            # jarvis.adapters.sleep_store.SleepState
-    proactive: Lazy[Any]        # jarvis_proactive.Manager
+    proactive: Lazy[Any]        # jarvis.adapters.proactive.Manager
