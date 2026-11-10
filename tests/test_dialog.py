@@ -66,26 +66,26 @@ def test_phrase_lists_cover_every_ack():
         assert set(D.DEFAULTS[key]) <= set(phrases)
 
 
-def test_quick_timer_gets_ack_then_result(listener, cfg, monkeypatch, tmp_path):
+def test_quick_timer_gets_ack_then_result(app, cfg, monkeypatch, tmp_path):
     out = []
-    monkeypatch.setattr(listener, "say", lambda t, c, **k: out.append(t) or True)
+    monkeypatch.setattr(app.conversation, "say", lambda t, c, **k: out.append(t) or True)
     ctl = Q.Controller(tmp_path, FakeBackend())
-    monkeypatch.setattr(listener, "command_controller", lambda: ctl)
+    monkeypatch.setattr(app.conversation, "controller", lambda: ctl)
     al = ROUTING.match_alias("поставь таймер на пять минут", cfg)
-    listener.run_alias(al, "поставь таймер на пять минут", cfg, "wake_word", False)
+    app.conversation.run_alias(al, "поставь таймер на пять минут", cfg, "wake_word", False)
     assert out[0] in D.DEFAULTS["ack_action"] and out[1] == "Таймер сохранён на пять минут, сэр."
 
 
-def test_instant_answer_has_no_ack(listener, cfg, monkeypatch, tmp_path):
+def test_instant_answer_has_no_ack(app, cfg, monkeypatch, tmp_path):
     out = []
-    monkeypatch.setattr(listener, "say", lambda t, c, **k: out.append(t) or True)
-    monkeypatch.setattr(listener, "command_controller", lambda: Q.Controller(tmp_path, FakeBackend()))
-    listener.run_alias({"name": "q", "action": "quick2", "cmd": "volume", "value": 40}, "громкость сорок", cfg, "wake_word", False)
+    monkeypatch.setattr(app.conversation, "say", lambda t, c, **k: out.append(t) or True)
+    monkeypatch.setattr(app.conversation, "controller", lambda: Q.Controller(tmp_path, FakeBackend()))
+    app.conversation.run_alias({"name": "q", "action": "quick2", "cmd": "volume", "value": 40}, "громкость сорок", cfg, "wake_word", False)
     assert out == ["Громкость 40 процентов, сэр."]
 
 
-def test_server_ack_varies_and_never_repeats(listener, cfg):
-    picks = [listener.pick(cfg, "ack_server") for _ in range(20)]
+def test_server_ack_varies_and_never_repeats(app, cfg):
+    picks = [app.conversation.pick(cfg, "ack_server") for _ in range(20)]
     assert all(a != b for a, b in zip(picks, picks[1:], strict=False))
 
 

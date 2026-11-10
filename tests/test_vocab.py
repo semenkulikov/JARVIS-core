@@ -13,6 +13,6 @@ def test_norm_folds_yo():
     assert V.norm("Чё ЕЩЁ осталось?!") == "че еще осталось"
 
 
-def test_listener_grammar_has_no_folded_only_words(listener, cfg):
+def test_listener_grammar_has_no_folded_only_words(app, cfg):
     words = {w for p in ROUTING.grammar_phrases(cfg) for w in p.split()}
     assert not words & set(V.VOSK_WORDS)

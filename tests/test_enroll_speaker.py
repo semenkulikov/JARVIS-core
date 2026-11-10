@@ -44,5 +44,5 @@ def test_listener_paused_noop_when_not_running(tmp_path):
 
 
 @pytest.mark.parametrize("phrase", E.PHRASES)
-def test_enrollment_phrases_match_no_alias(listener, cfg, phrase):
+def test_enrollment_phrases_match_no_alias(app, cfg, phrase):
     assert ROUTING.match_alias(_bare(phrase), cfg) is None

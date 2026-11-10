@@ -1,0 +1,66 @@
+"""Composition root: the only place that creates and wires the listener's objects."""
+from __future__ import annotations
+
+import importlib
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import jarvis_audio as AUDIO
+import jarvis_commands as QUICK
+import jarvis_proactive as PROACTIVE
+import jarvis_sleep as SLEEP
+from jarvis.adapters.asr_vosk import VoskASR
+from jarvis.adapters.audio import MicInput
+from jarvis.adapters.outbox import Outbox
+from jarvis.adapters.speaker import SpeakerGate
+from jarvis.adapters.status_cache import StatusCache
+from jarvis.adapters.transport import WebhookTransport
+from jarvis.adapters.tts import Voice
+from jarvis.app import settings
+from jarvis.app.components import Components, Paths
+from jarvis.app.conversation import Conversation
+from jarvis.app.listener import Listener
+from jarvis.app.warmup import Warmup
+from jarvis.core.lazy import Lazy
+from jarvis.core.phrases import Picker
+from jarvis.core.routing import Router
+from jarvis.core.state import ListenerFSM, ListenerState, RequestLedger, Signals
+
+
+@dataclass
+class App:
+    c: Components
+    conversation: Conversation
+    warmup: Warmup
+    listener: Listener
+
+
+def build_app(home: str | Path, sd: Any = None) -> App:
+    """Wire everything for JARVIS_HOME ``home``; ``sd`` is the sounddevice module (imported when None)."""
+    if sd is None: sd = importlib.import_module("sounddevice")
+    paths = Paths.of(home)
+    os.makedirs(paths.cache, exist_ok=True)
+    outbox = Outbox(paths.at("outbox")); outbox.ensure()
+    state, signals, fsm, ledger = ListenerState(), Signals(), ListenerFSM(), RequestLedger()
+    controller: Lazy[Any] = Lazy(lambda: QUICK.Controller(paths.home))
+
+    def shutdown_pending() -> bool:
+        ctl = controller.peek()
+        return ctl is not None and bool(getattr(ctl, "pending_shutdown", None))
+
+    player = AUDIO.Player(sd)
+    c = Components(
+        paths=paths, config=settings.config_store(paths.home), picker=Picker(settings.DEFAULTS),
+        signals=signals, fsm=fsm, state=state, ledger=ledger, router=Router(state, shutdown_pending),
+        mic=MicInput(), asr=VoskASR(state), speaker=SpeakerGate(paths.home),
+        transport=WebhookTransport(signals, ledger), player=player, voice=Voice(paths.home, state, signals, fsm, player),
+        outbox=outbox, status=StatusCache(os.path.join(paths.cache, "status.json")),
+        controller=controller,
+        sleep=Lazy(lambda: SLEEP.SleepState(os.path.join(paths.cache, "sleep.json"))),
+        proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),
+    )
+    conversation = Conversation(c)
+    warmup = Warmup(c)
+    return App(c, conversation, warmup, Listener(c, conversation, warmup, sd))

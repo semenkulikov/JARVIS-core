@@ -99,8 +99,8 @@ def test_new_kinds_pass_transport_allowlist(cfg, monkeypatch, kind, extra):
     assert all(posted[-1][k] == v for k, v in extra.items()) and 'shell' not in posted[-1]
 
 
-def test_explain_replies_are_private(listener):
-    assert 'explain_error' in listener.CODE.PRIVATE_KINDS
+def test_explain_replies_are_private(app):
+    assert 'explain_error' in CODE.PRIVATE_KINDS
 
 
 @pytest.mark.parametrize('heard,cmd', [('объяснения эту ошибку', 'explain_error'), ('объясни этого ошибку', 'explain_error'),

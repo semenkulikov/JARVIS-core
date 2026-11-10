@@ -1,5 +1,5 @@
 """Model-free tests: fail closed on real audio, HTTP or desktop actions."""
-import copy,logging,os,sys,tempfile,types,urllib.request
+import copy,os,sys,types,urllib.request
 from pathlib import Path
 import pytest
 ROOT=Path(__file__).resolve().parent.parent
@@ -8,18 +8,11 @@ SD=types.ModuleType('sounddevice')
 def forbidden(*a,**kw):raise AssertionError('REAL AUDIO/NETWORK/SYSTEM ACTION FORBIDDEN')
 SD.play=forbidden;SD.wait=lambda:None;SD.stop=lambda:None;SD.InputStream=forbidden
 sys.modules['sounddevice']=SD
-@pytest.fixture(scope='session')
-def listener():
- with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
-  import jarvis_paths
-  old=jarvis_paths.HOME;jarvis_paths.HOME=Path(d)
-  try:
-   src=(ROOT/'src'/'jarvis_voice.py').read_text(encoding='utf-8')
-   m=types.ModuleType('jarvis_pytest_silent');m.__file__=str(ROOT/'src'/'jarvis_voice.py')
-   sys.modules[m.__name__]=m;exec(compile(src,m.__file__,'exec'),m.__dict__)
-   yield m
-  finally:
-   logging.shutdown();jarvis_paths.HOME=old
+@pytest.fixture
+def app(tmp_path):
+ """A fresh listener wired by the composition root against an empty JARVIS_HOME."""
+ from jarvis.app.context import build_app
+ return build_app(tmp_path/'home',sd=SD)
 @pytest.fixture(autouse=True)
 def guards(monkeypatch):
  import jarvis_credentials as C,jarvis_commands as Q,laptop
@@ -36,7 +29,7 @@ def guards(monkeypatch):
  monkeypatch.setattr(laptop,'temperature_c',forbidden)
  if hasattr(os,'startfile'):monkeypatch.setattr(os,'startfile',forbidden)
 @pytest.fixture
-def cfg(listener,monkeypatch):
+def cfg(app,monkeypatch):
  import jarvis_commands as Q,jarvis_dialog as D,jarvis_proactive as P
  from jarvis.app.settings import DEFAULTS
  from jarvis.core.phrases import SMALLTALK_ALIASES
@@ -44,5 +37,5 @@ def cfg(listener,monkeypatch):
  c['aliases']=c['aliases']+copy.deepcopy(SMALLTALK_ALIASES)
  c['stress_dict']=dict(dict(P.STRESS,**Q.STRESS,**D.STRESS),**(c.get('stress_dict') or {}))
  c['followup_enabled']=False
- monkeypatch.setattr(listener,'load_cfg',lambda:c)
+ monkeypatch.setattr(app.c.config,'load',lambda:c)
  return c

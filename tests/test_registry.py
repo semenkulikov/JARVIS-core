@@ -16,7 +16,7 @@ EXAMPLES = [(c.id, e) for c in R.COMMANDS for e in c.examples]
 
 
 @pytest.mark.parametrize("cid,example", EXAMPLES)
-def test_every_example_routes_to_its_command(listener, cfg, cid, example):
+def test_every_example_routes_to_its_command(app, cfg, cid, example):
     cfg["food_local_enabled"] = True
     assert R.route_id(ROUTING.match_alias(example, cfg)) == cid
 
@@ -55,5 +55,5 @@ def test_capabilities_phrase_short_and_mentions_notion():
     ("что ты умеешь", "capabilities"), ("то есть что ты умеешь", "capabilities"),
     ("утренний брифинг", "tasks_briefing"), ("чё ещё осталось", "tasks_left"), ("перескажу все раздачи", "tasks_all"),
 ])
-def test_live_feedback_phrases(listener, cfg, text, cid):
+def test_live_feedback_phrases(app, cfg, text, cid):
     assert R.route_id(ROUTING.match_alias(text, cfg)) == cid

@@ -132,85 +132,89 @@ def test_not_wake_phrases(text):
 
 # ---------------------------------------------------------------- listener integration
 @pytest.fixture
-def said(listener, monkeypatch):
+def said(app, monkeypatch):
     out = []
-    monkeypatch.setattr(listener, "say", lambda t, c, **k: out.append(t))
-    monkeypatch.setattr(listener, "say_reply", lambda t, c, **k: out.append(t))
+    monkeypatch.setattr(app.conversation, "say", lambda t, c, **k: out.append(t))
+    monkeypatch.setattr(app.conversation, "say_reply", lambda t, c, **k: out.append(t))
     return out
 
 
-def test_sleep_command_is_local(listener, cfg):
+def test_sleep_command_is_local(app, cfg):
     al = ROUTING.match_alias("засни на час", cfg)
     assert al["action"] == "jarvis_sleep" and al["seconds"] == 3600
 
 
-def test_legacy_sleep_mode_unchanged(listener, cfg):
+def test_legacy_sleep_mode_unchanged(app, cfg):
     al = ROUTING.match_alias("режим сна", cfg)
     assert al["action"] == "quick2" and al["mode"] == "sleep"
 
 
-def test_run_sleep_alias_starts_sleep(listener, cfg, said, monkeypatch, tmp_path):
+def test_run_sleep_alias_starts_sleep(app, cfg, said, monkeypatch, tmp_path):
     st = SLEEP.SleepState(tmp_path / "sleep.json")
-    monkeypatch.setattr(listener, "SLEEP_STATE", st)
+    app.c.sleep.set(st)
     al = ROUTING.match_alias("спящий режим на тридцать минут", cfg)
-    listener.run_alias(al, "спящий режим на тридцать минут", cfg, "wake_word", False)
+    app.conversation.run_alias(al, "спящий режим на тридцать минут", cfg, "wake_word", False)
     assert st.active() and 1790 < st.remaining() <= 1800
-    assert said and "спящий режим" in said[0] and listener.STATE.followup_eligible is False
+    assert said and "спящий режим" in said[0] and app.c.state.followup_eligible is False
 
 
-def test_run_sleep_alias_test_mode_no_state(listener, cfg, said, monkeypatch, tmp_path):
+def test_run_sleep_alias_test_mode_no_state(app, cfg, said, monkeypatch, tmp_path):
     st = SLEEP.SleepState(tmp_path / "sleep.json")
-    monkeypatch.setattr(listener, "SLEEP_STATE", st)
-    listener.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 60}, "засни", cfg, "wake_word", True)
+    app.c.sleep.set(st)
+    app.conversation.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 60}, "засни", cfg, "wake_word", True)
     assert not st.active()
 
 
-def test_low_conf_sleep_rejected(listener, cfg):
-    listener.STATE.last_capture = None
-    assert listener.choose("засни на час", 0.4, "", cfg) == ("засни на час", False)
+def test_low_conf_sleep_rejected(app, cfg):
+    app.c.state.last_capture = None
+    assert app.c.router.choose("засни на час", 0.4, "", cfg) == ("засни на час", False)
 
 
 @pytest.mark.parametrize("text,conf,followup,hit_max", GARBAGE)
-def test_choose_drops_garbage_silently(listener, cfg, text, conf, followup, hit_max):
-    listener.STATE.last_capture = {"words": words(text, conf), "hit_max": hit_max}
-    assert listener.choose(text, conf, "", cfg, followup=followup) == ("", False)
-    assert listener.STATE.dropped is True
+def test_choose_drops_garbage_silently(app, cfg, text, conf, followup, hit_max):
+    app.c.state.last_capture = {"words": words(text, conf), "hit_max": hit_max}
+    assert app.c.router.choose(text, conf, "", cfg, followup=followup) == ("", False)
+    assert app.c.state.dropped is True
 
 
-def test_choose_continuous_speech_dropped(listener, cfg):
-    listener.STATE.last_capture = {"words": words("какая погода завтра", 0.95), "hit_max": True}
-    assert listener.choose("какая погода завтра", 0.95, "", cfg) == ("", False)
+def test_choose_continuous_speech_dropped(app, cfg):
+    app.c.state.last_capture = {"words": words("какая погода завтра", 0.95), "hit_max": True}
+    assert app.c.router.choose("какая погода завтра", 0.95, "", cfg) == ("", False)
 
 
-def test_choose_clear_free_phrase_passes(listener, cfg):
-    listener.STATE.last_capture = {"words": words("какая погода завтра", 0.95), "hit_max": False}
-    assert listener.choose("какая погода завтра", 0.95, "", cfg) == ("какая погода завтра", True)
+def test_choose_clear_free_phrase_passes(app, cfg):
+    app.c.state.last_capture = {"words": words("какая погода завтра", 0.95), "hit_max": False}
+    assert app.c.router.choose("какая погода завтра", 0.95, "", cfg) == ("какая погода завтра", True)
 
 
-def test_followup_ignores_grammar_guess(listener, cfg):
-    listener.STATE.last_capture = {"words": words("в вашем", 0.85), "hit_max": False}
-    assert listener.choose("в вашем", 0.85, "статус по задачам", cfg, followup=True)[1] is False
+def test_followup_ignores_grammar_guess(app, cfg):
+    app.c.state.last_capture = {"words": words("в вашем", 0.85), "hit_max": False}
+    assert app.c.router.choose("в вашем", 0.85, "статус по задачам", cfg, followup=True)[1] is False
 
 
-def test_garbled_wake_turn_says_nothing(listener, cfg, said, monkeypatch):
-    def fake_capture(cap, c, nospeech, skip_s=0.0, max_s=None):
-        listener.STATE.last_capture = {"words": words("то есть", 0.65), "hit_max": False}
+def test_garbled_wake_turn_says_nothing(app, cfg, said, monkeypatch):
+    calls = []
+    def fake_capture(cap, c, nospeech, skip_s=0.0, max_s=None, wake_pause_s=None):
+        calls.append(wake_pause_s)
+        app.c.state.last_capture = {"words": words("то есть", 0.65), "hit_max": False}
         return "то есть", 0.65, ""
-    monkeypatch.setattr(listener, "capture_phrase", fake_capture)
-    monkeypatch.setattr(listener, "free_phrase", lambda *a, **k: pytest.fail("garbage must not reach the server"))
-    listener._handle_turn("wake_word", AUDIO_IN.Capture(), None, False, 0.0)
-    assert said == []
+    monkeypatch.setattr(app.conversation, "capture", fake_capture)
+    monkeypatch.setattr(app.conversation, "ask_server", lambda *a, **k: pytest.fail("garbage must not reach the server"))
+    app.conversation.handle_turn("wake_word", AUDIO_IN.Capture(), None, False, 0.0)
+    assert said == [] and len(calls) == 1 and app.c.state.dropped is True
 
 
-def test_not_understood_phrase_never_spoken(listener, cfg, said, monkeypatch):
+def test_not_understood_phrase_never_spoken(app, cfg, said, monkeypatch):
     seq = iter([("", 0.0, ""), ("знать", 0.48, "")])
-    def fake_capture(cap, c, nospeech, skip_s=0.0, max_s=None):
+    def fake_capture(cap, c, nospeech, skip_s=0.0, max_s=None, wake_pause_s=None):
         t, cf, g = next(seq)
-        listener.STATE.last_capture = {"words": words(t, cf) if t else [], "hit_max": False}
+        app.c.state.last_capture = {"words": words(t, cf) if t else [], "hit_max": False}
         return t, cf, g
-    monkeypatch.setattr(listener, "capture_phrase", fake_capture)
-    listener._handle_turn("wake_word", AUDIO_IN.Capture(), None, False, 0.0)
-    assert not any("расслышал" in s or "разобрал" in s for s in said)
+    monkeypatch.setattr(app.conversation, "capture", fake_capture)
+    monkeypatch.setattr(app.conversation, "ask_server", lambda *a, **k: pytest.fail("unclear speech must not reach the server"))
+    app.conversation.handle_turn("wake_word", AUDIO_IN.Capture(), None, False, 0.0)
+    assert next(seq, None) is None  # both captures ran: the wake turn and the one after the wake ack
+    assert said and not any("расслышал" in s or "разобрал" in s for s in said)
 
 
 def test_followup_window_capped(cfg):
@@ -231,26 +235,26 @@ class _Sig:
 
 
 @pytest.fixture
-def outbox(listener, cfg, said, monkeypatch, tmp_path):
+def outbox(app, cfg, said, monkeypatch, tmp_path):
     from jarvis.adapters.outbox import Outbox
-    monkeypatch.setattr(listener, "OUTBOX", Outbox(str(tmp_path), done=str(tmp_path), signal=_Sig()))
-    listener.interrupt.clear(); listener.LEDGER.down_since = None
+    monkeypatch.setattr(app.c, "outbox", Outbox(str(tmp_path), done=str(tmp_path), signal=_Sig()))
+    app.c.signals.interrupt.clear(); app.c.ledger.down_since = None
     cfg.update(reply_timeout_s=3.0, server_notice_s=5.0, server_down_wait_s=5.0)
     return tmp_path
 
 
 @pytest.mark.parametrize("body", ["<silent>", ""])
-def test_silent_final_speaks_nothing(listener, cfg, said, outbox, body):
+def test_silent_final_speaks_nothing(app, cfg, said, outbox, body):
     (outbox / "s1.txt").write_text(body, encoding="utf-8")
     t = time.time()
-    assert listener.wait_replies("s1", cfg, listener_ack="Сейчас, сэр.") is True
+    assert app.conversation.wait_replies("s1", cfg, listener_ack="Сейчас, сэр.") is True
     assert said == [] and time.time() - t < 2.5
 
 
-def test_silent_after_parts_keeps_parts(listener, cfg, said, outbox):
+def test_silent_after_parts_keeps_parts(app, cfg, said, outbox):
     (outbox / "s2.1.txt").write_text("Первая часть.", encoding="utf-8")
     (outbox / "s2.txt").write_text("<silent>", encoding="utf-8")
-    assert listener.wait_replies("s2", cfg) is True and said == ["Первая часть."]
+    assert app.conversation.wait_replies("s2", cfg) is True and said == ["Первая часть."]
 
 
 
@@ -292,20 +296,20 @@ def test_sleep_wake_needs_higher_conf(asr, cfg, monkeypatch):
     assert asr.verify_wake([], 0, 10, cfg, need=("проснись",), min_conf=0.85) is False
 
 
-def test_grammar_settles_garbled_safe_command(listener, cfg):
-    assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg) == ("что в гите проекта пример", True)
+def test_grammar_settles_garbled_safe_command(app, cfg):
+    assert app.c.router.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg) == ("что в гите проекта пример", True)
 
 
 @pytest.mark.parametrize("text,gtext", [("почему небо голубое", "помедленнее"),
                                         ("добав двести грамм торга", "добавь двести грамм творога")])
-def test_grammar_never_forces_free_questions_or_writes(listener, cfg, text, gtext):
-    assert listener.choose(text, 0.9, gtext, cfg)[0] != gtext
+def test_grammar_never_forces_free_questions_or_writes(app, cfg, text, gtext):
+    assert app.c.router.choose(text, 0.9, gtext, cfg)[0] != gtext
 
 
-def test_grammar_rescue_not_in_followup_or_when_disabled(listener, cfg):
-    assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg, followup=True)[0] != "что в гите проекта пример"
+def test_grammar_rescue_not_in_followup_or_when_disabled(app, cfg):
+    assert app.c.router.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg, followup=True)[0] != "что в гите проекта пример"
     cfg["grammar_command_rescue"] = False
-    assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg)[0] != "что в гите проекта пример"
+    assert app.c.router.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg)[0] != "что в гите проекта пример"
 
 
 def test_enter_phrase_has_duration_words_and_wake_hint():
@@ -318,15 +322,15 @@ def test_hint_phrase_rounds_remaining_minutes():
     assert "ещё минуту" in SLEEP.hint_phrase(5)
 
 
-def test_sleep_alias_announces_how_to_wake(listener, cfg, said, monkeypatch, tmp_path):
-    monkeypatch.setattr(listener, "SLEEP_STATE", SLEEP.SleepState(tmp_path / "sleep.json"))
-    listener.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 3600}, "засни", cfg, "wake_word", True)
+def test_sleep_alias_announces_how_to_wake(app, cfg, said, monkeypatch, tmp_path):
+    app.c.sleep.set(SLEEP.SleepState(tmp_path / "sleep.json"))
+    app.conversation.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 3600}, "засни", cfg, "wake_word", True)
     assert said == ["Ухожу в спящий режим на час, сэр. Разбудить: Джарвис, проснись."]
 
 
-def test_sleep_hint_rate_limited(listener, cfg, monkeypatch):
-    listener.STATE.sleep_hint_at = 0
-    assert listener.sleep_hint_due(cfg)
-    listener.STATE.sleep_hint_at = listener.time.time()
-    assert not listener.sleep_hint_due(cfg)
-    assert not listener.sleep_hint_due(dict(cfg, sleep_hint_enabled=False, sleep_hint_interval_s=0))
+def test_sleep_hint_rate_limited(app, cfg, monkeypatch):
+    app.c.state.sleep_hint_at = 0
+    assert app.conversation.sleep_hint_due(cfg)
+    app.c.state.sleep_hint_at = time.time()
+    assert not app.conversation.sleep_hint_due(cfg)
+    assert not app.conversation.sleep_hint_due(dict(cfg, sleep_hint_enabled=False, sleep_hint_interval_s=0))

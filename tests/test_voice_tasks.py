@@ -37,15 +37,15 @@ def test_run_tasks_missing_cache_file(cfg, tmp_path):
     assert [t for t, _ in s.asked] == [T.SERVER_TEXT["briefing"]]
 
 
-def test_awake_and_capabilities_reply_locally(listener, cfg, monkeypatch):
+def test_awake_and_capabilities_reply_locally(app, cfg, monkeypatch):
     said = []
-    monkeypatch.setattr(listener, "say", lambda t, c, **k: said.append(t) or True)
-    monkeypatch.setattr(listener, "say_reply", lambda t, c, **k: said.append(t))
-    listener.run_alias(ROUTING.match_alias("проснись", cfg), "проснись", cfg, "wake_word", False)
-    listener.run_alias(ROUTING.match_alias("что ты умеешь", cfg), "что ты умеешь", cfg, "wake_word", False)
+    monkeypatch.setattr(app.conversation, "say", lambda t, c, **k: said.append(t) or True)
+    monkeypatch.setattr(app.conversation, "say_reply", lambda t, c, **k: said.append(t))
+    app.conversation.run_alias(ROUTING.match_alias("проснись", cfg), "проснись", cfg, "wake_word", False)
+    app.conversation.run_alias(ROUTING.match_alias("что ты умеешь", cfg), "что ты умеешь", cfg, "wake_word", False)
     assert said[0] == T.AWAKE_REPLY and said[1].startswith("Умею вот что, сэр:")
 
 
-def test_grammar_has_new_phrases(listener, cfg):
+def test_grammar_has_new_phrases(app, cfg):
     g = ROUTING.grammar_phrases(cfg)
     assert "утренний брифинг" in g and "что ещё осталось" in g and "выруби экран" in g and "что ты умеешь" in g

@@ -19,5 +19,5 @@ def test_user_aliases_keep_new_default_phrases():
 @pytest.mark.parametrize("text,name", [("выруби экран", "monitor_off"), ("погаси экран", "monitor_off"), ("выключи экран", "monitor_off"),
                                        ("отключи экран", "monitor_off"), ("когда тренировка", "workout"), ("во сколько тренировка", "workout"),
                                        ("когда следующая тренировка", "workout")])
-def test_screen_and_workout_phrases(listener, cfg, text, name):
+def test_screen_and_workout_phrases(app, cfg, text, name):
     assert ROUTING.match_alias(text, cfg)["name"] == name
