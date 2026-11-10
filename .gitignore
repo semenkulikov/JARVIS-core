@@ -26,6 +26,7 @@ models/
 speaker/
 reports/
 eval/
+calibration/
 hf_cache/
 *.npy
 *.bundle
