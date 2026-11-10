@@ -1,45 +1,40 @@
+import datetime
 import json
 
 import jarvis_tasks as T
 from jarvis.core import routing as ROUTING
 from jarvis.adapters.status_cache import StatusCache
+from command_fakes import FakeServices, run
 
 
-def _cache(listener, tmp_path, monkeypatch, data):
+def _cache(tmp_path, data):
     p = tmp_path / "status.json"
     p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    monkeypatch.setattr(listener, "CACHE", StatusCache(str(p)))
+    return StatusCache(str(p))
 
 
-def test_run_tasks_reads_fresh_cache(listener, cfg, monkeypatch, tmp_path):
-    now = listener.datetime.datetime.now().astimezone()
-    _cache(listener, tmp_path, monkeypatch, {"updated": now.isoformat(timespec="seconds"), "today": "Сегодня одна встреча.",
-                                             "notion": "В Notion один проект на проверке."})
-    said, posted = [], []
-    monkeypatch.setattr(listener, "say_reply", lambda t, c, **k: said.append(t))
-    monkeypatch.setattr(listener, "free_phrase", lambda *a, **k: posted.append((a, k)))
-    listener.run_tasks("left", "что ещё осталось", cfg, "wake_word", False)
-    assert said and said[0].startswith("Данные на ") and said[0].endswith("Сегодня одна встреча. В Notion один проект на проверке.")
-    assert not posted
+def test_run_tasks_reads_fresh_cache(cfg, tmp_path):
+    now = datetime.datetime.now().astimezone()
+    s = FakeServices(_cache(tmp_path, {"updated": now.isoformat(timespec="seconds"), "today": "Сегодня одна встреча.",
+                                       "notion": "В Notion один проект на проверке."}))
+    run({"action": "tasks", "mode": "left"}, "что ещё осталось", cfg, s)
+    assert s.replies and s.replies[0].startswith("Данные на ") and s.replies[0].endswith("Сегодня одна встреча. В Notion один проект на проверке.")
+    assert not s.asked
 
 
-def test_run_tasks_without_task_list_asks_server(listener, cfg, monkeypatch, tmp_path):
-    now = listener.datetime.datetime.now().astimezone()
-    _cache(listener, tmp_path, monkeypatch, {"updated": now.isoformat(timespec="seconds"), "today": "x"})
-    posted = []
-    monkeypatch.setattr(listener, "say_reply", lambda t, c, **k: posted.append(("said", t)))
-    monkeypatch.setattr(listener, "free_phrase", lambda text, cfg, trig, test, **k: posted.append((text, k)))
-    listener.run_tasks("all", "все задачи", cfg, "wake_word", False)
-    text, kw = posted[0]
-    assert text == T.SERVER_TEXT["all"] and kw["extra_payload"] == {"intent": "tasks_all"} and kw["kind"] == "free"
+def test_run_tasks_without_task_list_asks_server(cfg, tmp_path):
+    now = datetime.datetime.now().astimezone()
+    s = FakeServices(_cache(tmp_path, {"updated": now.isoformat(timespec="seconds"), "today": "x"}))
+    run({"action": "tasks", "mode": "all"}, "все задачи", cfg, s)
+    text, kw = s.asked[0]
+    assert not s.replies
+    assert text == T.SERVER_TEXT["all"] and kw["extra_payload"] == {"intent": "tasks_all"} and kw["kind"] == "free" and kw["ack"] == "<ack_lookup>"
 
 
-def test_run_tasks_missing_cache_file(listener, cfg, monkeypatch, tmp_path):
-    monkeypatch.setattr(listener, "CACHE", StatusCache(str(tmp_path / "none.json")))
-    posted = []
-    monkeypatch.setattr(listener, "free_phrase", lambda text, *a, **k: posted.append(text))
-    listener.run_tasks("briefing", "утренний брифинг", cfg, "wake_word", False)
-    assert posted == [T.SERVER_TEXT["briefing"]]
+def test_run_tasks_missing_cache_file(cfg, tmp_path):
+    s = FakeServices(StatusCache(str(tmp_path / "none.json")))
+    run({"action": "tasks", "mode": "briefing"}, "утренний брифинг", cfg, s)
+    assert [t for t, _ in s.asked] == [T.SERVER_TEXT["briefing"]]
 
 
 def test_awake_and_capabilities_reply_locally(listener, cfg, monkeypatch):

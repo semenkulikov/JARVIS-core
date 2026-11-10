@@ -1,7 +1,7 @@
 # Jarvis voice assistant 3.18.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
-import json, time, uuid, queue, threading, logging, subprocess, datetime, re, collections, shlex
+import json, time, uuid, queue, threading, logging, collections
 from logging.handlers import RotatingFileHandler
 import numpy as np
 import sounddevice as sd
@@ -31,8 +31,6 @@ import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 import jarvis_codemode as CODE
 import jarvis_dialog as DIALOG
-import jarvis_tasks as TASKS
-import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake)
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device
 from jarvis.adapters.tts import Voice, split_text
@@ -41,13 +39,14 @@ from jarvis.adapters.outbox import Outbox, read_text
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.speaker import SpeakerGate
+from jarvis.commands import registry as COMMANDS
+from jarvis.commands.base import CommandContext
 from jarvis.adapters.process import mem_info, trim_memory
-from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, match_alias
 from jarvis.core.state import ListenerFSM, ListenerState, Mode, RequestLedger, Signals
 from jarvis.app import settings as SETTINGS
 from jarvis.app.settings import DEFAULTS
-from jarvis.core.phrases import Picker, all_phrases, smalltalk_reply
+from jarvis.core.phrases import Picker, all_phrases
 from jarvis.core.followup import FollowupSettings
 from jarvis.core.matching import (norm_phrase as _norm_phrase, natural_status_alias, filler_only,
                                   pure_wait_filler, followup_echo, corroborated_stop, stop_candidate)
@@ -232,133 +231,24 @@ CACHE = StatusCache(os.path.join(BASE, "cache", "status.json"))
 
 
 
-def run_tasks(mode, text, cfg, trig, test):
-    """Briefing / what is left / all tasks / Notion: from a fresh snapshot, otherwise from the server."""
-    cache, fresh, stamp = CACHE.tasks_snapshot(cfg)
-    reply, server_text = TASKS.answer(mode, cache if isinstance(cache, dict) else None, fresh, stamp=stamp)
-    log.info("tasks %s -> %s", mode, "cache" if reply else "server")
-    if reply: say_reply(reply, cfg); return
-    free_phrase(server_text, cfg, trig, test, ack=pick(cfg, "ack_lookup"), kind="free", extra_payload={"intent": "tasks_" + mode})
-
+class _Services:
+    """Command services backed by this module's names (looked up per call, so they can be swapped)."""
+    state = property(lambda self: STATE)
+    status = property(lambda self: CACHE)
+    picker = property(lambda self: PICKER)
+    def say(self, *a, **k): return say(*a, **k)
+    def say_reply(self, *a, **k): return say_reply(*a, **k)
+    def ask_server(self, *a, **k): return free_phrase(*a, **k)
+    def pick(self, *a): return pick(*a)
+    def controller(self): return command_controller()
+    def sleep(self): return sleep_state()
+    def proactive(self): return proactive_manager()
+SERVICES = _Services()
+COMMAND_HANDLERS = COMMANDS.load_builtin()
 
 
 def run_alias(al, text, cfg, trig, test):
-    act = al.get("action", "say"); reply = al.get("reply") or ""
-    ack = lambda: say(reply or pick(cfg, "ack_command"), cfg, role="ack")
-    log.info("ALIAS %s (%s) <- %r", al.get("name", "?"), act, text)
-    if act == "jarvis_sleep":
-        STATE.followup_eligible = False
-        secs = int(al["seconds"])
-        if test: log.info("TEST sleep %ss: no persistent change", secs)
-        else: sleep_state().start(secs)
-        say(SLEEP.enter_phrase(secs), cfg)
-        return
-    if act == "awake":
-        say(TASKS.AWAKE_REPLY, cfg); return
-    if act == "capabilities":
-        for line in REGISTRY.log_lines(): log.info("capabilities: %s", line)
-        say_reply(REGISTRY.capabilities_phrase(), cfg); return
-    if act == "tasks":
-        run_tasks(al["mode"], text, cfg, trig, test); return
-    if act == "proactive_dnd":
-        if test: log.info("TEST DND=%s: no persistent change",al["enabled"])
-        else: proactive_manager().set_dnd(al["enabled"])
-        say(PROACTIVE.REPLIES[0 if al["enabled"] else 1],cfg)
-        return
-    if act == "quick2":
-        key = DIALOG.ack_key(al); spoken = pick(cfg, key) if key else ""
-        # After an instant ack a server fallback must not add a second one.
-        fwd_ack = {"ack": "", "listener_ack": spoken} if spoken else {}
-        run = lambda speak: command_controller().execute(al,text,cfg,speak,lambda value,**kw:free_phrase(value,cfg,trig,test,**{**fwd_ack, **kw}),
-                last_reply=STATE.last_reply,last_private=STATE.last_reply_private,trigger=trig,
-                confidence=STATE.last_input_conf,test=test)
-        keep = DIALOG.ack_then(say, cfg, spoken, run)
-        if not keep: STATE.followup_eligible = False
-        return
-    if act in ("status", "cache_field"):
-        field = al.get("field") if act == "cache_field" else None
-        decision, cached, age = CACHE.cached_status(field, cfg)
-        log.info("status cache policy=%s field=%s age_h=%s", decision, field or "all", None if age is None else round(age,3))
-        if decision == "fresh":
-            say_reply(cached, cfg); return
-        if decision == "stale":
-            spoken = cached + " Это сохранённые данные. Обновляю данные, сэр."
-            # Fetch concurrently while the dated snapshot is being read.
-            free_phrase(text, cfg, trig, test, ack=spoken, kind="status"); return
-        free_phrase(text if field else "статус по задачам", cfg, trig, test, ack=pick(cfg, "ack_status"), kind="status")
-    elif act == "time":
-        now = datetime.datetime.now(); say(f"Сейчас {JT.time_words(now.hour, now.minute)}, сэр.", cfg)
-    elif act == "workout":
-        say(workout_summary(cfg), cfg)
-    elif act == "smalltalk":
-        say(smalltalk_reply(al, PICKER), cfg)
-    elif act == "stop":
-        say(pick(cfg, "ack_stop"), cfg, role="stop_ack")
-    elif act == "key":
-        vk = LP.VK[al["key"]]; n = int(al.get("times", 1))
-        if test: log.info("TEST: would send vk=0x%X x%d", vk, n)
-        else: LP.press(vk, n)
-        if not al.get("silent") and al["key"] != "mute": ack()
-    elif act == "monitor_off":
-        ack()
-        if test: log.info("TEST: would turn monitor off")
-        else: time.sleep(0.5); LP.monitor_off()
-    elif act == "timer":
-        secs = LP.parse_duration_s(text)
-        if not secs: say("На сколько поставить таймер, сэр?", cfg); return
-        LP.TIMERS.add(secs, text)
-        say(f"Таймер на {QUICK.duration_label(secs)}, сэр.", cfg)
-    elif act == "timer_cancel":
-        n = LP.TIMERS.cancel(); say("Таймер отменён, сэр." if n else "Активных таймеров нет, сэр.", cfg)
-    elif act == "battery":
-        pct, ac = LP.battery()
-        if pct is None: say("Не вижу батарею, сэр.", cfg); return
-        say(f"Заряд {JT.num_ru(pct)} {JT.plural(pct, 'процент', 'процента', 'процентов')}, " + ("зарядка подключена, сэр." if ac else "работаем от батареи, сэр."), cfg)
-    elif act == "temperature":
-        t = LP.temperature_c()
-        if t is None: say("Датчик температуры сейчас недоступен, сэр.", cfg)
-        else: say(f"Температура системы {JT.num_ru(t)} {JT.plural(t, 'градус', 'градуса', 'градусов')}, сэр.", cfg)
-    elif act == "open_project":
-        rest = " ".join(_norm_phrase(text)); rest = re.sub(r"^.*?проект\w*\s*", "", rest)
-        path, score = LP.find_project(rest, lambda w: JT._latin(re.match(r"(?s).+", w)))
-        log.info("project match %r -> %s (%.2f)", rest, path, score)
-        exe = LP.cursor_exe()
-        if not path or score < 0.5: say("Не нашёл такой проект, сэр.", cfg); return
-        if not exe: say("Не нашёл Курсор, сэр.", cfg); return
-        if test: log.info("TEST: would run %s %s", exe, path)
-        else: subprocess.Popen([exe, path], creationflags=0x08000000)
-        ack()
-    elif act == "open_github":
-        url = CACHE.github_url()
-        if not url:
-            r = LP.recent_repo(); url = LP.remote_url(r) if r else None; log.info("recent repo %s -> %s", r, url)
-        if not url: say("Не нашёл репозиторий, сэр.", cfg); return
-        if test: log.info("TEST: would open %s", url)
-        else: os.startfile(url)
-        ack()
-    elif act == "open":
-        tgt = os.path.expandvars(al.get("target", ""))
-        if test: log.info("TEST: would open %s (exists=%s)", tgt, os.path.exists(tgt) or tgt.startswith("http")); ack(); return
-        try:
-            if not re.match(r"^\w+:", tgt) or re.match(r"^[A-Za-z]:\\", tgt):
-                if not os.path.exists(tgt): raise FileNotFoundError(tgt)
-            os.startfile(tgt); ack()
-        except Exception as e:
-            log.warning("open failed %s: %s", tgt, e); say("Не нашёл приложение, сэр.", cfg)
-    elif act == "lock":
-        ack()
-        if test: log.info("TEST: would lock"); return
-        subprocess.Popen(["rundll32.exe", "user32.dll,LockWorkStation"])
-    elif act == "shell":
-        ack()
-        target = str(al.get("target", "")).strip()
-        if test: log.info("TEST: would run %s", target); return
-        if not target: return
-        subprocess.Popen(shlex.split(target, posix=False), shell=False)
-    elif act == "webhook":
-        free_phrase(al.get("target") or text, cfg, trig, test, ack=reply or None)
-    else:
-        say(reply, cfg)
+    COMMANDS.dispatch(CommandContext(text, cfg, trig, test, SERVICES), al)
 
 def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, extra_payload=None):
     trace = STATE.trace
