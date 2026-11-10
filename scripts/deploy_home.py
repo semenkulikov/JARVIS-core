@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Callable, Dict, Iterable, Optional
 
 REPO = Path(__file__).resolve().parent.parent
@@ -42,7 +42,7 @@ def render_launcher(home: Path, python: Path, env: Dict[str, str], repo: Path = 
     ]
     for key in sorted(env):
         lines.append("pe(" + _vbs(key) + ") = " + _vbs(env[key]))
-    script = repo / "src" / "jarvis_supervisor.py"
+    script = PureWindowsPath(str(repo)) / "src" / "jarvis_supervisor.py"  # a Windows launcher on any OS
     lines += [
         "sh.CurrentDirectory = " + _vbs(str(home)),
         "sh.Run " + _vbs('"' + str(python) + '" "' + str(script) + '"') + ", 0, False",
