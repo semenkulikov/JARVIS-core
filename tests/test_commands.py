@@ -109,3 +109,10 @@ def test_modes_do_not_duplicate_owned_timers(harness):
                                        ('сколько свободно на диски', 'disk'), ('проверь сервере', 'server_health')])
 def test_common_asr_variants(heard, cmd):
     assert Q.match(heard)['cmd'] == cmd
+
+
+@pytest.mark.parametrize('secs,label', [(3600, 'час'), (7200, 'два часа'), (2700, 'сорок пять минут'), (1800, 'полчаса'),
+                                        (5400, 'полтора часа'), (60, 'минуту'), (4800, 'час двадцать минут'),
+                                        (18000, 'пять часов'), (90, 'полторы минуты'), (150, 'две минуты тридцать секунд'), (21600, 'шесть часов')])
+def test_duration_label_is_natural(secs, label):
+    assert Q.duration_label(secs) == label

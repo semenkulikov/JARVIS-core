@@ -827,10 +827,7 @@ def run_alias(al, text, cfg, trig, test):
         secs = LP.parse_duration_s(text)
         if not secs: say("На сколько поставить таймер, сэр?", cfg); return
         LP.TIMERS.add(secs, text)
-        if secs % 3600 == 0: w = f"{JT.num_ru(secs // 3600)} {JT.plural(secs // 3600, 'час', 'часа', 'часов')}"
-        elif secs % 60 == 0: m = secs // 60; w = f"{JT.num_ru(m, 'f')} {JT.plural(m, 'минуту', 'минуты', 'минут')}"
-        else: w = f"{JT.num_ru(secs, 'f')} {JT.plural(secs, 'секунду', 'секунды', 'секунд')}"
-        say(f"Таймер на {w}, сэр.", cfg)
+        say(f"Таймер на {QUICK.duration_label(secs)}, сэр.", cfg)
     elif act == "timer_cancel":
         n = LP.TIMERS.cancel(); say("Таймер отменён, сэр." if n else "Активных таймеров нет, сэр.", cfg)
     elif act == "battery":
