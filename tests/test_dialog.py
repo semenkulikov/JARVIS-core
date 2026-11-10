@@ -4,6 +4,7 @@ import pytest
 
 import jarvis_commands as Q
 import jarvis_dialog as D
+from jarvis.core import wake as W
 from test_commands import FakeBackend
 
 
@@ -85,11 +86,11 @@ def test_server_ack_varies_and_never_repeats(listener, cfg):
     assert all(a != b for a, b in zip(picks, picks[1:], strict=False))
 
 
-def test_only_wake_heard(listener):
-    assert listener.only_wake_heard([{"word": "джарвис"}], "")
-    assert listener.only_wake_heard([], "хей джарвис")
-    assert not listener.only_wake_heard([{"word": "джарвис"}], "поставь")
-    assert not listener.only_wake_heard([], "")
+def test_only_wake_heard():
+    assert W.only_wake_heard([{"word": "джарвис"}], "")
+    assert W.only_wake_heard([], "хей джарвис")
+    assert not W.only_wake_heard([{"word": "джарвис"}], "поставь")
+    assert not W.only_wake_heard([], "")
 
 
 def test_wake_ack_phrases_precached(listener, cfg):

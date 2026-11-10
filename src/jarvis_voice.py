@@ -43,6 +43,8 @@ import jarvis_dialog as DIALOG
 import jarvis_vocab as VOCAB
 import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
+from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
+                              heard_after, phrase_finished)
 from jarvis.core.matching import (norm_phrase as _norm_phrase, tok_match as _tok_match, natural_status_alias, filler_only,
                                   incomplete_fragment, pure_wait_filler, followup_echo, corroborated_stop, stop_candidate)
 CMDS = None
@@ -913,7 +915,6 @@ def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, e
     else: say("Не получилось отправить запрос, сэр.", cfg)
 
 # ================= capture after wake =================
-WAKE_TOK = re.compile(r"^(хей|эй|хэй|эх|ай|а|о|ну|слушай|джарвис\w*|жарвис\w*|джервис\w*|дарвис\w*|гарвис\w*|джарви\w*|джави\w*|харвис\w*|травис\w*|арвис\w*|рвис\w*|jarvis)$")
 
 class Capture:
     def __init__(self, pre=None):
@@ -921,10 +922,6 @@ class Capture:
         self.audio_start = time.time() - sum(len(x) for x in (pre or [])) / SR
         for x in pre or []: self.q.put(x)
 
-def strip_wake(words):
-    toks = [w for w in words]
-    while toks and WAKE_TOK.match(toks[0]): toks.pop(0)
-    return " ".join(toks).strip()
 
 class AGC:
     def __init__(self, cfg):
@@ -947,33 +944,9 @@ def grammar_phrases(cfg):
     ph += TASKS.PHRASES
     return sorted({VOCAB.vosk_spelling(p) for p in ph if p}) + ["[unk]"]
 
-def only_wake_heard(words, partial):
-    """True while everything recognised so far is the wake name (plus «хей» and the like)."""
-    toks = [w.get("word", "") for w in words] + (partial or "").split()
-    return bool(toks) and all(WAKE_TOK.match(t) for t in toks)
 
-# The Vosk wake path starts the capture this far before the end of «Джарвис»; what Vosk makes
-# of that tail («крыс», «есть», «то есть») is not the command and must not end the capture.
-VOSK_WAKE_TAIL_S = 0.3
-VOSK_WAKE_SKIP_S = VOSK_WAKE_TAIL_S + 0.1
 
-def heard_after(words, partial_words, partial, skip_s):
-    """Tokens recognised so far that end after skip_s; without partial timings the partial counts."""
-    toks = [w.get("word", "") for w in words if w.get("end", 99) > skip_s]
-    if partial_words is not None: toks += [w.get("word", "") for w in partial_words if w.get("end", 99) > skip_s]
-    elif partial: toks += partial.split()
-    return toks
 
-def phrase_finished(now, t0, heard, last_change, acoustic_last, nospeech_s, sil, wake_pause_s=None, skip_s=0.0):
-    """End of the utterance: enough silence after speech, or no speech at all within the wait."""
-    quiet = lambda d: acoustic_last is None or now - acoustic_last > d
-    if not heard:
-        wait, need = nospeech_s, 0.5
-        if wake_pause_s is not None and skip_s > 0:  # only the wake tail so far: answer a bare «Джарвис» soon
-            wait, need = min(nospeech_s, skip_s + wake_pause_s), max(0.5, wake_pause_s)
-        return now - t0 > wait and quiet(need)
-    lim = wake_pause_s if wake_pause_s is not None and all(WAKE_TOK.match(t) for t in heard) else sil
-    return bool(last_change) and now - last_change > lim and quiet(lim)
 
 def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=None):
     """returns (text, avg_conf, grammar_text); wake_pause_s ends a bare «Джарвис» sooner."""
@@ -1019,12 +992,8 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=No
     finally:
         if STATE["capture"] is cap: STATE["capture"] = None
     kept = [w for w in words if w.get("end", 99) > skip_s]
-    # Strip the recognized wake name, not a fixed 1.35 s of possible command audio.
-    wake_indices = [i for i,w in enumerate(kept[:8]) if re.fullmatch(r"(?:джарвис|жарвис|джервис|дарвис|гарвис|джарви|джави|харвис|арвис|jarvis)\w*", w["word"])]
-    if wake_indices: kept = kept[wake_indices[-1]+1:]
-    toks = [w["word"] for w in kept]
-    while toks and WAKE_TOK.match(toks[0]): toks.pop(0); kept.pop(0)
-    text = " ".join(toks).strip()
+    kept = strip_wake_words(kept)
+    text = " ".join(w["word"] for w in kept).strip()
     conf = sum(w.get("conf", 1) for w in kept) / len(kept) if kept else 0.0
     gk = [w for w in gwords if w.get("end", 99) > skip_s and w["word"] != "[unk]"]
     gtext = " ".join(w["word"] for w in gk); gconf = sum(w.get("conf", 1) for w in gk) / len(gk) if gk else 0.0
@@ -1131,9 +1100,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
             text, ok = choose(text, conf, g, cfg)
             if STATE["dropped"]: return
         else:
-            text = " ".join(t for t in _norm_phrase(text)); toks = text.split()
-            while toks and WAKE_TOK.match(toks[0]): toks.pop(0)
-            text = " ".join(toks)
+            text = strip_wake(_norm_phrase(text))
             if trig != "followup":
                 STATE["last_input_conf"] = 1.0
                 STATE["last_input_end"] = None
@@ -1501,11 +1468,11 @@ def main():
                             fw = fr.get("result", [])
                             fc = sum(w.get("conf",0) for w in fw) / max(1,len(fw))
                             free_last = (time.monotonic(), fr.get("text", "") if fc >= 0.5 else "")
-                            if PROACTIVE.priority_candidate(fr.get("text",""),fc,STATE["speaking_text"],cfg) and any(w.get("word") in ("джарвис","жарвис","джервис","дарвис","гарвис","джарви","джави","jarvis") and w.get("conf",0)>=float(cfg.get("priority_wake_min_conf",.85)) for w in fw[:3]):
+                            if PROACTIVE.priority_candidate(fr.get("text",""),fc,STATE["speaking_text"],cfg) and any(w.get("word") in PRIORITY_WAKE_WORDS and w.get("conf",0)>=float(cfg.get("priority_wake_min_conf",.85)) for w in fw[:3]):
                                 log.info("PRIORITY vosk wake conf=%.2f -> interrupt and capture",fc)
                                 interrupt.set()
                                 if STATE.get("rid"): CANCELLED[STATE["rid"]]=time.time()
-                                wake=next((w for w in fw[:3] if w.get("word") in ("джарвис","жарвис","джервис","дарвис","гарвис","джарви","джави","jarvis")),None)
+                                wake=next((w for w in fw[:3] if w.get("word") in PRIORITY_WAKE_WORDS),None)
                                 pending=borigin+int((wake.get("start",0) if wake else 0)*SR)-int(.25*SR)
                                 continue
                         if brec.AcceptWaveform(bb):
