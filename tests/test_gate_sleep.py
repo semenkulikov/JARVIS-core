@@ -232,9 +232,8 @@ class _Sig:
 
 @pytest.fixture
 def outbox(listener, cfg, said, monkeypatch, tmp_path):
-    monkeypatch.setattr(listener, "OUTBOX", str(tmp_path))
-    monkeypatch.setattr(listener, "DONE", str(tmp_path))
-    monkeypatch.setattr(listener, "OUTBOX_SIGNAL", _Sig())
+    from jarvis.adapters.outbox import Outbox
+    monkeypatch.setattr(listener, "OUTBOX", Outbox(str(tmp_path), done=str(tmp_path), signal=_Sig()))
     listener.interrupt.clear(); listener.LEDGER.down_since = None
     cfg.update(reply_timeout_s=3.0, server_notice_s=5.0, server_down_wait_s=5.0)
     return tmp_path

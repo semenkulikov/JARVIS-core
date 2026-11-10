@@ -10,8 +10,7 @@ import jarvis_paths as PATHS
 BASE = str(PATHS.HOME)
 LOGDIR = str(PATHS.log_dir())
 os.makedirs(LOGDIR, exist_ok=True)
-OUTBOX = os.path.join(BASE, "outbox"); DONE = os.path.join(OUTBOX, "done")
-os.makedirs(DONE, exist_ok=True); os.makedirs(os.path.join(BASE, "cache"), exist_ok=True)
+os.makedirs(os.path.join(BASE, "cache"), exist_ok=True)
 TEST_TRIGGER = os.path.join(BASE, "test_trigger")
 STOP_FILE = os.path.join(BASE, "stop")
 
@@ -41,6 +40,7 @@ from jarvis.core import status as STATUS
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
 from jarvis.adapters.tts import Voice, split_text
 from jarvis.adapters.transport import WebhookTransport
+from jarvis.adapters.outbox import Outbox, read_text
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, grammar_phrases, match_alias
@@ -58,7 +58,7 @@ def command_controller():
     return CMDS
 
 import jarvis_speed as SPEED
-OUTBOX_SIGNAL = SPEED.OutboxSignal(OUTBOX)
+OUTBOX = Outbox(os.path.join(BASE, "outbox")); OUTBOX.ensure()
 
 def perf(event, **meta):
     STATE.perf(event, **meta)
@@ -147,16 +147,7 @@ def precache(cfg):
 
 
 
-def read_part(p):
-    for _ in range(10):
-        try:
-            with open(p, encoding="utf-8-sig") as f: return f.read()
-        except PermissionError: time.sleep(0.2)
-    return ""
 
-def move_done(p):
-    try: os.replace(p, os.path.join(DONE, os.path.basename(p)))
-    except Exception as e: log.warning("move failed %s: %s", p, e)
 
 def say_reply(txt, cfg, private=False):
     t0 = time.time()
@@ -164,23 +155,8 @@ def say_reply(txt, cfg, private=False):
         if interrupt.is_set() or time.time() - t0 > 30: return
         time.sleep(3)
 
-def ready_part(p, allow_empty=False):
-    """Avoid playing partially-written files, without a fixed 200 ms penalty."""
-    try:
-        a = os.stat(p)
-        time.sleep(0.08)
-        b = os.stat(p)
-        return (a.st_size > 0 or allow_empty) and (a.st_size, a.st_mtime_ns) == (b.st_size, b.st_mtime_ns)
-    except OSError: return False
 
-def file_age(p):
-    try: return max(0.0, time.time() - os.path.getmtime(p))
-    except OSError: return 0.0
 
-def log_outbox(p, rid, label, txt, t0):
-    try: lag = max(0.0, time.time() - os.path.getmtime(p))
-    except OSError: lag = -1
-    log.info("outbox %s (%d chars) rid=%s wait_s=%.3f file_age_s=%.3f", label, len(txt), rid, time.time() - t0, lag)
 
 
 SERVER_DOWN_PHRASE = "Сервер не отвечает, сэр. Локальные команды работают."
@@ -201,10 +177,10 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
         real_data_seen = True
         if kind.startswith("clipboard_") or kind in CODE.PRIVATE_KINDS: say_reply(txt,cfg,private=True)
         else: say_reply(txt, cfg)
-    final = os.path.join(OUTBOX, f"{rid}.txt")
+    final = OUTBOX.final(rid)
     while time.time() - t0 < cfg["reply_timeout_s"]:
-        OUTBOX_SIGNAL.clear()
-        if not server_seen and (os.path.exists(final) or os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt"))):
+        OUTBOX.signal.clear()
+        if not server_seen and (os.path.exists(final) or os.path.exists(OUTBOX.part(rid, n))):
             server_seen = True; LEDGER.down_since = None
         el = time.time() - t0
         if not server_seen and was_down and el > float(cfg.get("server_down_wait_s", 45)):
@@ -217,23 +193,23 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
             say(SERVER_SLOW_PHRASE, cfg)
         # An initial acknowledgement is enough. No second "checking" announcement.
         if not listener_ack and not real_data_seen and fillers == 0 and time.time() - t0 > max(12.0, float(cfg.get("wait_filler_s", 12))) \
-                and not os.path.exists(final) and not os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt")):
+                and not os.path.exists(final) and not os.path.exists(OUTBOX.part(rid, n)):
             fillers += 1; say("Ответ ещё готовится, сэр.", cfg)
         if interrupt.is_set():
             LEDGER.cancel(rid); log.info("reply wait for %s abandoned (interrupted), rid cancelled", rid); return False
-        part = os.path.join(OUTBOX, f"{rid}.{n}.txt")
+        part = OUTBOX.part(rid, n)
         if os.path.exists(part) or os.path.exists(final): perf("first_server_file")
-        if os.path.exists(part) and ready_part(part):
+        if os.path.exists(part) and OUTBOX.ready(part):
             perf("first_server_file")
-            txt = read_part(part); log_outbox(part, rid, "part " + str(n), txt, t0)
-            move_done(part); speak_part(txt); n += 1; continue
-        if os.path.exists(final) and ready_part(final, allow_empty=real_data_seen or file_age(final) >= 0.6):
+            txt = OUTBOX.read(part); OUTBOX.log_arrival(part, rid, "part " + str(n), txt, t0)
+            OUTBOX.move_done(part); speak_part(txt); n += 1; continue
+        if os.path.exists(final) and OUTBOX.ready(final, allow_empty=real_data_seen or OUTBOX.file_age(final) >= 0.6):
             perf("first_server_file")
-            while os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt")):
-                p = os.path.join(OUTBOX, f"{rid}.{n}.txt"); t = read_part(p); move_done(p); log.info("outbox part %d (%d chars)", n, len(t)); speak_part(t); n += 1
-            txt = read_part(final); log_outbox(final, rid, "final", txt, t0); move_done(final)
+            while os.path.exists(OUTBOX.part(rid, n)):
+                p = OUTBOX.part(rid, n); t = OUTBOX.read(p); OUTBOX.move_done(p); log.info("outbox part %d (%d chars)", n, len(t)); speak_part(t); n += 1
+            txt = OUTBOX.read(final); OUTBOX.log_arrival(final, rid, "final", txt, t0); OUTBOX.move_done(final)
             speak_part(txt); return True
-        OUTBOX_SIGNAL.wait(cfg)
+        OUTBOX.signal.wait(cfg)
     log.warning("reply timeout for %s", rid)
     if not server_seen and not real_data_seen:
         LEDGER.down_since = time.time(); LEDGER.cancel(rid)
@@ -714,10 +690,10 @@ def main():
             ready.set(); log.info("vosk background warmup %.3fs", time.monotonic()-t0)
     threading.Thread(target=warm_vosk, name="vosk-warmup", daemon=True).start()
     threading.Thread(target=precache, args=(cfg,), name="tts-warmup", daemon=True).start()
-    OUTBOX_SIGNAL.start(cfg.get("outbox_watch_enabled", True),cfg.get("outbox_event_batch_s",0.02))
+    OUTBOX.signal.start(cfg.get("outbox_watch_enabled", True),cfg.get("outbox_event_batch_s",0.02))
     while not ready.wait(0.1):
         if os.path.exists(STOP_FILE):
-            RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); OUTBOX_SIGNAL.stop(); return
+            RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); OUTBOX.signal.stop(); return
     if model_error: raise model_error[0]
     model = model_box[0]; STATE.model = model
     def wake_rec():
@@ -765,7 +741,7 @@ def main():
             if os.path.exists(STOP_FILE):
                 RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); log.info("stop file -> intentional exit"); interrupt.set(); PLAYER.idle(1.0); break
             if not busy.is_set() and os.path.exists(TEST_TRIGGER):
-                tt = read_part(TEST_TRIGGER).strip(); os.remove(TEST_TRIGGER); cfg = load_cfg()
+                tt = read_text(TEST_TRIGGER).strip(); os.remove(TEST_TRIGGER); cfg = load_cfg()
                 log.info("test_trigger %r", tt)
                 if tt.lower() in ("clap",): start("clap", text="", test=True)
                 elif tt.lower() in ("", "wake", "джарвис", "хей джарвис"): start("wake_word", text="", test=True)
@@ -804,12 +780,7 @@ def main():
             sc = max(oww.predict(i16).values()) if oww is not None else 0.0
             if time.time() - last_clean > 2:
                 last_clean = time.time()
-                for rid_c, tc in list(LEDGER.cancelled.items()):
-                    if time.time() - tc > 900: LEDGER.cancelled.pop(rid_c, None); continue
-                    for fn in os.listdir(OUTBOX):
-                        if fn.startswith(rid_c):
-                            try: os.remove(os.path.join(OUTBOX, fn)); log.info("dropped cancelled outbox part %s", fn)
-                            except Exception as e: log.info("drop failed %s: %s", fn, e)
+                OUTBOX.purge_cancelled(LEDGER)
             if busy.is_set():
                 if not was_busy:
                     brec = stop_rec(cfg); bagc = AGC(cfg)
@@ -817,7 +788,7 @@ def main():
                 was_busy = True
                 if cap is None and not interrupt.is_set() and not STATE.stop_ack_active and not STATE.followup_guard:
                     if os.path.exists(TEST_BARGE):
-                        tb = read_part(TEST_BARGE).strip(); os.remove(TEST_BARGE); log.info("test_bargein %r (speaking=%s)", tb, speaking.is_set())
+                        tb = read_text(TEST_BARGE).strip(); os.remove(TEST_BARGE); log.info("test_bargein %r (speaking=%s)", tb, speaking.is_set())
                         do_stop("test: " + tb); continue
                     try:
                         bb = (bagc(x) * 32767).astype(np.int16).tobytes()
@@ -911,7 +882,7 @@ def main():
                     start("wake_word", pre=pre, skip_s=skip)
         except Exception as e:
             log.exception("main loop error: %s", e); time.sleep(0.5)
-    OUTBOX_SIGNAL.stop()
+    OUTBOX.signal.stop()
 
 if __name__ == "__main__":
     guard=RUNTIME.Singleton(BASE,"listener")

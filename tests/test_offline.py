@@ -6,7 +6,8 @@ class Sig:
  def wait(self,cfg):time.sleep(0.01)
 @pytest.fixture
 def outbox(listener,cfg,monkeypatch,tmp_path):
- said=[];monkeypatch.setattr(listener,'OUTBOX',str(tmp_path));monkeypatch.setattr(listener,'OUTBOX_SIGNAL',Sig())
+ from jarvis.adapters.outbox import Outbox
+ said=[];monkeypatch.setattr(listener,'OUTBOX',Outbox(str(tmp_path),done=str(tmp_path/'done'),signal=Sig()));listener.OUTBOX.ensure()
  monkeypatch.setattr(listener,'say',lambda t,c,**k:said.append(t));monkeypatch.setattr(listener,'say_reply',lambda t,c,**k:said.append(t))
  listener.interrupt.clear();listener.LEDGER.down_since=None
  cfg.update(reply_timeout_s=0.4,server_notice_s=0.1,server_down_wait_s=0.1,server_down_ttl_s=60)
