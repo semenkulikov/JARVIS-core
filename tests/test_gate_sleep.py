@@ -358,3 +358,29 @@ def test_verify_wake_feeds_normalized_padded_clip(asr, cfg, monkeypatch):
     assert seen["agc"] is False and 0.6 < seen["peak"] <= 0.71 and seen["n"] == 8000 + 2 * int(0.2 * 16000)
     cfg["wake_verify_normalize"] = False
     asr.verify_wake(ring, 0, 8000, cfg); assert seen["agc"] is True and seen["n"] == 8000
+
+
+@pytest.mark.parametrize("text,conf,gtext,want", [
+    ("закачай экран", 0.74, "выключи экран", "выключи экран"),
+    ("заблокируй храм", 0.56, "заблокируй экран", "заблокируй экран"),
+    ("открой угрозой", 0.56, "открой браузер", "открой браузер"),
+    ("режим фокусах", 0.74, "режим фокуса", "режим фокуса"),
+    ("отмени выключения", 0.38, "отмени выключение", "отмени выключение"),
+    ("перестань все задачи", 0.83, "перескажу все задачи", "перескажу все задачи"),
+])
+def test_confident_grammar_settles_unclear_owner_speech(app, cfg, text, conf, gtext, want):
+    words = [{"word": w, "conf": 0.3 if i == 0 else 0.95} for i, w in enumerate(text.split())]  # one word was a guess
+    app.c.state.last_capture = {"words": words, "grammar_conf": 1.0}
+    assert app.c.router.choose(text, conf, gtext, cfg) == (want, True)
+
+
+@pytest.mark.parametrize("text,conf,gtext", [
+    ("почему небо голубое", 0.9, "помедленнее"),                      # no shared word
+    ("сколько стоит биткоин", 0.95, "сколько заряда"),                # clear free question goes to the server
+    ("добав двести грамм торга", 0.5, "добавь двести грамм творога"),  # writes never come from the grammar
+    ("закачай экран", 0.74, "выключи экран"),                          # grammar not confident enough
+])
+def test_confident_grammar_never_forces_questions_writes_or_unsure_grammar(app, cfg, text, conf, gtext):
+    gconf = 0.8 if text == "закачай экран" else 1.0
+    app.c.state.last_capture = {"words": [{"word": w, "conf": 0.3 if i == 0 else 0.95} for i, w in enumerate(text.split())], "grammar_conf": gconf}
+    assert app.c.router.choose(text, conf, gtext, cfg)[0] != gtext

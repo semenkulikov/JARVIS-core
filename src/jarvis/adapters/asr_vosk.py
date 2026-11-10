@@ -117,7 +117,7 @@ class VoskASR:
         if tr is not None and kept:
             tr.mark("speech_end", at=time.perf_counter() - endpoint_lag, estimated=True)
         self.state.last_input_conf = conf
-        self.state.last_capture = {"words": kept, "hit_max": cut and bool(kept)}
+        self.state.last_capture = {"words": kept, "hit_max": cut and bool(kept), "grammar_conf": round(gconf, 3) if gtext else 0.0}
         self.state.last_input_end = time.monotonic() - endpoint_lag if kept else None
         self.state.perf("recognized", confidence=round(conf,3))
         return text, conf, (gtext if gconf >= 0.75 else "")

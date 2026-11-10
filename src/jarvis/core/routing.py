@@ -22,6 +22,21 @@ log = logging.getLogger("jarvis")
 
 # Actions that only read data: safe to take from the grammar recognizer or a low-confidence follow-up.
 READ_ONLY_ACTIONS = ("status", "cache_field", "time", "workout", "tasks", "capabilities")
+# Never taken from the grammar recognizer alone: writes, timers, sleep, shutdown and anything sent on.
+GRAMMAR_NEVER_ACTIONS = ("webhook", "jarvis_sleep", "timer", "open_project")
+GRAMMAR_NEVER_CMDS = ("food_log", "todoist_add", "note", "shutdown_prepare", "shutdown_confirm", "volume", "timer", "reminder")
+
+
+def grammar_may_decide(alias: Alias | None) -> bool:
+    """Whether a confident grammar reading of this action may replace an unclear free transcript."""
+    if not alias or alias.get("action") in GRAMMAR_NEVER_ACTIONS: return False
+    return not (alias.get("action") == "quick2" and alias.get("cmd") in GRAMMAR_NEVER_CMDS)
+
+
+def grammar_agrees(text: str, gtext: str) -> bool:
+    """The free transcript shares a content word (4+ letters, ending or slip aside) with the grammar phrase."""
+    free = [t for t in norm_phrase(text) if len(t) >= 4]; gram = [t for t in norm_phrase(gtext) if len(t) >= 4]
+    return any(tok_match(a, b) or difflib.SequenceMatcher(None, a, b).ratio() >= 0.7 for a in free for b in gram)
 
 
 def match_alias(text: str, cfg: Config) -> Alias | None:
@@ -117,6 +132,14 @@ class Router:
             log.info("filler-only/echo transcript ignored: %r", text); return "", False
         al = match_alias(text, cfg) if text else None
         ga = match_alias(gtext, cfg) if gtext else None
+        gconf = float((self.state.last_capture or {}).get("grammar_conf", 0.0))
+        confident = bool(not followup and ga and gconf >= float(cfg.get("grammar_confident_conf", 0.95)) and grammar_may_decide(ga))
+        if al and confident and ga:
+            same = al.get("name") == ga.get("name")
+            close = (al.get("action") in READ_ONLY_ACTIONS and ga.get("action") in READ_ONLY_ACTIONS
+                     and difflib.SequenceMatcher(None, " ".join(norm_phrase(text)), " ".join(norm_phrase(gtext))).ratio() >= 0.8)
+            if (same and conf < float(cfg.get("min_conf", 0.55))) or (not same and close):
+                log.info("confident grammar wins: %r (free %r conf %.2f, grammar conf %.2f)", gtext, text, conf, gconf); return gtext, True
         if al:
             if al.get("action") in READ_ONLY_ACTIONS and conf<float(cfg.get("min_conf",0.55)) and not (gtext and ga):
                 log.info("local intent rejected: low ASR confidence %.2f",conf); return text,False
@@ -139,5 +162,7 @@ class Router:
         meta = self.state.last_capture or {}
         words = meta.get("words") or [{"word": w, "conf": conf} for w in norm_phrase(text)]
         reason = GATE.reject_reason(words, cfg, followup=followup, hit_max=bool(meta.get("hit_max")))
+        if reason and confident and grammar_agrees(text, gtext):
+            log.info("confident grammar wins over unclear speech: %r (free %r, %s, grammar conf %.2f)", gtext, text, reason, gconf); return gtext, True
         if reason: return self.drop(reason, text)
         return text, True
