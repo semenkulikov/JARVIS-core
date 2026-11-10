@@ -10,7 +10,7 @@ import jarvis_commands as QUICK
 from jarvis.core import gate as GATE
 import jarvis_proactive as PROACTIVE
 import jarvis_sleep as SLEEP
-import jarvis_speed as SPEED
+from jarvis.core.fuzzy import fuzzy_alias
 from jarvis.core import tasks as TASKS
 from jarvis.core import vocab as VOCAB
 from jarvis.core.matching import filler_only, incomplete_fragment, natural_status_alias, norm_phrase, tok_match
@@ -45,7 +45,7 @@ def match_alias(text: str, cfg: Config) -> Alias | None:
         return {"name":"dated_query", "action":"webhook", "target":text}
     natural = natural_status_alias(text)
     if natural: return natural
-    fuzzy = SPEED.fuzzy_alias(text, cfg)
+    fuzzy = fuzzy_alias(text, cfg)
     if fuzzy: return fuzzy
     best: Alias | None = None; bscore = 0
     for al in cfg.get("aliases") or []:
@@ -73,7 +73,7 @@ def match_alias(text: str, cfg: Config) -> Alias | None:
             else: continue
             if score > bscore: best, bscore = al, score
     if best: return best
-    return SPEED.fuzzy_alias(text, cfg)
+    return fuzzy_alias(text, cfg)
 
 
 def grammar_phrases(cfg: Config) -> list[str]:

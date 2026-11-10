@@ -21,7 +21,6 @@ from jarvis.core import gate as GATE
 import jarvis_proactive as PROACTIVE
 import jarvis_runtime as RUNTIME
 import jarvis_sleep as SLEEP
-import jarvis_speed as SPEED
 import laptop as LP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, frames_after, pick_device
 from jarvis.adapters.outbox import read_text
@@ -30,6 +29,7 @@ from jarvis.app.components import Components
 from jarvis.app.conversation import Conversation
 from jarvis.app.warmup import Warmup
 from jarvis.core.matching import corroborated_stop, stop_candidate
+from jarvis.core.perf import Trace
 from jarvis.core.ports import Config
 from jarvis.core.state import Mode
 from jarvis.core.wake import PRIORITY_WAKE_WORDS, VOSK_WAKE_SKIP_S, VOSK_WAKE_TAIL_S
@@ -81,7 +81,7 @@ class Listener:
         sig.interrupt.clear(); sig.busy.set()
         cap = Capture(pre) if (text is None and pre is not None) else None
         self.c.state.capture = cap
-        threading.Thread(target=self.conversation.handle, args=(trig, cap, text, test, skip_s, SPEED.Trace(trig)), daemon=True).start()
+        threading.Thread(target=self.conversation.handle, args=(trig, cap, text, test, skip_s, Trace(trig)), daemon=True).start()
 
     def do_stop(self, reason: str) -> None:
         log.info("STOP barge-in (%s): speech stopped", reason)

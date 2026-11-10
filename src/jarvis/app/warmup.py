@@ -6,14 +6,13 @@ import logging
 import os
 import time
 
-import jarvis_speed as SPEED
 from jarvis.core import text as JT
 from jarvis.adapters.process import trim_memory
 from jarvis.adapters.tts import split_text
 from jarvis.app.components import Components
 from jarvis.app.conversation import (NO_REPLY_PHRASE, SEND_FAILED_PHRASE, SERVER_DOWN_PHRASE, SERVER_SLOW_PHRASE,
                                      TIMER_DONE_PHRASE)
-from jarvis.core.phrases import all_phrases
+from jarvis.core.phrases import all_phrases, template_phrases
 from jarvis.core.ports import Config
 
 log = logging.getLogger("jarvis")
@@ -52,7 +51,7 @@ class Warmup:
         except Exception as e: log.warning("pronunciation audit save failed: %s", type(e).__name__)
         log.info("precache done (%s, ruaccent=%s, audited_phrases=%d)", cfg.get("tts_engine"), self.c.accent.state, len(pronunciation_audit))
         if cfg.get("template_precache", True):
-            templates = SPEED.template_phrases(cfg, JT)
+            templates = template_phrases(cfg)
             busy = self.c.signals.busy
             for phrase in templates:
                 if self._stopping(): break

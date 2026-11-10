@@ -241,7 +241,7 @@ stateDiagram-v2
 | `jarvis/app/components.py` | 70 | `Paths` и `Components`: все объекты слушателя |
 | `jarvis/app/listener.py` | 337 | Цикл микрофона: имя, хлопки, прерывание, сон, объявления, таймеры, память |
 | `jarvis/app/conversation.py` | 315 | Ход разговора, служебные триггеры, запрос и ответы сервера, продолжение |
-| `jarvis/app/warmup.py` | 65 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
+| `jarvis/app/warmup.py` | 64 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
 | `jarvis/app/settings.py` | 109 | Значения по умолчанию и псевдонимы, сборка конфигурации |
 | `jarvis/commands/registry.py` | 46 | `@handles`, поиск модулей, `dispatch` |
 | `jarvis/commands/base.py` | 56 | `CommandContext`, порт `Services` |
@@ -255,7 +255,7 @@ stateDiagram-v2
 | `jarvis/core/routing.py` | 143 | Псевдонимы, грамматика, выбор между свободным текстом и грамматикой |
 | `jarvis/core/config.py` | 94 | `ConfigStore`, проверка типов, слияние псевдонимов |
 | `jarvis/core/matching.py` | 86 | Нормализация фразы, обрывки, паразиты, эхо, «стоп» |
-| `jarvis/core/phrases.py` | 72 | Болтовня, выбор фразы без повторов, список фраз для кэша |
+| `jarvis/core/phrases.py` | 86 | Болтовня, выбор фразы без повторов, список фраз для кэша |
 | `jarvis/core/wake.py` | 65 | Имя в начале фразы, конец фразы |
 | `jarvis/core/status.py` | 60 | Политика свежести кэша статуса, ответ из снимка |
 | `jarvis/core/followup.py` | 37 | `FollowupSettings` |
@@ -265,13 +265,14 @@ stateDiagram-v2
 | `jarvis/adapters/audio.py` | 154 | Микрофон, уровни, усиление, кольцевой буфер, выбор устройства, хлопки |
 | `jarvis/adapters/asr_vosk.py` | 142 | Модель и грамматики Vosk, запись фразы, проверка имени |
 | `jarvis/adapters/transport.py` | 81 | Webhook с повтором и списком разрешённых полей |
-| `jarvis/adapters/outbox.py` | 74 | Файлы ответов сервера |
+| `jarvis/adapters/outbox.py` | 120 | Файлы ответов сервера |
 | `jarvis/adapters/status_cache.py` | 54 | `status.json`: статус, задачи, ссылка GitHub |
 | `jarvis/adapters/speaker.py` | 49 | Необязательная проверка голоса владельца |
 | `jarvis/adapters/accent.py` | 73 | Необязательные ударения RUAccent |
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
 | `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
-| `jarvis_speed.py` | 120 | Замеры задержек, события `outbox`, нечёткий разбор команды, заготовки фраз |
+| `jarvis/core/perf.py` | 45 | Трассировка задержек `PERF event`/`PERF summary` |
+| `jarvis/core/fuzzy.py` | 59 | Осторожный нечёткий матч коротких вопросов только для чтения |
 | `jarvis_audio.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis_fx.py` | 53 | Тембр через NumPy и SciPy |
 | `jarvis_commands.py` | 382 | Быстрые команды, действия Windows, таймеры на диске, подтверждение выключения |

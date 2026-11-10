@@ -15,7 +15,6 @@ from jarvis.core import codemode as CODE
 from jarvis.core import dialog as DIALOG
 from jarvis.core import gate as GATE
 import jarvis_sleep as SLEEP
-import jarvis_speed as SPEED
 from jarvis.adapters.audio import Capture
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.app.components import Components
@@ -23,6 +22,7 @@ from jarvis.commands import registry as COMMANDS
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.core.followup import FollowupSettings
 from jarvis.core.matching import filler_only, followup_echo, natural_status_alias, norm_phrase, pure_wait_filler
+from jarvis.core.perf import Trace
 from jarvis.core.phrases import Picker
 from jarvis.core.ports import Config
 from jarvis.core.routing import match_alias
@@ -259,7 +259,7 @@ class Conversation:
         try:
             turns = 0
             c.fsm.to(Mode.LISTENING if (text is None and cap is not None) else Mode.PROCESSING, trig)
-            st.trace = trace or SPEED.Trace(trig)
+            st.trace = trace or Trace(trig)
             st.trace.meta["test"] = bool(test)
             while True:
                 st.reply_parts = []
@@ -284,7 +284,7 @@ class Conversation:
                 delay = max(0.0, st.last_spoken_end + guard - time.monotonic())
                 if interrupt.wait(delay): break
                 log.info("follow-up open window_s=%.1f guard_s=%.2f question=%s turn=%d", window, guard, spoken.rstrip().endswith("?"), turns + 1)
-                st.trace = SPEED.Trace("followup")
+                st.trace = Trace("followup")
                 st.trace.meta["test"] = bool(test)
                 cap = Capture(); st.capture = cap; st.followup_guard = False; c.fsm.to(Mode.FOLLOWUP, "window")
                 text, conf, grammar = self.capture(cap, cfg, window, max_s=window + float(cfg["phrase_max_s"]))

@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 import jarvis_commands as QUICK
 from jarvis.core import dialog as DIALOG
+from jarvis.core import text as JT
 import jarvis_proactive as PROACTIVE
 
 # Local conversation: whole short utterances only, never a substring in a request.
@@ -70,3 +71,16 @@ def all_phrases(cfg: dict[str, Any]) -> list[str]:
                         out.append(r.format(greeting=greeting, daypart=daypart))
     out += QUICK.CACHED_REPLIES + PROACTIVE.REPLIES
     return list(dict.fromkeys(out))
+
+
+def template_phrases(cfg: Mapping[str, Any], now: datetime.datetime | None = None) -> list[str]:
+    """Whole-sentence WAV templates, bounded preload; never splice number waveforms."""
+    now = now or datetime.datetime.now()
+    out = []
+    for i in range(max(0, min(5, int(cfg.get("time_preload_minutes", 3))))):
+        t = now + datetime.timedelta(minutes=i)
+        out.append("Сейчас " + JT.time_words(t.hour, t.minute) + ", сэр.")
+    for n in (1, 5, 10, 15, 30, 45):
+        out.append("Таймер на " + JT.num_ru(n, "f") + " " + JT.plural(n, "минуту", "минуты", "минут") + ", сэр.")
+    out.append("Таймер на один час, сэр.")
+    return out

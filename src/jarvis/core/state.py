@@ -95,7 +95,7 @@ class ListenerState:
     last_spoken: str = ""
     last_spoken_end: float = 0.0
     speech_serial: int = 0
-    trace: Any = None               # jarvis_speed.Trace of the current turn
+    trace: Any = None               # jarvis.core.perf.Trace of the current turn
     last_reply: str = ""
     last_reply_private: bool = False
     reply_parts: list[str] = field(default_factory=list)
