@@ -1,14 +1,17 @@
 import pytest
 
+from jarvis.app.settings import DEFAULT_ALIASES
+from jarvis.core.config import merge_aliases
 
-def test_user_aliases_keep_new_default_phrases(listener):
+
+def test_user_aliases_keep_new_default_phrases():
     user = [{"name": "monitor_off", "phrases": ["выключи экран"], "action": "monitor_off"},
             {"name": "mine", "phrases": ["моя фраза"], "action": "say"}]
-    merged = listener.merge_aliases(user, listener.DEFAULT_ALIASES)
+    merged = merge_aliases(user, DEFAULT_ALIASES)
     mon = next(a for a in merged if a["name"] == "monitor_off")
     assert "выруби экран" in mon["phrases"] and mon["phrases"][0] == "выключи экран"
     assert any(a["name"] == "mine" for a in merged) and any(a["name"] == "workout" for a in merged)
-    replaced = listener.merge_aliases([dict(user[0], replace=True)], listener.DEFAULT_ALIASES)
+    replaced = merge_aliases([dict(user[0], replace=True)], DEFAULT_ALIASES)
     assert next(a for a in replaced if a["name"] == "monitor_off")["phrases"] == ["выключи экран"]
 
 

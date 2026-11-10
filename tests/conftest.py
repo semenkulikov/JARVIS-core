@@ -37,9 +37,12 @@ def guards(monkeypatch):
  if hasattr(os,'startfile'):monkeypatch.setattr(os,'startfile',forbidden)
 @pytest.fixture
 def cfg(listener,monkeypatch):
- c=copy.deepcopy(listener.DEFAULTS)
- c['aliases']=c['aliases']+copy.deepcopy(listener.SMALLTALK_ALIASES)
- c['stress_dict']=dict(dict(listener.PROACTIVE.STRESS,**listener.QUICK.STRESS,**listener.DIALOG.STRESS),**(c.get('stress_dict') or {}))
+ import jarvis_commands as Q,jarvis_dialog as D,jarvis_proactive as P
+ from jarvis.app.settings import DEFAULTS
+ from jarvis.core.phrases import SMALLTALK_ALIASES
+ c=copy.deepcopy(DEFAULTS)
+ c['aliases']=c['aliases']+copy.deepcopy(SMALLTALK_ALIASES)
+ c['stress_dict']=dict(dict(P.STRESS,**Q.STRESS,**D.STRESS),**(c.get('stress_dict') or {}))
  c['followup_enabled']=False
  monkeypatch.setattr(listener,'load_cfg',lambda:c)
  return c

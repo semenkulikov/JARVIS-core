@@ -29,12 +29,12 @@ def test_example_config_is_current():
     assert json.loads((ROOT / "config.example.json").read_text(encoding="utf-8"))["config_version"] == M.CURRENT
 
 
-def test_listener_applies_migrations(listener, monkeypatch, tmp_path):
+def test_listener_applies_migrations(monkeypatch, tmp_path):
+    import jarvis_credentials as CREDS
+    from jarvis.app import settings
     (tmp_path / "config.json").write_text('{"phrase_silence_s": 1.0}', encoding="utf-8")
-    monkeypatch.setattr(listener, "BASE", str(tmp_path))
-    monkeypatch.setattr(listener, "_CFG", {"m": None, "c": None})
-    monkeypatch.setattr(listener.CREDS, "webhook", lambda cfg, base: "")
-    cfg = listener.load_cfg()
+    monkeypatch.setattr(CREDS, "webhook", lambda cfg, base: "")
+    cfg = settings.config_store(tmp_path).load()
     assert cfg["phrase_silence_s"] == 0.95 and cfg["config_version"] == M.CURRENT
 
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 import jarvis_registry as R
+from jarvis.app import settings as SETTINGS
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -19,8 +20,8 @@ def test_every_example_routes_to_its_command(listener, cfg, cid, example):
     assert R.route_id(listener.match_alias(example, cfg)) == cid
 
 
-def test_every_default_alias_is_registered(listener):
-    for al in listener.DEFAULT_ALIASES:
+def test_every_default_alias_is_registered():
+    for al in SETTINGS.DEFAULT_ALIASES:
         # a quick command with the same name handles those phrases first
         assert al["name"] in R.BY_ID or "q:" + al["name"] in R.BY_ID, al["name"]
 
