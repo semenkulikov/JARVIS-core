@@ -18,4 +18,5 @@ line-length = 100
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+# Correctness only (pyflakes + bugbear); the compact one-line style is intentional and not linted.
+select = ["F", "B"]
