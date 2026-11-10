@@ -5,6 +5,7 @@ import logging,os,subprocess,sys,time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import jarvis_runtime as R
+import jarvis_paths as PATHS
 from jarvis_paths import HOME, SOURCE_DIR
 BASE=HOME
 log=logging.getLogger('jarvis.supervisor')
@@ -41,7 +42,7 @@ def run(base=BASE,spawn=None,sleep=time.sleep,clock=time.monotonic,alive=None,li
  return 'test_limit'
 
 def main():
- folder=BASE/'logs';folder.mkdir(parents=True,exist_ok=True);handler=RotatingFileHandler(folder/'supervisor.log',maxBytes=500000,backupCount=2,encoding='utf-8');handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'));log.addHandler(handler);log.setLevel(logging.INFO)
+ folder=PATHS.log_dir();folder.mkdir(parents=True,exist_ok=True);handler=RotatingFileHandler(folder/'supervisor.log',maxBytes=500000,backupCount=2,encoding='utf-8');handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'));log.addHandler(handler);log.setLevel(logging.INFO)
  guard=R.Singleton(BASE,'supervisor')
  acquired=guard.acquire()
  # An explicit start just after listener exit may overlap the old supervisor's final poll.

@@ -10,7 +10,7 @@ import sounddevice as sd
 
 import jarvis_paths as PATHS
 BASE = str(PATHS.HOME)
-LOGDIR = os.path.join(BASE, "logs")
+LOGDIR = str(PATHS.log_dir())
 os.makedirs(LOGDIR, exist_ok=True)
 OUTBOX = os.path.join(BASE, "outbox"); DONE = os.path.join(OUTBOX, "done")
 os.makedirs(DONE, exist_ok=True); os.makedirs(os.path.join(BASE, "cache"), exist_ok=True)

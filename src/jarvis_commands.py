@@ -3,6 +3,7 @@ No actions happen on import. Every OS-facing operation lives behind SystemBacken
 """
 import base64,ctypes,datetime,json,logging,math,os,re,shutil,subprocess,threading,time,uuid
 from pathlib import Path
+import jarvis_paths as PATHS
 log=logging.getLogger('jarvis')
 
 NUM={'ноль':0,'один':1,'одна':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'одиннадцать':11,'двенадцать':12,'тринадцать':13,'четырнадцать':14,'пятнадцать':15,'шестнадцать':16,'семнадцать':17,'восемнадцать':18,'девятнадцать':19,'двадцать':20,'тридцать':30,'сорок':40,'пятьдесят':50,'шестьдесят':60,'семьдесят':70,'восемьдесят':80,'девяносто':90,'сто':100,'двести':200,'триста':300,'четыреста':400,'пятьсот':500,'шестьсот':600,'семьсот':700,'восемьсот':800,'девятьсот':900,'полтора':1.5,'полторы':1.5}
@@ -266,7 +267,7 @@ class Controller:
     if n is None or n<0 or n>100:say('Назовите громкость от нуля до ста процентов, сэр.',cfg);return True
     b.volume(n);say('Громкость '+str(int(n))+' процентов, сэр.',cfg);return n>0
    if cmd=='screenshot':
-    b.screenshot(self.base/'screenshots');say('Скриншот сохранён, сэр.',cfg);return True
+    b.screenshot(PATHS.screenshots_dir(self.base));say('Скриншот сохранён, сэр.',cfg);return True
    if cmd=='disk':
     free,total,drive=b.disk(a['drive']);say('На диске '+drive+' свободно '+str(round(free/(1024**3),1))+' гигабайта из '+str(round(total/(1024**3),1))+', сэр.',cfg);return True
    if cmd=='close_window':b.close_window();say('Отправил запрос на закрытие окна, сэр.',cfg);return True

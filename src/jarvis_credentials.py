@@ -3,6 +3,7 @@ Only Jarvis-owned credential names are addressable; restricted legacy files are 
 """
 import json,os,sys
 from pathlib import Path
+import jarvis_paths as PATHS
 NAMES=('webhook_auth_header','FATSECRET_CLIENT_ID','FATSECRET_OAUTH1_CONSUMER_SECRET','FATSECRET_ACCESS_TOKEN','FATSECRET_ACCESS_SECRET')
 _BACKEND=None
 
@@ -31,7 +32,7 @@ def backend():
 
 def service(name):
  if name not in NAMES:raise ValueError('unsupported_credential_name')
- return 'JarvisVoiceAssistant.'+name
+ return PATHS.credential_prefix()+name
 
 def get_secret(name):
  try:
