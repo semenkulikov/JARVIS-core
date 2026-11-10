@@ -1,4 +1,4 @@
-# Jarvis voice assistant 3.12.0
+# Jarvis voice assistant 3.14.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
 import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib, shlex, urllib.parse
@@ -31,6 +31,8 @@ import jarvis_commands as QUICK
 import jarvis_proactive as PROACTIVE
 import jarvis_credentials as CREDS
 import jarvis_runtime as RUNTIME
+import jarvis_gate as GATE
+import jarvis_sleep as SLEEP
 CMDS = None
 def command_controller():
     global CMDS
@@ -87,6 +89,7 @@ SMALLTALK = [
     ("identity", ["кто ты", "как тебя зовут", "ты кто"], ["Джарвис, сэр. Ваш голосовой помощник.", "Ваш Джарвис, сэр. Всегда к вашим услугам."]),
     ("bye", ["пока", "до свидания", "до встречи", "увидимся"], ["До встречи, сэр. Я остаюсь на связи.", "Всего доброго, сэр.", "До свидания, сэр. Хорошего {daypart}."]),
     ("okay", ["окей", "хорошо", "ладно", "понятно", "ясно", "все хорошо", "все нормально", "да да да", "да да", "да окей"], ["Хорошо, сэр.", "Понял вас, сэр.", "Как скажете, сэр."]),
+    ("done", ["все", "это все", "на этом все", "все спасибо", "пока все", "больше ничего"], ["Хорошо, сэр.", "Как скажете, сэр.", "Понял, сэр. Я на связи."]),
     ("mood", ["у меня все хорошо", "у меня все отлично", "нормально", "все отлично"], ["Рад это слышать, сэр.", "Прекрасно, сэр. Пусть так и продолжается."]),
 ]
 SMALLTALK_ALIASES = [{"name": "chat_" + k, "phrases": ph, "action": "smalltalk", "replies": r, "extra_words": 0} for k, ph, r in SMALLTALK]
@@ -127,7 +130,7 @@ DEFAULTS = {
     "clap_enabled": True, "clap_min_peak": 0.2, "clap_ratio": 10.0, "clap_attack": 4.0, "clap_max_len_s": 0.15,
     "clap_decay": 0.25, "clap_gap_min_s": 0.12, "clap_gap_max_s": 0.9, "clap_quiet_s": 0.5, "clap_peak_similarity": 4.0,
     "clap_log_min_peak": 0.08, "clap_tail_s": 0.25, "clap_noise_rel": 0.35, "clap_noise_attack": 2.0,
-    "cooldown_s": 1.0, "reply_timeout_s": 240, "cache_max_age_h": 2.5,
+    "cooldown_s": 1.0, "reply_timeout_s": 240, "server_notice_s": 90.0, "server_down_wait_s": 45.0, "server_down_ttl_s": 1800.0, "cache_max_age_h": 2.5,
     "workout_days": [], "workout_time": "12:00",
     "projects_dir": "",
     "level_log_interval_s": 300,
@@ -136,6 +139,7 @@ DEFAULTS = {
 
 _CFG = {"m": None, "c": None}
 DEFAULTS.update(PROACTIVE.DEFAULTS)
+DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 
 def load_cfg():
     p = os.path.join(BASE, "config.json")
@@ -188,8 +192,15 @@ levels = {"max": 0.0, "sum": 0.0, "n": 0}
 busy = threading.Event()        # a handler is running
 speaking = threading.Event()
 interrupt = threading.Event()   # wake word during busy -> stop speech/handler
-STATE = {"capture": None, "model": None, "speaking_text": "", "rid": None, "stop_pending": False, "stop_ack_active": False, "followup_guard": False, "followup_eligible": False, "last_spoken": "", "last_spoken_end": 0.0, "speech_serial": 0, "trace": None, "last_reply": "", "last_reply_private": False, "reply_parts": [], "last_input_conf": 1.0, "last_input_end": None}
+STATE = {"capture": None, "model": None, "speaking_text": "", "rid": None, "stop_pending": False, "stop_ack_active": False, "followup_guard": False, "followup_eligible": False, "last_spoken": "", "last_spoken_end": 0.0, "speech_serial": 0, "trace": None, "last_reply": "", "last_reply_private": False, "reply_parts": [], "last_input_conf": 1.0, "last_input_end": None, "last_capture": None, "dropped": False}
 CANCELLED = {}  # rid -> time
+SLEEP_STATE = None
+WAKE_FILE = os.path.join(BASE, SLEEP.WAKE_FILE)
+SLEEP_END_PHRASE = "Я снова на связи, сэр."
+def sleep_state():
+    global SLEEP_STATE
+    if SLEEP_STATE is None: SLEEP_STATE = SLEEP.SleepState(os.path.join(BASE, "cache", "sleep.json"))
+    return SLEEP_STATE
 
 def cb(indata, frames, t, status):
     try: audio_q.put_nowait(indata[:, 0].copy())
@@ -319,7 +330,7 @@ def precache(cfg):
     JT.init_accentizer(cfg, BASE)
     cfg = load_cfg(); pronunciation_audit = []
     for t in all_phrases(cfg) + ["Блокирую, сэр.", "Сэр, время вышло.", "Таймер отменён, сэр.", "Вебхук не настроен, сэр.", "Не получилось отправить запрос, сэр.",
-              "Ответ не пришёл, сэр. Попробуйте ещё раз позже.", "Свежих данных нет, сэр, запрашиваю.", "Не нашёл приложение, сэр."]:
+              "Ответ не пришёл, сэр. Попробуйте ещё раз позже.", SERVER_DOWN_PHRASE, SERVER_SLOW_PHRASE, "Хорошо, сэр.", "Свежих данных нет, сэр, запрашиваю.", "Не нашёл приложение, сэр."]:
         pronunciation_audit.append({"text": t, "normalized": JT.normalize(t, cfg)})
         for att in range(10):
             try:
@@ -520,6 +531,10 @@ def ready_part(p, allow_empty=False):
         return (a.st_size > 0 or allow_empty) and (a.st_size, a.st_mtime_ns) == (b.st_size, b.st_mtime_ns)
     except OSError: return False
 
+def file_age(p):
+    try: return max(0.0, time.time() - os.path.getmtime(p))
+    except OSError: return 0.0
+
 def log_outbox(p, rid, label, txt, t0):
     try: lag = max(0.0, time.time() - os.path.getmtime(p))
     except OSError: lag = -1
@@ -530,12 +545,23 @@ def pure_wait_filler(text):
     t = re.sub(r"\bсэр\b", "", t); t = " ".join(t.split())
     return bool(re.fullmatch(r"(?:(?:одну )?(?:минуту|секунду)(?: (?:уточняю|проверяю|посмотрю))?|(?:сейчас |уже )?(?:посмотрю|уточню|проверю|проверяю|смотрю|уточняю|запрашиваю)(?: (?:данные|календарь|задачи|статус))?|почти готово)", t))
 
+SERVER_DOWN_PHRASE = "Сервер не отвечает, сэр. Локальные команды работают."
+SERVER_SLOW_PHRASE = "Сервер пока молчит, сэр. Подожду ещё немного."
+SERVER = {"down_since": None}
+
+def server_recently_down(cfg, now=None):
+    t = SERVER.get("down_since")
+    return t is not None and ((now or time.time()) - t) < float(cfg.get("server_down_ttl_s", 1800))
+
 def wait_replies(rid, cfg, listener_ack="", kind="free"):
     t0 = time.time(); n = 1; fillers = 0; STATE["rid"] = rid
-    real_data_seen = False
+    real_data_seen = False; server_seen = False; slow_noticed = False
+    was_down = server_recently_down(cfg, t0)
     def speak_part(txt):
         nonlocal real_data_seen
-        if not txt.strip(): return
+        if GATE.is_silent_reply(txt):
+            if txt.strip(): log.info("server asked for silence rid=%s", rid)
+            return
         if listener_ack and not real_data_seen and pure_wait_filler(txt):
             log.info("skipped redundant server filler rid=%s: %r", rid, txt); return
         real_data_seen = True
@@ -544,6 +570,17 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
     final = os.path.join(OUTBOX, f"{rid}.txt")
     while time.time() - t0 < cfg["reply_timeout_s"]:
         OUTBOX_SIGNAL.clear()
+        if not server_seen and (os.path.exists(final) or os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt"))):
+            server_seen = True; SERVER["down_since"] = None
+        el = time.time() - t0
+        if not server_seen and was_down and el > float(cfg.get("server_down_wait_s", 45)):
+            # Server already failed recently: do not hang for the full timeout again.
+            CANCELLED[rid] = time.time(); SERVER["down_since"] = time.time()
+            log.warning("server still silent rid=%s after %.0fs (down since earlier) -> local fallback", rid, el)
+            say(SERVER_DOWN_PHRASE, cfg); return False
+        if not server_seen and not was_down and not slow_noticed and el > float(cfg.get("server_notice_s", 90)):
+            slow_noticed = True; log.info("server silent rid=%s after %.0fs -> notice", rid, el)
+            say(SERVER_SLOW_PHRASE, cfg)
         # An initial acknowledgement is enough. No second "checking" announcement.
         if not listener_ack and not real_data_seen and fillers == 0 and time.time() - t0 > max(12.0, float(cfg.get("wait_filler_s", 12))) \
                 and not os.path.exists(final) and not os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt")):
@@ -556,7 +593,7 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
             perf("first_server_file")
             txt = read_part(part); log_outbox(part, rid, "part " + str(n), txt, t0)
             move_done(part); speak_part(txt); n += 1; continue
-        if os.path.exists(final) and ready_part(final, allow_empty=real_data_seen):
+        if os.path.exists(final) and ready_part(final, allow_empty=real_data_seen or file_age(final) >= 0.6):
             perf("first_server_file")
             while os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt")):
                 p = os.path.join(OUTBOX, f"{rid}.{n}.txt"); t = read_part(p); move_done(p); log.info("outbox part %d (%d chars)", n, len(t)); speak_part(t); n += 1
@@ -564,6 +601,10 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
             speak_part(txt); return True
         OUTBOX_SIGNAL.wait(cfg)
     log.warning("reply timeout for %s", rid)
+    if not server_seen and not real_data_seen:
+        SERVER["down_since"] = time.time(); CANCELLED[rid] = time.time()
+        log.warning("server marked unresponsive (no outbox file for rid=%s)", rid)
+        say(SERVER_DOWN_PHRASE, cfg); return False
     say("Ответ не пришёл, сэр. Попробуйте ещё раз позже.", cfg)
     return False
 
@@ -606,11 +647,20 @@ def natural_status_alias(text):
         return {"name":"task_status", "action":"cache_field", "field":"today"}
     return None
 
+FILLER_TOKENS = {"сэр", "ну", "э", "эм", "а", "ага", "угу", "так"}
+def filler_only(text):
+    toks = _norm_phrase(text)
+    if not toks: return False
+    if all(t in FILLER_TOKENS for t in toks): return True
+    return toks in (["да", "сэр"], ["да", "да", "сэр"], ["сэр", "да"])
+
 def incomplete_fragment(text):
     t = " ".join(_norm_phrase(text))
     return bool(re.fullmatch(r"(?:в|на|по|с|из|о|об|для|к|у) (?:вашем|твоем|моем|этом|том|вас|меня)|(?:как|что|ну|это|там|ты|и отметил|и отметь)",t))
 
 def match_alias(text, cfg):
+    secs = SLEEP.parse(text)
+    if secs: return {"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": secs}
     proactive = PROACTIVE.intent(text)
     if proactive: return proactive
     toks = _norm_phrase(text)
@@ -711,6 +761,13 @@ def run_alias(al, text, cfg, trig, test):
     act = al.get("action", "say"); reply = al.get("reply") or ""
     ack = lambda: say(reply or pick(cfg, "ack_command"), cfg, role="ack")
     log.info("ALIAS %s (%s) <- %r", al.get("name", "?"), act, text)
+    if act == "jarvis_sleep":
+        STATE["followup_eligible"] = False
+        secs = int(al["seconds"])
+        if test: log.info("TEST sleep %ss: no persistent change", secs)
+        else: sleep_state().start(secs)
+        say("Перехожу в спящий режим на " + SLEEP.label(secs) + ", сэр.", cfg)
+        return
     if act == "proactive_dnd":
         if test: log.info("TEST DND=%s: no persistent change",al["enabled"])
         else: proactive_manager().set_dnd(al["enabled"])
@@ -876,7 +933,7 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None):
         except Exception as e: log.info("grammar recognizer failed: %s", e)
     agc = AGC(cfg)
     max_s = max_s or float(cfg["phrase_max_s"]); sil = float(cfg["phrase_silence_s"])
-    words = []; gwords = []; t0 = time.time(); last_change = None; partial = ""
+    words = []; gwords = []; t0 = time.time(); last_change = None; partial = ""; cut = True
     acoustic_last = None; noise_floor = 0.001; samples = 0
     try:
         while time.time() - t0 < max_s:
@@ -901,8 +958,8 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None):
                         if p: last_change = time.time()
                 if not cap.q.empty(): continue
             has = bool(words) or bool(partial)
-            if not has and time.time() - t0 > nospeech_s and (acoustic_last is None or time.time() - acoustic_last > 0.5): break
-            if has and last_change and time.time() - last_change > sil and (acoustic_last is None or time.time() - acoustic_last > sil): break
+            if not has and time.time() - t0 > nospeech_s and (acoustic_last is None or time.time() - acoustic_last > 0.5): cut = False; break
+            if has and last_change and time.time() - last_change > sil and (acoustic_last is None or time.time() - acoustic_last > sil): cut = False; break
         words += json.loads(rec.FinalResult()).get("result", [])
         if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
     finally:
@@ -927,18 +984,28 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None):
     if tr is not None and kept:
         tr.mark("speech_end", at=time.perf_counter() - endpoint_lag, estimated=True)
     STATE["last_input_conf"] = conf
+    STATE["last_capture"] = {"words": kept, "hit_max": cut and bool(kept)}
     STATE["last_input_end"] = time.monotonic() - endpoint_lag if kept else None
     perf("recognized", confidence=round(conf,3))
     return text, conf, (gtext if gconf >= 0.75 else "")
 
-def choose(text, conf, gtext, cfg):
+def drop(reason, text):
+    """Garbled / background speech: log it and stay silent."""
+    STATE["dropped"] = True
+    log.info("dropped silently (%s): %r", reason, text)
+    return "", False
+
+def choose(text, conf, gtext, cfg, followup=False):
     """pick final phrase + whether it is understood"""
+    STATE["dropped"] = False
+    if text and filler_only(text) and not (CMDS is not None and getattr(CMDS, "pending_shutdown", None)):
+        log.info("filler-only/echo transcript ignored: %r", text); return "", False
     al = match_alias(text, cfg) if text else None
     ga = match_alias(gtext, cfg) if gtext else None
     if al:
         if al.get("action") in ("status","cache_field","time","workout") and conf<float(cfg.get("min_conf",0.55)) and not (gtext and ga):
             log.info("local intent rejected: low ASR confidence %.2f",conf); return text,False
-        if al.get("action") in ("quick2","proactive_dnd") and conf<float(cfg.get("min_conf",0.55)):
+        if al.get("action") in ("quick2","proactive_dnd","jarvis_sleep") and conf<float(cfg.get("min_conf",0.55)):
             log.info("quick command rejected: low ASR confidence %.2f",conf); return text, False
         if al.get("_fuzzy") and conf < float(cfg.get("min_conf",0.55)):
             log.info("fuzzy intent rejected: low ASR confidence %.2f",conf); return text, False
@@ -947,12 +1014,15 @@ def choose(text, conf, gtext, cfg):
             log.info("grammar smalltalk wins over fuzzy guess: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
         return text, True
     if incomplete_fragment(text):
-        log.info("incomplete fragment -> local repeat: %r", text); return text, False
+        return drop("fragment", text)
     safe_grammar = ga and ga.get("action") in ("smalltalk", "status", "cache_field", "time", "workout", "stop")
-    if gtext and safe_grammar and (not text or conf < 0.8):
+    if gtext and safe_grammar and not followup and (not text or conf < 0.8):
         log.info("grammar hint wins: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
     if not text: return "", False
-    if conf < float(cfg.get("min_conf", 0.55)): log.info("low confidence %.2f -> not understood", conf); return text, False
+    meta = STATE.get("last_capture") or {}
+    words = meta.get("words") or [{"word": w, "conf": conf} for w in _norm_phrase(text)]
+    reason = GATE.reject_reason(words, cfg, followup=followup, hit_max=bool(meta.get("hit_max")))
+    if reason: return drop(reason, text)
     return text, True
 
 def _handle_turn(trig, cap, text, test, skip_s):
@@ -975,6 +1045,8 @@ def _handle_turn(trig, cap, text, test, skip_s):
             finally:
                 if not test: proactive_manager().complete(item,interrupt.is_set())
             return
+        if trig == "sleep_end":
+            perf("route", route="sleep_end"); say(SLEEP_END_PHRASE, cfg); return
         if trig == "timer_fire":
             perf("route", route="timer_fire")
             notice = text if isinstance(text,dict) else {}
@@ -987,6 +1059,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
         if text is None:
             text, conf, g = ("", 0, "") if cap is None else capture_phrase(cap, cfg, float(cfg["phrase_wait_s"]), skip_s)
             text, ok = choose(text, conf, g, cfg)
+            if STATE["dropped"]: return
         else:
             text = " ".join(t for t in _norm_phrase(text)); toks = text.split()
             while toks and WAKE_TOK.match(toks[0]): toks.pop(0)
@@ -999,13 +1072,14 @@ def _handle_turn(trig, cap, text, test, skip_s):
             if interrupt.is_set(): return
             cap2 = Capture(); STATE["capture"] = cap2
             text, conf, g = capture_phrase(cap2, cfg, float(cfg["followup_listen_s"]))
+            raw2 = text
             text, ok = choose(text, conf, g, cfg)
-            if not text and not g:
+            if not text and (not g or filler_only(raw2)):
                 log.info("no follow-up phrase"); return
         if interrupt.is_set(): return
         if not ok or not text:
-            STATE["followup_eligible"] = bool(text)
-            say(pick(cfg, "ack_not_understood"), cfg, role="ack"); return
+            # Never "sorry, I did not catch that": unclear input is dropped silently.
+            log.info("not understood -> silent: %r", text); return
         perf("recognized")
         confirmation = command_controller().confirmation(text,trig,STATE.get("last_input_conf",0),heard_at=STATE.get("last_input_end"))
         al = ({"name":"shutdown_confirmation", "action":"quick2", "cmd":"shutdown_confirm", **confirmation} if confirmation is not None else match_alias(text,cfg))
@@ -1026,7 +1100,8 @@ def followup_echo(text, spoken):
 
 def followup_seconds(cfg, spoken):
     key = "followup_question_window_s" if (spoken or "").rstrip().endswith("?") else "followup_window_s"
-    return max(0.0, min(30.0, float(cfg.get(key, 10 if key == "followup_question_window_s" else 7))))
+    cap_s = float(GATE.setting(cfg, "followup_window_cap_s"))
+    return max(0.0, min(30.0, cap_s, float(cfg.get(key, 10 if key == "followup_question_window_s" else 7))))
 
 def handle(trig, cap, text, test, skip_s, trace=None):
     """Own the entire short conversation; only silence/stop/limit returns to wake mode."""
@@ -1067,7 +1142,7 @@ def handle(trig, cap, text, test, skip_s, trace=None):
             if followup_echo(text, spoken):
                 STATE["trace"].finish("echo")
                 log.info("follow-up close: likely speaker echo %r", text); break
-            chosen, ok = choose(text, conf, grammar, cfg)
+            chosen, ok = choose(text, conf, grammar, cfg, followup=True)
             if not ok or not chosen:
                 STATE["trace"].finish("fragment")
                 log.info("follow-up close: fragment/garbage %r", text); break
@@ -1176,6 +1251,32 @@ def request_morning(job,cfg,test=False):
         if not test: proactive_manager().morning_result(job,result,cfg)
     log.info("morning briefing POST date=%s ok=%s",job.get("local_date"),bool(result))
 
+def ring_audio(ring, a, b):
+    """Samples [a, b) from the ring buffer of (start_pos, chunk)."""
+    parts = []
+    for p, c in ring:
+        lo, hi = max(a, p), min(b, p + len(c))
+        if hi > lo: parts.append(c[lo - p:hi - p])
+    return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
+
+def free_words(model, audio, cfg):
+    """Free-vocabulary transcript of a short clip (grammar recognizers force every sound into the wake word)."""
+    from vosk import KaldiRecognizer
+    r = KaldiRecognizer(model, SR); r.SetWords(True); agc = AGC(cfg)
+    for i in range(0, len(audio), CHUNK):
+        r.AcceptWaveform((agc(audio[i:i + CHUNK]) * 32767).astype(np.int16).tobytes())
+    return json.loads(r.FinalResult()).get("result", [])
+
+def verify_wake(model, ring, a, b, cfg, need=(), min_conf=None):
+    """True when a free transcript of [a, b) contains the wake name (and every word in ``need``) confidently."""
+    if not GATE.setting(cfg, "wake_verify_enabled"): return True
+    t0 = time.monotonic(); ws = free_words(model, ring_audio(ring, a, b), cfg)
+    mc = float(min_conf if min_conf is not None else GATE.setting(cfg, "wake_verify_min_conf"))
+    ok = GATE.wake_word_confirmed(ws, mc) and all(any(w.get("word") == n and w.get("conf", 0) >= mc for w in ws) for n in need)
+    log.info("wake verify %s: free=%r (%.2fs)", "OK" if ok else "REJECTED",
+             " ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws), time.monotonic() - t0)
+    return ok
+
 def main():
     cfg = load_cfg()
     LP.TIMERS = command_controller().timers
@@ -1201,6 +1302,11 @@ def main():
     def wake_rec():
         r = KaldiRecognizer(model, SR, json.dumps(["джарвис", "хей джарвис", "эй джарвис", "[unk]"], ensure_ascii=False))
         r.SetWords(True); return r
+    def sleep_rec():
+        r = KaldiRecognizer(model, SR, json.dumps(list(SLEEP.WAKE_PHRASES) + ["[unk]"], ensure_ascii=False))
+        r.SetWords(True); return r
+    srec = None; sbase = 0; wake_check = None
+    if sleep_state().active(): log.info("sleep mode active for %.0fs more", sleep_state().remaining())
     oww = None
     if cfg["oww_enabled"]:
         try:
@@ -1220,7 +1326,7 @@ def main():
     dev = pick_device(cfg)
     stream = sd.InputStream(device=dev, samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=cb)
     stream.start()
-    log.info("listening (v3.12.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+    log.info("listening (v3.14.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0
@@ -1242,14 +1348,17 @@ def main():
                 if tt.lower() in ("clap",): start("clap", text="", test=True)
                 elif tt.lower() in ("", "wake", "джарвис", "хей джарвис"): start("wake_word", text="", test=True)
                 else: start("wake_word", text=tt, test=True)
+            sleeping = sleep_state().active()
+            if not busy.is_set() and not was_busy and sleep_state().poll(WAKE_FILE):
+                srec = None; start("sleep_end", text=""); continue
             if time.monotonic()>=next_proactive:
                 next_proactive=time.monotonic()+max(1,float(cfg.get("proactive_tick_s",5)))
                 job=pm.tick(cfg)
                 if job: threading.Thread(target=request_morning,args=(job,dict(cfg)),name="morning-post",daemon=True).start()
-                if not busy.is_set() and not was_busy and pending is None and not STATE["stop_pending"]:
+                if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE["stop_pending"]:
                     item=pm.take(cfg)
                     if item: start("proactive",text=item)
-            if not busy.is_set() and not was_busy and pending is None and not STATE["stop_pending"] and pm.can_speak(cfg):
+            if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE["stop_pending"] and pm.can_speak(cfg):
                 for notice in LP.TIMERS.pop_fired(limit=1): start("timer_fire", text=notice, test=False); break
             if time.time() - lastlvl > cfg["level_log_interval_s"]:
                 n = max(levels["n"], 1)
@@ -1315,7 +1424,7 @@ def main():
                         pending = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
                 continue
             if was_busy:
-                was_busy = False; last_end = time.time(); wrec = wake_rec(); wbase = pos; clap.events = []; clap.cur = None
+                was_busy = False; last_end = time.time(); wrec = wake_rec(); wbase = pos; wake_check = None; clap.events = []; clap.cur = None
                 if oww is not None: oww.reset()
                 cfg = load_cfg(); STATE["rid"] = None
                 if STATE["stop_pending"]:
@@ -1323,20 +1432,42 @@ def main():
                 if pending is not None:
                     pre = [c for (p, c) in ring if p + len(c) > pending]; pending = None; barge_armed = False
                     start("wake_word", pre=pre, skip_s=0.0); continue
+            if sleeping:
+                # Sleep: no clap, no wake word, no follow-ups. Only a strict «Джарвис, проснись».
+                wake_check = None
+                if srec is None: srec = sleep_rec(); sbase = st
+                if srec.AcceptWaveform(i16.tobytes()):
+                    ws = json.loads(srec.Result()).get("result", [])
+                    said = " ".join(w.get("word", "") for w in ws)
+                    if SLEEP.is_wake_phrase(said) and min(w.get("conf", 0) for w in ws) >= 0.9:
+                        a = sbase + int((ws[0]["start"] - 0.45) * SR); b = sbase + int((ws[-1]["end"] + 0.3) * SR)
+                        if verify_wake(model, ring, a, b, cfg, need=("проснись",), min_conf=GATE.setting(cfg, "sleep_wake_min_conf")):
+                            sleep_state().stop("phrase"); srec = None
+                            start("sleep_end", text=""); continue
+                continue
+            srec = None
             trig = None; frm = None; skip = 0.0
             if cfg["clap_enabled"] and clap.feed(x, st, cfg): trig = "clap"
             if cfg["wake_word_enabled"] and not trig:
-                if sc >= cfg["oww_threshold"]:
-                    trig = "wake_word"; log.info("oww score %.2f", sc)
-                    frm = st + len(x) - int(cfg["wake_prebuffer_s"] * SR); skip = 0.0
+                if sc >= cfg["oww_threshold"] and wake_check is None:
+                    log.info("oww score %.2f", sc)
+                    frm = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
+                    if sc >= float(GATE.setting(cfg, "oww_strong_threshold")): trig = "wake_word"
+                    else: wake_check = {"a": frm, "b": pos + int(0.3 * SR), "frm": frm, "src": "oww"}
                 if wrec.AcceptWaveform(i16.tobytes()):
                     res = json.loads(wrec.Result())
                     ws = [w for w in res.get("result", []) if w.get("word") == "джарвис"]
                     if ws and ws[0].get("conf", 0) >= cfg["vosk_wake_min_conf"]:
-                        if not trig:
-                            trig = "wake_word"; log.info("vosk wake conf %.2f", ws[0]["conf"])
-                            frm = wbase + int(ws[-1]["end"] * SR) - int(0.3 * SR); skip = 0.0
+                        if not trig and (wake_check is None or wake_check["src"] == "oww"):
+                            log.info("vosk wake candidate conf %.2f", ws[0]["conf"])
+                            wake_check = {"a": wbase + int((ws[0]["start"] - float(GATE.setting(cfg, "wake_verify_pre_s"))) * SR),
+                                          "b": wbase + int((ws[-1]["end"] + float(GATE.setting(cfg, "wake_verify_post_s"))) * SR),
+                                          "frm": wbase + int(ws[-1]["end"] * SR) - int(0.3 * SR), "src": "vosk"}
                     elif ws: log.info("vosk wake rejected conf %.2f", ws[0].get("conf", 0))
+                if not trig and wake_check is not None and pos >= wake_check["b"]:
+                    wc, wake_check = wake_check, None
+                    if verify_wake(model, ring, wc["a"], wc["b"], cfg):
+                        trig = "wake_word"; frm = wc["frm"]; skip = 0.0
             if trig and time.time() - last_end > cfg["cooldown_s"]:
                 barge_armed = False
                 if trig == "clap": start("clap", text="")
