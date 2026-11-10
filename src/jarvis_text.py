@@ -127,6 +127,13 @@ def normalize_full_units(text):
 
 # ---------------- latin ----------------
 LATIN = {'github': 'гитхаб', 'cursor': 'курсор', 'telegram': 'телеграм', 'todoist': 'тодоист', 'fatsecret': 'фэт сикрет', 'vercel': 'версел', 'api': 'эй пи ай', 'ci': 'си ай', 'cd': 'си ди', 'mac': 'мак', 'macbook': 'макбук', 'windows': 'виндоус', 'intel': 'интел', 'wi-fi': 'вай-фай', 'wifi': 'вай-фай', 'python': 'питон', 'docker': 'докер', 'react': 'реакт', 'next': 'некст', 'node': 'нод', 'pr': 'пул реквест', 'ok': 'окей', 'google': 'гугл', 'youtube': 'ютуб', 'jarvis': 'джарвис', 'git': 'гит', 'ui': 'ю ай', 'url': 'ю ар эл', 'json': 'джейсон', 'deploy': 'деплой', 'frontend': 'фронтенд', 'my': 'май', 'site': 'сайт', 'bot': 'бот', 'parser': 'парсер', 'project': 'проект', 'async': 'асинк', 'rag': 'раг', 'llm': 'эл эл эм', 'tg': 'тэ гэ', 'vpn': 'вэ пэ эн', 'backend': 'бэкенд', 'status': 'статус', 'readme': 'ридми', 'main': 'мейн', 'dev': 'дев'}
+
+
+def extend_latin(words):
+    """Add pronunciations for Latin words from config (``latin_words``: {"word": "слово"})."""
+    for k, v in (words or {}).items():
+        if isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip():
+            LATIN[k.strip().lower()] = v.strip()
 _TR = {"a": "а", "b": "б", "c": "к", "d": "д", "e": "е", "f": "ф", "g": "г", "h": "х", "i": "и", "j": "дж", "k": "к", "l": "л",
        "m": "м", "n": "н", "o": "о", "p": "п", "q": "к", "r": "р", "s": "с", "t": "т", "u": "у", "v": "в", "w": "в", "x": "кс",
        "y": "й", "z": "з"}

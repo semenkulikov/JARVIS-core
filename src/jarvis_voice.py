@@ -31,6 +31,7 @@ import jarvis_commands as QUICK
 import jarvis_proactive as PROACTIVE
 import jarvis_credentials as CREDS
 import jarvis_runtime as RUNTIME
+import jarvis_migrations as MIGRATIONS
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 CMDS = None
@@ -153,7 +154,9 @@ def load_cfg():
     except Exception as e:
         log.warning("config load failed: %s", e)
         if _CFG["c"] is not None: return _CFG["c"]
-    # Portable defaults keep configuration knobs effective; no machine-specific migrations.
+    applied = MIGRATIONS.migrate(cfg, DEFAULTS)
+    if applied: log.info("config migrations applied in memory: %s", applied)
+    JT.extend_latin(cfg.get("latin_words"))
     if cfg.get("projects_dir"):
         LP.PROJ_DIR = os.path.expanduser(os.path.expandvars(cfg["projects_dir"]))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg,BASE)

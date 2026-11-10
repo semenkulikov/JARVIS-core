@@ -1,4 +1,5 @@
 {
+  "config_version": 1,
   "webhook_url": "",
   "webhook_auth_header": "",
   "tts_engine": "silero",
