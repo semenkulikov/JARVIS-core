@@ -57,7 +57,7 @@ def match(text: str, cfg: Mapping[str, Any] | None = None) -> dict[str, Any] | N
     if t in ('отмени таймер','отключи таймер','убери таймер'):return a('timer_cancel',kinds=['timer'])
     if t in ('отмени напоминания','отключи напоминания'):return a('timer_cancel',kinds=['reminder'])
     if t=='отмени все таймеры и напоминания':return a('timer_cancel',kinds=None)
-    for pat in [r'каждые (.+?) напоминай(?: мне)? (.+)',r'напоминай(?: мне)? каждые (.+?(?:секунд\w*|минут\w*|час\w*)) (.+)']:
+    for pat in [r'каждые (.+?) напомина[йя](?: мне)? (.+)',r'напомина[йя](?: мне)? каждые (.+?(?:секунд\w*|минут\w*|час\w*)) (.+)']:
         m=re.fullmatch(pat,t)
         if m:return a('reminder',seconds=duration(m[1]),label=m[2])
     if re.match(r'^(?:поставь )?таймер\b',t):return a('timer',seconds=duration(re.sub(r'^(?:поставь )?таймер(?: на)?\s*','',t)))

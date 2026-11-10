@@ -384,3 +384,10 @@ def test_confident_grammar_never_forces_questions_writes_or_unsure_grammar(app, 
     gconf = 0.8 if text == "закачай экран" else 1.0
     app.c.state.last_capture = {"words": [{"word": w, "conf": 0.3 if i == 0 else 0.95} for i, w in enumerate(text.split())], "grammar_conf": gconf}
     assert app.c.router.choose(text, conf, gtext, cfg)[0] != gtext
+
+
+def test_owner_phrasings_from_calibration():
+    assert SLEEP.parse("в спящий режим на десять минут") == 600
+    from jarvis.core import quick as Q
+    al = Q.match("напоминая каждые двадцать минут пить воду", {})
+    assert al and al["cmd"] == "reminder" and al["seconds"] == 1200
