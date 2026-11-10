@@ -1,4 +1,4 @@
-# Jarvis voice assistant 3.16.0
+# Jarvis voice assistant 3.17.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
 import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib, shlex, urllib.parse
@@ -1390,7 +1390,7 @@ def main():
     dev = pick_device(cfg)
     stream = sd.InputStream(device=dev, samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=cb)
     stream.start()
-    log.info("listening (v3.16.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+    log.info("listening (v3.17.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     preload_speaker(cfg)
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); lastmem = time.monotonic(); was_busy = False; barge_armed = False; pending = None
