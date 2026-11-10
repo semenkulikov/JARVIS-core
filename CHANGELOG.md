@@ -3,6 +3,20 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Номера версий — [семантические](https://semver.org/lang/ru/).
 
+## [3.20.0] — 2026-11-10
+
+### Изменено
+
+- Все модули `src/jarvis_*.py` перенесены в слои пакета `src/jarvis/`: чистые правила (числа, текст, сон, объявления, проекты, еда, задачи, голосовой отпечаток) — в `core`, файлы, Windows, FatSecret и таймеры — в `adapters`, супервизор — в `app`. В `src/` остались три точки входа: `jarvis_supervisor.py`, `jarvis_voice.py` и `fatsecret_call.py`; поведение, настройки, журнал и `outbox` не изменились.
+- Быстрые команды выполняет `commands.controller.Controller`: рабочий стол, таймеры, проекты и дневник еды приходят в него через порты, сборка — в `app.context.build_controller`. В пакете нет `global`, это проверяет тест.
+- Сравнение без различия «е» и «ё» — одна функция `jarvis.core.fold` вместо тринадцати копий.
+- Строгий mypy без послаблений для всего `src/` и `scripts/`, в CI на Ubuntu и Windows.
+
+### Исправлено
+
+- `scripts/latency_summary.py` по умолчанию читает журнал из `JARVIS_LOG_DIR`, а не из папки репозитория.
+- Таймер из псевдонима разбирает длительность тем же разбором, что и быстрые команды («полтора часа», «двадцать минут»).
+
 ## [3.19.0] — 2026-11-10
 
 ### Изменено
@@ -97,6 +111,7 @@
 - Тесты без моделей, звука и сети. Проверка запускается на Windows и Linux.
 - Документация на русском, README на двух языках, шаблоны задач, `pyproject.toml` с версией и ruff.
 
+[3.20.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.18.0...v3.19.0
 [3.18.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.17.0...v3.18.0
 [3.17.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.16.0...v3.17.0
