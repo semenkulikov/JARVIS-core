@@ -23,6 +23,7 @@ from jarvis.core import text as JT
 from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.audio import SR
 from jarvis.core.state import ListenerFSM, ListenerState, Mode, Signals
+from jarvis.core.fold import fold
 
 Config = dict[str, Any]
 Chunk = tuple[np.ndarray, int]
@@ -174,7 +175,7 @@ class Voice:
                 except Exception as e: err.append(e); log.warning("tts chunk failed: %s", e)
             enqueue(None)
         threading.Thread(target=prod, daemon=True).start()
-        self.signals.speaking.set(); played = 0; t0 = time.time(); self.state.speaking_text = text.lower().replace("ё", "е")
+        self.signals.speaking.set(); played = 0; t0 = time.time(); self.state.speaking_text = fold(text)
         prev_mode = self.fsm.mode; self.fsm.to(Mode.SPEAKING, role)
         try:
             while True:

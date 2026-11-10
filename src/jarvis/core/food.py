@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from jarvis.core import numbers as NUMBERS
+from jarvis.core.fold import fold
 
 log = logging.getLogger("jarvis")
 
@@ -63,7 +64,7 @@ class FoodResult:
 
 
 def norm(t: str) -> str:
-    return " ".join(re.sub(r"[^\w\s.,]", " ", str(t).lower().replace("ё", "е")).split())
+    return " ".join(re.sub(r"[^\w\s.,]", " ", fold(str(t))).split())
 
 
 def _split_amount(tokens: List[str], number: Callable[[str], Optional[float]]) -> Tuple[Optional[float], List[str]]:

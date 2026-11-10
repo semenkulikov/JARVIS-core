@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime
 import re
 from typing import Any, Mapping
+from jarvis.core.fold import fold
 
 DEFAULTS: dict[str, Any] = {
     "proactive_enabled": True, "proactive_quiet_start": "23:00", "proactive_quiet_end": "08:00",
@@ -26,7 +27,7 @@ WAKE_NAMES = {"джарвис", "жарвис", "джервис", "дарвис"
 
 
 def intent(text: str) -> dict[str, Any] | None:
-    t = " ".join(re.findall(r"\w+", text.lower().replace("ё", "е")))
+    t = " ".join(re.findall(r"\w+", fold(text)))
     if t in PHRASES: return {"name": "dnd_on" if t in PHRASES[:3] else "dnd_off", "action": "proactive_dnd", "enabled": t in PHRASES[:3]}
     return None
 
@@ -58,7 +59,7 @@ def quiet(cfg: Mapping[str, Any], epoch: float) -> bool:
 
 def priority_candidate(text: str, confidence: float, speaker_text: str, cfg: Mapping[str, Any]) -> bool:
     """Require an actual leading wake name, not just a grammar hallucination or TTS echo."""
-    words = re.findall(r"\w+", text.lower().replace("ё", "е")); said = re.findall(r"\w+", speaker_text.lower().replace("ё", "е"))
+    words = re.findall(r"\w+", fold(text)); said = re.findall(r"\w+", fold(speaker_text))
     wake = next((i for i, w in enumerate(words[:3]) if w in WAKE_NAMES), None)
     if wake is None or confidence < float(cfg.get("priority_wake_min_conf", .85)): return False
     if any(w in WAKE_NAMES for w in said): return False

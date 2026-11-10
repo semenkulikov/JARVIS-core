@@ -8,6 +8,7 @@ for grammar phrases. Checked against vosk-model-small-ru-0.22.
 from __future__ import annotations
 
 import re
+from jarvis.core.fold import fold
 
 # folded spelling -> the only spelling the model knows
 VOSK_WORDS = {
@@ -20,7 +21,7 @@ VOSK_WORDS = {
 
 def norm(text: str) -> str:
     """Lower-case, «ё» -> «е», punctuation -> spaces, single spaces."""
-    t = (text or "").lower().replace("ё", "е")
+    t = fold(text)
     return " ".join(re.sub(r"[^\w\s]", " ", t).split())
 
 

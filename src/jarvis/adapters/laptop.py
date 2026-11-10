@@ -14,6 +14,7 @@ import time
 from typing import Any, Callable
 
 from jarvis.adapters.paths import PROJECTS_DIR
+from jarvis.core.fold import fold
 
 log = logging.getLogger("jarvis")
 CREATE_NO_WINDOW = 0x08000000
@@ -77,7 +78,7 @@ def _folders(root: str) -> list[str]:
 def find_project(spoken: str, latin_fn: Callable[[str], str], projects_dir: str | None = None) -> tuple[str | None, float]:
     """Folder whose (transliterated) name sounds closest to ``spoken`` and its similarity."""
     root = projects_root(projects_dir)
-    spoken = re.sub(r"\s+", "", spoken.lower().replace("ё", "е"))
+    spoken = re.sub(r"\s+", "", fold(spoken))
     if not spoken: return None, 0
     best, bs = None, 0.0
     for d in _folders(root):

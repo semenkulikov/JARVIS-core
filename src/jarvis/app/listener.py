@@ -32,6 +32,7 @@ from jarvis.core.perf import Trace
 from jarvis.core.ports import Config
 from jarvis.core.state import Mode
 from jarvis.core.wake import PRIORITY_WAKE_WORDS, VOSK_WAKE_SKIP_S, VOSK_WAKE_TAIL_S
+from jarvis.core.fold import fold
 
 log = logging.getLogger("jarvis")
 RING_S = 8
@@ -250,7 +251,7 @@ class Listener:
                     ws = json.loads(lp.brec.Result()).get("result", [])
                     if ws:
                         conf = sum(w.get("conf", 0) for w in ws) / len(ws); ph = " ".join(w["word"] for w in ws)
-                        echo = any(w["word"].replace("ё", "е") in state.speaking_text for w in ws)
+                        echo = any(fold(w["word"]) in state.speaking_text for w in ws)
                         partial_free = json.loads(lp.brfree.PartialResult()).get("partial", "")
                         recent_free = lp.free_last[1] if time.monotonic() - lp.free_last[0] < 1.2 else ""
                         corroborated = corroborated_stop(ph, partial_free) or corroborated_stop(ph, recent_free)

@@ -53,3 +53,10 @@ def test_no_global_statements_in_the_package():
 def test_src_keeps_only_the_entry_points():
     """Everything else lives in the layered package; these three are called by name from outside."""
     assert sorted(p.name for p in PKG.parent.glob("*.py")) == ["fatsecret_call.py", "jarvis_supervisor.py", "jarvis_voice.py"]
+
+
+def test_yo_folding_has_one_home():
+    """«ё» → «е» for matching lives in jarvis.core.fold, so every matcher folds the same way."""
+    bad = [p.relative_to(PKG).as_posix() for p in PKG.rglob("*.py") if p.name != "fold.py"
+           and ('replace("ё", "е")' in p.read_text(encoding="utf-8") or "replace('ё','е')" in p.read_text(encoding="utf-8"))]
+    assert bad == []

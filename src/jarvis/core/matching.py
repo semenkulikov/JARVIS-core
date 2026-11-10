@@ -4,13 +4,14 @@ from __future__ import annotations
 import difflib
 import re
 from typing import Any
+from jarvis.core.fold import fold
 
 Alias = dict[str, Any]
 
 
 def norm_phrase(t: str | None) -> list[str]:
     """Lower-case word tokens with «ё» folded to «е» and punctuation dropped."""
-    t = (t or "").lower().replace("ё", "е")
+    t = fold(t)
     return re.sub(r"[^\w\s]", " ", t).split()
 
 

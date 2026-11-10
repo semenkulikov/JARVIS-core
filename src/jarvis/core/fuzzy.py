@@ -5,6 +5,7 @@ import difflib
 import logging
 import re
 from typing import Any, Callable, Mapping
+from jarvis.core.fold import fold
 
 log = logging.getLogger("jarvis")
 _MUTATION = re.compile(r"\b(?:добав\w*|созда\w*|удал\w*|постав\w*|отмен\w*|измени\w*|перенес\w*|отмет\w*|выполн\w*|закро\w*|заверш\w*"
@@ -14,7 +15,7 @@ READ_ONLY = ("status", "cache_field", "time", "workout")
 
 
 def norm(text: str | None) -> str:
-    words = re.sub(r"[^\w\s]", " ", (text or "").lower().replace("ё", "е")).split()
+    words = re.sub(r"[^\w\s]", " ", fold(text)).split()
     words = ["что" if w in ("че", "чо") else w for w in words]
     return " ".join(w for w in words if w not in ("ну", "сэр", "пожалуйста"))
 

@@ -10,6 +10,7 @@ from typing import Optional
 
 from jarvis.core import numbers as NUMBERS
 from jarvis.core import quick as Q
+from jarvis.core.fold import fold
 
 DEFAULT_S = 3600
 MIN_S = 60
@@ -29,7 +30,7 @@ DEFAULTS = {"sleep_hint_enabled": True, "sleep_hint_interval_s": 600}
 
 
 def _norm(text: str) -> str:
-    t = (text or "").lower().replace("ё", "е")
+    t = fold(text)
     t = " ".join(re.sub(r"[^\w\s]", " ", t).split())
     return re.sub(r"^(?:(?:хей|эй) )?джарвис ", "", t)
 
@@ -61,4 +62,4 @@ def hint_phrase(remaining_s: float) -> str:
 
 
 def is_wake_phrase(text: str) -> bool:
-    return " ".join((text or "").lower().replace("ё", "е").split()) in WAKE_PHRASES
+    return " ".join(fold(text).split()) in WAKE_PHRASES

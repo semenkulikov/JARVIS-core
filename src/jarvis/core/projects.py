@@ -15,6 +15,7 @@ import re
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from jarvis.core.fold import fold
 
 log = logging.getLogger("jarvis")
 
@@ -78,7 +79,7 @@ def match(t: str) -> Optional[Dict[str, Any]]:
 
 
 def norm_name(s: str) -> str:
-    return re.sub(r"[^0-9a-zа-я]+", "", str(s).lower().replace("ё", "е"))
+    return re.sub(r"[^0-9a-zа-я]+", "", fold(str(s)))
 
 
 def resolve(spoken: str, items: Sequence[Any]) -> Optional[Any]:
