@@ -4,6 +4,7 @@ Only Jarvis-owned credential names are addressable; restricted legacy files are 
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
@@ -13,12 +14,9 @@ from typing import Any, Mapping
 from jarvis.adapters import paths as PATHS
 
 NAMES = ("webhook_auth_header", "FATSECRET_CLIENT_ID", "FATSECRET_OAUTH1_CONSUMER_SECRET", "FATSECRET_ACCESS_TOKEN", "FATSECRET_ACCESS_SECRET")
-_BACKEND: Any = None
-
-
+@functools.lru_cache(maxsize=1)
 def backend() -> Any:
-    global _BACKEND
-    if _BACKEND is not None: return _BACKEND
+    """The Windows keyring backend, loaded once; None off Windows or without keyring."""
     if os.name != "nt": return None
     try:
         from keyring.backends.Windows import WinVaultKeyring
@@ -30,14 +28,13 @@ def backend() -> Any:
         sys.path.insert(0, site_s)
         try:
             from keyring.backends.Windows import WinVaultKeyring
-            _BACKEND = WinVaultKeyring()
-            return _BACKEND
+            return WinVaultKeyring()
         except ImportError:
             return None
         finally:
             try: sys.path.remove(site_s)
             except ValueError: pass
-    _BACKEND = WinVaultKeyring(); return _BACKEND
+    return WinVaultKeyring()
 
 
 def service(name: str) -> str:

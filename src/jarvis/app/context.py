@@ -34,12 +34,9 @@ from jarvis.app.warmup import Warmup
 from jarvis.commands.controller import Controller
 from jarvis.core.lazy import Lazy
 from jarvis.core.phrases import Picker
-from jarvis.core.ports import Config, DesktopBackend, Laptop, PhraseRecognizer, ProjectToolsPort, ServerTransport, SpeechOutput, StatusSource, Synthesizer
+from jarvis.core.ports import Config, DesktopBackend, PhraseRecognizer, ProjectToolsPort, ServerTransport, SpeechOutput, StatusSource, Synthesizer
 from jarvis.core.routing import Router
 from jarvis.core.state import ListenerFSM, ListenerState, RequestLedger, Signals
-
-
-LAPTOP_PORT: Laptop = LAPTOP  # the module implements the port
 
 
 @dataclass
@@ -85,7 +82,7 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         transport=WebhookTransport(signals, ledger), player=player, accent=accent,
         voice=Voice(paths.home, state, signals, fsm, player, accent),
         outbox=outbox, status=StatusCache(os.path.join(paths.cache, "status.json")),
-        controller=controller, laptop=LAPTOP_PORT,
+        controller=controller, laptop=LAPTOP,
         sleep=Lazy(lambda: SleepState(os.path.join(paths.cache, "sleep.json"))),
         proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),
     )
