@@ -45,6 +45,7 @@ import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
                               heard_after, phrase_finished)
+from jarvis.core import status as STATUS
 from jarvis.core.followup import FollowupSettings
 from jarvis.core.matching import (norm_phrase as _norm_phrase, tok_match as _tok_match, natural_status_alias, filler_only,
                                   incomplete_fragment, pure_wait_filler, followup_echo, corroborated_stop, stop_candidate)
@@ -643,15 +644,6 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
     return False
 
 CACHE = os.path.join(BASE, "cache", "status.json")
-def read_cache():
-    try:
-        with open(CACHE, encoding="utf-8-sig") as f: c = json.load(f)
-        upd = datetime.datetime.fromisoformat(c["updated"])
-        if upd.tzinfo is None: upd = upd.astimezone()
-        age = (datetime.datetime.now().astimezone() - upd).total_seconds() / 3600
-        return c.get("text", ""), age
-    except Exception as e:
-        log.info("no usable cache: %s", e); return None, None
 
 # ================= aliases =================
 
@@ -709,35 +701,12 @@ def match_alias(text, cfg):
     if best: return best
     return SPEED.fuzzy_alias(text, cfg)
 
-CACHE_HINTS = {
-    "food": r"питани|ккал|килокалор|белк|съеден|калори",
-    "today": r"календар|тодоист|задач|встреч|сегодня|тренировк",
-    "deploy": r"проект|деплой|коммит|репозитор|гитхаб|сайт",
-}
 
-def cache_age_policy(updated, cfg, now=None):
-    now = now or datetime.datetime.now().astimezone()
-    dt = datetime.datetime.fromisoformat(updated)
-    if dt.tzinfo is None: dt = dt.astimezone()
-    local_dt = dt.astimezone(now.tzinfo)
-    age = (now - dt).total_seconds() / 3600
-    if age < 0 or local_dt.date() != now.date(): return "old", age
-    fresh_h = float(cfg.get("cache_max_age_h", 2.5))
-    stale_h = max(fresh_h, float(cfg.get("cache_stale_read_max_age_h", 3)))
-    if age < fresh_h: return "fresh", age
-    return ("stale" if age <= stale_h else "old"), age
 
 def cached_status(field, cfg):
     try:
         with open(CACHE, encoding="utf-8-sig") as f: data = json.load(f)
-        decision, age = cache_age_policy(data["updated"], cfg)
-        body = data.get(field or "text")
-        if field and not body: body = cache_field(field)[0]
-        if not isinstance(body, str) or not body.strip(): return "missing", "", age
-        dt = datetime.datetime.fromisoformat(data["updated"]).astimezone()
-        body = re.sub(r"^(?:По данным|Данные) на[^.!?]+[.!?]\s*", "", body.strip(), flags=re.I)
-        stamp = "По данным на " + JT.time_words(dt.hour, dt.minute) + ", сэр. "
-        return decision, stamp + body, age
+        return STATUS.status_answer(data, field, cfg)
     except Exception as e:
         log.info("status snapshot unusable: %s", type(e).__name__); return "missing", "", None
 
@@ -746,9 +715,8 @@ def run_tasks(mode, text, cfg, trig, test):
     cache, fresh, stamp = None, False, ""
     try:
         with open(CACHE, encoding="utf-8-sig") as f: cache = json.load(f)
-        decision, _ = cache_age_policy(cache["updated"], cfg); fresh = decision == "fresh"
-        dt = datetime.datetime.fromisoformat(cache["updated"]).astimezone()
-        stamp = "Данные на " + JT.time_words(dt.hour, dt.minute) + "."
+        decision, _ = STATUS.cache_age_policy(cache["updated"], cfg); fresh = decision == "fresh"
+        stamp = "Данные на " + STATUS.spoken_time(cache["updated"]) + "."
     except Exception as e:
         log.info("tasks: snapshot unusable (%s)", type(e).__name__)
     reply, server_text = TASKS.answer(mode, cache if isinstance(cache, dict) else None, fresh, stamp=stamp)
@@ -756,24 +724,7 @@ def run_tasks(mode, text, cfg, trig, test):
     if reply: say_reply(reply, cfg); return
     free_phrase(server_text, cfg, trig, test, ack=pick(cfg, "ack_lookup"), kind="free", extra_payload={"intent": "tasks_" + mode})
 
-def cache_stamp():
-    try:
-        with open(CACHE, encoding="utf-8-sig") as f: updated = json.load(f)["updated"]
-        dt = datetime.datetime.fromisoformat(updated).astimezone()
-        return "Данные на " + JT.time_words(dt.hour, dt.minute) + ", сэр. "
-    except Exception: return ""
 
-def cache_field(field):
-    try:
-        with open(CACHE, encoding="utf-8-sig") as f: c = json.load(f)
-    except Exception as e:
-        log.info("cache read failed: %s", e); return None, None
-    v = c.get(field)
-    if isinstance(v, (list, dict)): v = " ".join(str(x) for x in (v.values() if isinstance(v, dict) else v))
-    if v: return str(v), "field"
-    sents = re.split(r"(?<=[.!?])\s+", c.get("text", ""))
-    hit = [x for x in sents[1:] if re.search(CACHE_HINTS.get(field, "$^"), x, re.I)]
-    return (" ".join(hit), "derived") if hit else (None, None)
 
 def run_alias(al, text, cfg, trig, test):
     act = al.get("action", "say"); reply = al.get("reply") or ""
