@@ -20,3 +20,17 @@ src = ["src", "tests", "scripts"]
 [tool.ruff.lint]
 # Correctness only (pyflakes + bugbear); the compact one-line style is intentional and not linted.
 select = ["F", "B"]
+
+[tool.mypy]
+# Typed from the start: the layered package. The flat legacy modules are followed silently.
+python_version = "3.12"
+mypy_path = "src"
+files = ["src/jarvis"]
+explicit_package_bases = true
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
