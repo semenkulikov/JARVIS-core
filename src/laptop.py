@@ -1,5 +1,5 @@
 # Laptop control + extra quick-command helpers for Jarvis
-import os, re, ctypes, subprocess, threading, time, json, difflib, glob, logging
+import os, re, ctypes, subprocess, threading, time, difflib, logging
 from ctypes import wintypes
 log = logging.getLogger("jarvis")
 

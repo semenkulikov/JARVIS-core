@@ -1,4 +1,4 @@
-import importlib.util,io,json,sys,urllib.parse
+import importlib.util,io,json,urllib.parse
 from pathlib import Path
 import pytest
 import jarvis_credentials as C

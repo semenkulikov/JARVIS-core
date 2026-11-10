@@ -55,4 +55,4 @@ if __name__ == "__main__":
         # Network exceptions can include URLs; display type only except known ValueError.
         message = str(exc) if type(exc) is ValueError else type(exc).__name__
         print(json.dumps({"local_error":message}, ensure_ascii=True))
-        raise SystemExit(1)
+        raise SystemExit(1) from None

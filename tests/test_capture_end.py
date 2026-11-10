@@ -1,4 +1,3 @@
-import pytest
 
 
 def test_wake_tail_is_not_speech(listener):

@@ -1,5 +1,5 @@
 """Export-specific safety checks; fixtures contain no real user data."""
-import ast,importlib.util,json,threading
+import json,threading
 from pathlib import Path
 import numpy as np
 import pytest

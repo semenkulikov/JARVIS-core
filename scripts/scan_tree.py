@@ -27,7 +27,7 @@ def scan(root,forbidden=(),staged=False):
  else:files=[p for p in root.rglob('*') if p.is_file() and not any(s in SKIP_DIRS for s in p.relative_to(root).parts)]
  for p in files:
   name=str(p.relative_to(root)).replace('\\','/')
-  def flag(kind,line=0):findings.append({'file':name,'line':line,'category':kind})
+  def flag(kind,line=0,name=name):findings.append({'file':name,'line':line,'category':kind})
   if any(fnmatch.fnmatch(p.name,pat) for pat in BAD_NAMES):flag('forbidden_filename')
   try:text=p.read_text(encoding='utf-8-sig')
   except UnicodeError:flag('unexpected_binary');continue

@@ -3,7 +3,6 @@ import threading
 import time
 
 import numpy as np
-import pytest
 
 import jarvis_audio as A
 

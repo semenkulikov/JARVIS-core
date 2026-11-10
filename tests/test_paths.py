@@ -1,5 +1,4 @@
 """Locations from the environment (no system actions)."""
-from pathlib import Path
 
 import pytest
 

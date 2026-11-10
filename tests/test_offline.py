@@ -1,4 +1,4 @@
-import os,threading,time,pytest
+import time,pytest
 class Sig:
  def clear(self):pass
  def wait(self,cfg):time.sleep(0.01)

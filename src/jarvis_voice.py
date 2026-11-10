@@ -1,7 +1,7 @@
 # Jarvis voice assistant 3.18.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
-import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib, shlex, urllib.parse
+import json, time, uuid, queue, threading, logging, subprocess, datetime, re, collections, difflib, shlex, urllib.parse
 from logging.handlers import RotatingFileHandler
 import ctypes
 from ctypes import wintypes
@@ -360,7 +360,7 @@ def precache(cfg):
     for t in all_phrases(cfg) + ["Блокирую, сэр.", "Сэр, время вышло.", "Таймер отменён, сэр.", "Вебхук не настроен, сэр.", "Не получилось отправить запрос, сэр.",
               "Ответ не пришёл, сэр. Попробуйте ещё раз позже.", SERVER_DOWN_PHRASE, SERVER_SLOW_PHRASE, "Хорошо, сэр.", "Свежих данных нет, сэр, запрашиваю.", "Не нашёл приложение, сэр."]:
         pronunciation_audit.append({"text": t, "normalized": JT.normalize(t, cfg)})
-        for att in range(10):
+        for _attempt in range(10):
             try:
                 for chunk in split_text(t, int(cfg.get("tts_chunk_chars",170))): get_audio(chunk, cfg)
                 break
@@ -729,7 +729,7 @@ def match_alias(text, cfg):
                 ct = [t for t in toks if t not in ("сэр", "пожалуйста", "ну", "э", "эм")]
                 if len(ct) != len(pt): continue
                 if ct == pt: score = 100 + len(pt)
-                elif all(_tok_match(a, b) or (min(len(a), len(b)) >= 4 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.75) for a, b in zip(ct, pt)): score = 20 + len(pt)
+                elif all(_tok_match(a, b) or (min(len(a), len(b)) >= 4 and difflib.SequenceMatcher(None, a, b).ratio() >= 0.75) for a, b in zip(ct, pt, strict=True)): score = 20 + len(pt)
                 else: continue
                 if score > bscore: best, bscore = al, score
                 continue
@@ -1326,7 +1326,7 @@ def pick_device(cfg):
         if any(k in n for k in keys):
             api = apis[d["hostapi"]]["name"]
             cands.append(({"Windows WASAPI": 0, "MME": 1, "Windows DirectSound": 2}.get(api, 3), i, d["name"], api))
-    for pr, i, name, api in sorted(cands):
+    for _rank, i, name, api in sorted(cands):
         try:
             sd.check_input_settings(device=i, samplerate=SR, channels=1, dtype="float32")
             log.info("mic selected: [%d] %s (%s)", i, name, api); return i

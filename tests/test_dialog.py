@@ -1,5 +1,4 @@
 import threading
-import time
 
 import pytest
 
@@ -83,7 +82,7 @@ def test_instant_answer_has_no_ack(listener, cfg, monkeypatch, tmp_path):
 
 def test_server_ack_varies_and_never_repeats(listener, cfg):
     picks = [listener.pick(cfg, "ack_server") for _ in range(20)]
-    assert all(a != b for a, b in zip(picks, picks[1:]))
+    assert all(a != b for a, b in zip(picks, picks[1:], strict=False))
 
 
 def test_only_wake_heard(listener):

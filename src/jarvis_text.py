@@ -250,7 +250,7 @@ def _patch_sessions(obj, depth=0, seen=None):
     seen = seen if seen is not None else set()
     if depth > 3 or id(obj) in seen: return
     seen.add(id(obj))
-    for name, v in list(getattr(obj, "__dict__", {}).items()):
+    for _name, v in list(getattr(obj, "__dict__", {}).items()):
         if type(v).__name__ == "InferenceSession":
             need = [i.name for i in v.get_inputs()]
             if "token_type_ids" in need and not getattr(v, "_jv_patched", False):

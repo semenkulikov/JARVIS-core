@@ -1,6 +1,4 @@
 """Synthetic commands; every desktop operation is a fake backend call."""
-import copy
-from pathlib import Path
 import pytest
 import jarvis_commands as Q
 

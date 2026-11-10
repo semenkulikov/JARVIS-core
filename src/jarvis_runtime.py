@@ -1,5 +1,5 @@
 """Small Windows singleton and intentional-stop primitives; no side effects on import."""
-import ctypes,hashlib,os,time
+import ctypes,hashlib,time
 from pathlib import Path
 
 def stop_marker(base):return Path(base)/'cache'/'intentional_stop'
