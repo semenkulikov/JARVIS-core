@@ -45,6 +45,7 @@ import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
                               heard_after, phrase_finished)
+from jarvis.core.followup import FollowupSettings
 from jarvis.core.matching import (norm_phrase as _norm_phrase, tok_match as _tok_match, natural_status_alias, filler_only,
                                   incomplete_fragment, pure_wait_filler, followup_echo, corroborated_stop, stop_candidate)
 CMDS = None
@@ -1130,10 +1131,6 @@ def _handle_turn(trig, cap, text, test, skip_s):
         STATE["capture"] = None; STATE["stop_ack_active"] = False
 
 
-def followup_seconds(cfg, spoken):
-    key = "followup_question_window_s" if (spoken or "").rstrip().endswith("?") else "followup_window_s"
-    cap_s = float(GATE.setting(cfg, "followup_window_cap_s"))
-    return max(0.0, min(30.0, cap_s, float(cfg.get(key, 10 if key == "followup_question_window_s" else 7))))
 
 def handle(trig, cap, text, test, skip_s, trace=None):
     """Own the entire short conversation; only silence/stop/limit returns to wake mode."""
@@ -1147,17 +1144,17 @@ def handle(trig, cap, text, test, skip_s, trace=None):
             serial = STATE["speech_serial"]
             _handle_turn(trig, cap, text, test, skip_s)
             STATE["trace"].finish("interrupted" if interrupt.is_set() else "done")
-            cfg = load_cfg()
-            if interrupt.is_set() or not cfg.get("followup_enabled", True): break
+            cfg = load_cfg(); fs = FollowupSettings.from_cfg(cfg)
+            if interrupt.is_set() or not fs.enabled: break
             if not STATE["followup_eligible"] or STATE["speech_serial"] == serial: break
-            if turns >= max(0, int(cfg.get("followup_max_turns", 8))):
+            if turns >= fs.max_turns:
                 log.info("follow-up turn limit -> wake mode"); break
             spoken = STATE["last_spoken"]
-            window = followup_seconds(cfg, spoken)
+            window = fs.window_for(spoken)
             if CMDS is not None and CMDS.pending_shutdown:
                 window = max(0.0,CMDS.pending_shutdown["expires"]-CMDS.clock())
             if window <= 0: break
-            guard = max(0.0, min(2.0, float(cfg.get("followup_echo_guard_s", 0.3))))
+            guard = fs.echo_guard_s
             STATE["followup_guard"] = True
             # Based on actual playback end, not synthesis start or webhook acknowledgement.
             delay = max(0.0, STATE["last_spoken_end"] + guard - time.monotonic())
@@ -1168,10 +1165,10 @@ def handle(trig, cap, text, test, skip_s, trace=None):
             cap = Capture(); STATE["capture"] = cap; STATE["followup_guard"] = False
             text, conf, grammar = capture_phrase(cap, cfg, window, max_s=window + float(cfg["phrase_max_s"]))
             if interrupt.is_set(): break
-            if text and conf < float(cfg.get("followup_min_conf", 0.65)):
+            if text and conf < fs.min_conf:
                 rescued = followup_rescue(text, grammar, cfg)
                 if rescued: log.info("follow-up grammar wins: %r (free %r conf %.2f)", rescued, text, conf); text, conf = rescued, 1.0
-            if not text or conf < float(cfg.get("followup_min_conf", 0.65)):
+            if not text or conf < fs.min_conf:
                 STATE["trace"].finish("silence")
                 log.info("follow-up close: silence/low confidence text=%r conf=%.2f", text, conf); break
             if followup_echo(text, spoken):

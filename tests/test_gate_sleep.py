@@ -6,6 +6,7 @@ import pytest
 
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
+from jarvis.core.followup import FollowupSettings, followup_seconds
 
 
 def words(text, conf):
@@ -210,10 +211,16 @@ def test_not_understood_phrase_never_spoken(listener, cfg, said, monkeypatch):
     assert not any("расслышал" in s or "разобрал" in s for s in said)
 
 
-def test_followup_window_capped(listener, cfg):
+def test_followup_window_capped(cfg):
     cfg.update(followup_window_s=7.0, followup_question_window_s=10.0)
-    assert listener.followup_seconds(cfg, "Что прикажете?") == 6.0
-    assert listener.followup_seconds(cfg, "Готово.") == 6.0
+    assert followup_seconds(cfg, "Что прикажете?") == 6.0
+    assert followup_seconds(cfg, "Готово.") == 6.0
+
+
+def test_followup_settings_clamp_and_question_window(cfg):
+    cfg.update(followup_window_s=3.0, followup_question_window_s=5.0, followup_echo_guard_s=9, followup_max_turns=-2)
+    fs = FollowupSettings.from_cfg(cfg)
+    assert (fs.window_for("Да?"), fs.window_for("Да."), fs.echo_guard_s, fs.max_turns) == (5.0, 3.0, 2.0, 0)
 
 
 class _Sig:
