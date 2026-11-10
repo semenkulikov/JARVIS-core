@@ -7,12 +7,12 @@ import re
 from typing import Any, Callable
 
 import jarvis_commands as QUICK
-import jarvis_gate as GATE
+from jarvis.core import gate as GATE
 import jarvis_proactive as PROACTIVE
 import jarvis_sleep as SLEEP
 import jarvis_speed as SPEED
-import jarvis_tasks as TASKS
-import jarvis_vocab as VOCAB
+from jarvis.core import tasks as TASKS
+from jarvis.core import vocab as VOCAB
 from jarvis.core.matching import filler_only, incomplete_fragment, natural_status_alias, norm_phrase, tok_match
 from jarvis.core.state import ListenerState
 

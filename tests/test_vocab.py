@@ -1,4 +1,4 @@
-import jarvis_vocab as V
+from jarvis.core import vocab as V
 from jarvis.core import routing as ROUTING
 
 

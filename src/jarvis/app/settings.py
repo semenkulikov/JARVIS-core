@@ -8,12 +8,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-import jarvis_codemode as CODE
+from jarvis.core import codemode as CODE
 import jarvis_commands as QUICK
 import jarvis_credentials as CREDS
-import jarvis_dialog as DIALOG
+from jarvis.core import dialog as DIALOG
 import jarvis_food as FOOD
-import jarvis_gate as GATE
+from jarvis.core import gate as GATE
 import jarvis_proactive as PROACTIVE
 import jarvis_projects as PROJECTS
 import jarvis_sleep as SLEEP

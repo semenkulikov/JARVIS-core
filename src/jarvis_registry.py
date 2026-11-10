@@ -1,6 +1,6 @@
 """Single list of every voice command: what it does, how to say it, and where it is handled.
 
-The matchers (jarvis_commands.match, jarvis_tasks.intent, the aliases in jarvis.app.settings, ...) stay
+The matchers (jarvis_commands.match, jarvis.core.tasks.intent, the aliases in jarvis.app.settings, ...) stay
 where they are; this registry is the documentation and «что ты умеешь» source, and the tests
 keep it honest: every example must route to its command id and every command the matchers can
 return must be listed here. docs/COMMANDS.md carries a generated copy (scripts/gen_commands_doc.py).

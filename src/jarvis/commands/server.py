@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-import jarvis_dialog as DIALOG
+from jarvis.core import dialog as DIALOG
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles
 

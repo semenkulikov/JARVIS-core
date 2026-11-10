@@ -6,7 +6,7 @@ from jarvis.commands import registry
 from jarvis.core.phrases import SMALLTALK_ALIASES
 from command_fakes import FakeServices, run
 
-# Actions produced in code rather than by the alias table (jarvis.core.routing, jarvis_tasks, sleep, DND).
+# Actions produced in code rather than by the alias table (jarvis.core.routing, jarvis.core.tasks, sleep, DND).
 ROUTED_ACTIONS = {"jarvis_sleep", "awake", "capabilities", "tasks", "proactive_dnd", "quick2", "webhook", "status", "cache_field", "say"}
 
 

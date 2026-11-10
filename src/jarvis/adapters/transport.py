@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-import jarvis_codemode as CODE
+from jarvis.core import codemode as CODE
 from jarvis.core.state import RequestLedger, Signals
 
 Config = dict[str, Any]

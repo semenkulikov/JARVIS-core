@@ -9,7 +9,7 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
-import jarvis_gate as GATE
+from jarvis.core import gate as GATE
 import jarvis_sleep as SLEEP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ring_audio
 from jarvis.core.matching import norm_phrase

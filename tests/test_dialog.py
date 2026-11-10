@@ -4,7 +4,7 @@ import threading
 import pytest
 
 import jarvis_commands as Q
-import jarvis_dialog as D
+from jarvis.core import dialog as D
 from jarvis.core import phrases as P
 from jarvis.core import wake as W
 from test_commands import FakeBackend

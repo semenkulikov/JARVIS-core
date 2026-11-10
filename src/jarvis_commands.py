@@ -4,7 +4,7 @@ No actions happen on import. Every OS-facing operation lives behind SystemBacken
 import base64,ctypes,datetime,difflib,json,logging,math,os,re,shutil,subprocess,threading,time,uuid
 from pathlib import Path
 import jarvis_paths as PATHS
-import jarvis_codemode as CODE
+from jarvis.core import codemode as CODE
 import jarvis_projects as PROJECTS
 import jarvis_food as FOOD
 log=logging.getLogger('jarvis')

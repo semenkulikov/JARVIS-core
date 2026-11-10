@@ -1,7 +1,7 @@
 import datetime
 import json
 
-import jarvis_tasks as T
+from jarvis.core import tasks as T
 from jarvis.core import routing as ROUTING
 from jarvis.adapters.status_cache import StatusCache
 from command_fakes import FakeServices, run

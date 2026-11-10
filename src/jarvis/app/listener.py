@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 
-import jarvis_gate as GATE
+from jarvis.core import gate as GATE
 import jarvis_proactive as PROACTIVE
 import jarvis_runtime as RUNTIME
 import jarvis_sleep as SLEEP

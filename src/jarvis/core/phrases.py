@@ -6,7 +6,7 @@ import random
 from typing import Any, Mapping
 
 import jarvis_commands as QUICK
-import jarvis_dialog as DIALOG
+from jarvis.core import dialog as DIALOG
 import jarvis_proactive as PROACTIVE
 
 # Local conversation: whole short utterances only, never a substring in a request.

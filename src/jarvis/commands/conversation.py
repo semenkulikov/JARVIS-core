@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 import jarvis_registry as REGISTRY
-import jarvis_tasks as TASKS
+from jarvis.core import tasks as TASKS
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles
 from jarvis.core.phrases import smalltalk_reply

@@ -3,7 +3,7 @@
 Hosts, URLs and test commands come only from the local config.json (nothing personal in Git).
 Test commands are argument lists run without a shell, in the project folder, with a timeout
 and without Jarvis or FatSecret variables in the environment. Opening pull requests is not
-here: that goes to the server as a chat-confirmed request (see jarvis_codemode).
+here: that goes to the server as a chat-confirmed request (see jarvis.core.codemode).
 """
 from __future__ import annotations
 

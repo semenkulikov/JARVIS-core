@@ -11,9 +11,9 @@ import time
 import uuid
 from typing import Any
 
-import jarvis_codemode as CODE
-import jarvis_dialog as DIALOG
-import jarvis_gate as GATE
+from jarvis.core import codemode as CODE
+from jarvis.core import dialog as DIALOG
+from jarvis.core import gate as GATE
 import jarvis_sleep as SLEEP
 import jarvis_speed as SPEED
 from jarvis.adapters.audio import Capture

@@ -12,7 +12,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
-import jarvis_migrations as MIGRATIONS
+from jarvis.core import migrations as MIGRATIONS
 
 Config = dict[str, Any]
 log = logging.getLogger("jarvis")

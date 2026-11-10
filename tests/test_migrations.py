@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-import jarvis_migrations as M
+from jarvis.core import migrations as M
 import jarvis_text as JT
 
 ROOT = Path(__file__).resolve().parent.parent

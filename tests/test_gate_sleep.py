@@ -4,7 +4,7 @@ import time
 import numpy as np
 import pytest
 
-import jarvis_gate as GATE
+from jarvis.core import gate as GATE
 import jarvis_sleep as SLEEP
 from jarvis.core.followup import FollowupSettings, followup_seconds
 from jarvis.core import routing as ROUTING

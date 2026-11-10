@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import re
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import jarvis_text as JT
-import jarvis_vocab as VOCAB
+from jarvis.core import vocab as VOCAB
 
 _LEAD = r"^(?:(?:а|ну|и|так|слушай|скажи|джарвис|то есть|есть)\s+)*"
 _MUTATE = re.compile(r"\b(?:отмет\w*|выполн\w*|заверш\w*|закр\w*|добав\w*|созда\w*|удал\w*|постав\w*|перенес\w*|измен\w*)\b")
@@ -51,7 +51,7 @@ SERVER_TEXT = {
 }
 
 
-def intent(text: str) -> Optional[dict]:
+def intent(text: str) -> Optional[dict[str, Any]]:
     t = VOCAB.norm(text)
     if not t:
         return None
@@ -68,7 +68,7 @@ def intent(text: str) -> Optional[dict]:
 
 
 # ------------------------------------------------------------------ answers from the snapshot
-def _when(value, now: _dt.datetime) -> str:
+def _when(value: Any, now: _dt.datetime) -> str:
     """«в 15:30», «завтра в 9:00», «до 10 ноября» from an ISO time; '' when there is none."""
     if not isinstance(value, str) or not value.strip():
         return ""
@@ -93,21 +93,22 @@ def _when(value, now: _dt.datetime) -> str:
 _MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
 
-def _tasks(cache: dict) -> Optional[List[dict]]:
+def _tasks(cache: dict[str, Any]) -> Optional[List[dict[str, Any]]]:
     v = cache.get("tasks")
     if not isinstance(v, list):
         return None
     return [x for x in v if isinstance(x, dict) and isinstance(x.get("title"), str) and x["title"].strip()]
 
 
-def _task_line(t: dict, now: _dt.datetime) -> str:
+def _task_line(t: dict[str, Any], now: _dt.datetime) -> str:
     when = _when(t.get("due_iso") or t.get("due"), now)
     if t.get("overdue") and when != "просрочена":
         when = (when + ", просрочена").strip(", ")
-    return t["title"].strip().rstrip(".") + (" — " + when if when else "")
+    title: str = t["title"]
+    return title.strip().rstrip(".") + (" — " + when if when else "")
 
 
-def speak_tasks(cache: dict, now: _dt.datetime, only_open: bool) -> Optional[str]:
+def speak_tasks(cache: dict[str, Any], now: _dt.datetime, only_open: bool) -> Optional[str]:
     tasks = _tasks(cache)
     if tasks is None:
         return None
@@ -120,14 +121,14 @@ def speak_tasks(cache: dict, now: _dt.datetime, only_open: bool) -> Optional[str
     return head + ". ".join(_task_line(t, now) for t in tasks) + "."
 
 
-def _notion_items(cache: dict) -> Optional[List[dict]]:
+def _notion_items(cache: dict[str, Any]) -> Optional[List[dict[str, Any]]]:
     v = cache.get("notion_tasks")
     if not isinstance(v, list):
         return None
     return [x for x in v if isinstance(x, dict) and isinstance(x.get("project"), str) and x["project"].strip()]
 
 
-def speak_notion(cache: dict) -> Optional[str]:
+def speak_notion(cache: dict[str, Any]) -> Optional[str]:
     items = _notion_items(cache)
     if items:
         parts = []
@@ -145,7 +146,7 @@ def speak_notion(cache: dict) -> Optional[str]:
     return None
 
 
-def answer(mode: str, cache: Optional[dict], fresh: bool, now: Optional[_dt.datetime] = None, stamp: str = "") -> Tuple[Optional[str], str]:
+def answer(mode: str, cache: Optional[dict[str, Any]], fresh: bool, now: Optional[_dt.datetime] = None, stamp: str = "") -> Tuple[Optional[str], str]:
     """(local reply or None, server request text). Local only from a fresh same-day snapshot.
 
     ``stamp`` («Данные на двенадцать ноль пять.») is put in front, after «Утренний брифинг» for a briefing.
@@ -157,7 +158,7 @@ def answer(mode: str, cache: Optional[dict], fresh: bool, now: Optional[_dt.date
     return reply, server
 
 
-def _answer(mode: str, cache: Optional[dict], fresh: bool, now: _dt.datetime) -> Tuple[Optional[str], str]:
+def _answer(mode: str, cache: Optional[dict[str, Any]], fresh: bool, now: _dt.datetime) -> Tuple[Optional[str], str]:
     server = SERVER_TEXT[mode]
     if not cache or not fresh:
         return None, server
@@ -174,10 +175,12 @@ def _answer(mode: str, cache: Optional[dict], fresh: bool, now: _dt.datetime) ->
         notion = speak_notion(cache)
         return base + (" " + notion if notion else ""), server
     if mode == "briefing":
-        text = cache.get("text") if isinstance(cache.get("text"), str) else ""
+        raw_text = cache.get("text")
+        text = raw_text if isinstance(raw_text, str) else ""
         text = re.sub(r"^(?:По данным|Данные) на[^.!?]+[.!?]\s*", "", text.strip(), flags=re.I)
         if not text:
             return None, server
-        notion = cache.get("notion") if isinstance(cache.get("notion"), str) and cache["notion"].strip() else ""
-        return "Утренний брифинг, сэр. " + text + (" " + notion.strip() if notion else ""), server
+        raw = cache.get("notion")
+        notion = raw.strip() if isinstance(raw, str) else ""
+        return "Утренний брифинг, сэр. " + text + (" " + notion if notion else ""), server
     return None, server

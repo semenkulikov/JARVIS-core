@@ -7,7 +7,9 @@ starts with near-zero latency while the command runs in parallel.
 from __future__ import annotations
 
 import threading
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar
+
+T = TypeVar("T")
 
 DEFAULTS: Dict[str, object] = {
     "ack_wake": ["Да, сэр?", "Слушаю, сэр.", "Я здесь, сэр.", "К вашим услугам, сэр."],
@@ -29,7 +31,7 @@ _LOOKUP = {"server_health", "nutrition_left", "git"}
 _FOOD = {"food_log"}
 
 
-def ack_key(alias: Optional[dict]) -> Optional[str]:
+def ack_key(alias: Optional[dict[str, Any]]) -> Optional[str]:
     """Config key of the ack list for a matched quick command, or None for no ack."""
     if not alias or alias.get("action") != "quick2":
         return None
@@ -45,8 +47,8 @@ def ack_key(alias: Optional[dict]) -> Optional[str]:
     return None
 
 
-def ack_then(say: Callable, cfg: dict, ack: str, work: Callable[[Callable], object],
-             thread_name: str = "ack-work"):
+def ack_then(say: Callable[..., Any], cfg: dict[str, Any], ack: str, work: Callable[[Callable[..., Any]], T],
+             thread_name: str = "ack-work") -> T:
     """Speak ``ack`` now while ``work(gated_say)`` runs in parallel; return work's result.
 
     Audio stays sequential: the worker's say calls wait until the ack has finished.
@@ -55,13 +57,13 @@ def ack_then(say: Callable, cfg: dict, ack: str, work: Callable[[Callable], obje
     if not ack:
         return work(say)
     spoken = threading.Event()
-    box: Dict[str, object] = {}
+    box: Dict[str, Any] = {}
 
-    def gated_say(text, c=None, **kw):
+    def gated_say(text: str, c: dict[str, Any] | None = None, **kw: Any) -> Any:
         spoken.wait()
         return say(text, cfg if c is None else c, **kw)
 
-    def run():
+    def run() -> None:
         try:
             box["value"] = work(gated_say)
         except BaseException as e:  # re-raised below
@@ -75,14 +77,15 @@ def ack_then(say: Callable, cfg: dict, ack: str, work: Callable[[Callable], obje
         spoken.set()
     th.join()
     if "error" in box:
-        raise box["error"]  # type: ignore[misc]
-    return box.get("value")
+        raise box["error"]
+    value: T = box["value"]
+    return value
 
 
-def phrase_lists(cfg: dict) -> List[str]:
+def phrase_lists(cfg: dict[str, Any]) -> List[str]:
     """Every ack phrase from this module, for the startup TTS cache."""
     out: List[str] = []
     for key in ("ack_wake",) + ACK_KEYS:
-        v = cfg.get(key) or DEFAULTS[key]
+        v: Any = cfg.get(key) or DEFAULTS[key]
         out += [v] if isinstance(v, str) else list(v)
     return [x for x in out if x]

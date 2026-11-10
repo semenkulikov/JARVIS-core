@@ -2,7 +2,7 @@ import datetime as dt
 
 import pytest
 
-import jarvis_tasks as T
+from jarvis.core import tasks as T
 
 NOW = dt.datetime(2026, 11, 10, 14, 0, tzinfo=dt.timezone(dt.timedelta(hours=1)))
 

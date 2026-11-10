@@ -1,6 +1,6 @@
 """Code mode: explain_error and chat-confirmed actions never run anything locally."""
 import pytest
-import jarvis_codemode as CODE
+from jarvis.core import codemode as CODE
 import jarvis_commands as Q
 from test_commands import FakeBackend
 
