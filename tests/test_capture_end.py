@@ -31,3 +31,12 @@ def test_strip_wake_words_drops_the_name_and_call_words():
     ws = [{"word": w} for w in ("хей", "джарвис", "ну", "который", "час")]
     assert [w["word"] for w in W.strip_wake_words(ws)] == ["который", "час"]
     assert W.strip_wake(["эй", "джарвис", "стоп"]) == "стоп"
+
+
+def test_a_project_named_after_the_assistant_keeps_its_name():
+    ws = [{"word": w} for w in ("джарвис", "открой", "проект", "джарвис")]
+    assert [w["word"] for w in W.strip_wake_words(ws)] == ["открой", "проект", "джарвис"]
+    ws = [{"word": w} for w in ("открой", "проект", "джарвис")]
+    assert [w["word"] for w in W.strip_wake_words(ws)] == ["открой", "проект", "джарвис"]
+    ws = [{"word": w} for w in ("шум", "какой", "джарвис")]  # pre-buffer noise before a bare call
+    assert W.strip_wake_words(ws) == []

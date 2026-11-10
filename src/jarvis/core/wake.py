@@ -7,6 +7,7 @@ from typing import Any, Iterable, Sequence
 Word = dict[str, Any]
 
 # Leading tokens that are the name or a call to it («хей», «слушай»), not the command.
+PROJECT_NOUN = re.compile(r"проект\w*|сервер\w*|тест\w*|гит\w*|репозитори\w*")
 WAKE_TOK = re.compile(r"^(хей|эй|хэй|эх|ай|а|о|ну|слушай|джарвис\w*|жарвис\w*|джервис\w*|дарвис\w*|гарвис\w*|джарви\w*|джави\w*|харвис\w*|травис\w*|арвис\w*|рвис\w*|jarvis)$")
 # Recognised spellings of the name itself.
 WAKE_NAME = re.compile(r"(?:джарвис|жарвис|джервис|дарвис|гарвис|джарви|джави|харвис|арвис|jarvis)\w*")
@@ -31,6 +32,9 @@ def strip_wake_words(kept: Sequence[Word]) -> list[Word]:
     out = list(kept)
     # Strip the recognized wake name, not a fixed 1.35 s of possible command audio.
     wake_indices = [i for i, w in enumerate(out[:8]) if WAKE_NAME.fullmatch(w["word"])]
+    # A name that closes a longer phrase is its argument («открой проект джарвис»), not the call.
+    if wake_indices and wake_indices[-1] == len(out) - 1 and len(out) >= 2 and PROJECT_NOUN.fullmatch(out[-2]["word"]):
+        wake_indices.pop()
     if wake_indices: out = out[wake_indices[-1] + 1:]
     while out and WAKE_TOK.match(out[0]["word"]): out.pop(0)
     return out
