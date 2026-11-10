@@ -261,28 +261,35 @@ def test_ring_audio():
     assert [c[0] for c in AUDIO_IN.frames_after(ring, 9)] == [0.0, 10.0] and len(AUDIO_IN.frames_after(ring, 10)) == 1
 
 
+@pytest.fixture
+def asr():
+    from jarvis.adapters.asr_vosk import VoskASR
+    from jarvis.core.state import ListenerState
+    return VoskASR(ListenerState())
+
+
 @pytest.mark.parametrize("free,need,ok", [
     ([{"word": "джарвис", "conf": 0.95}], (), True),
     ([{"word": "то", "conf": 1.0}, {"word": "есть", "conf": 1.0}], (), False),
     ([{"word": "джарвис", "conf": 0.95}], ("проснись",), False),
     ([{"word": "джарвис", "conf": 0.95}, {"word": "проснись", "conf": 0.9}], ("проснись",), True),
 ])
-def test_verify_wake(listener, cfg, monkeypatch, free, need, ok):
+def test_verify_wake(asr, cfg, monkeypatch, free, need, ok):
     cfg["wake_verify_min_conf"] = 0.8
-    monkeypatch.setattr(listener, "free_words", lambda model, audio, c: free)
-    assert listener.verify_wake(None, [], 0, 10, cfg, need=need) is ok
+    monkeypatch.setattr(asr, "free_words", lambda audio, c: free)
+    assert asr.verify_wake([], 0, 10, cfg, need=need) is ok
 
 
-def test_verify_wake_disabled(listener, cfg, monkeypatch):
+def test_verify_wake_disabled(asr, cfg, monkeypatch):
     cfg["wake_verify_enabled"] = False
-    monkeypatch.setattr(listener, "free_words", lambda *a: pytest.fail("must not decode"))
-    assert listener.verify_wake(None, [], 0, 10, cfg) is True
+    monkeypatch.setattr(asr, "free_words", lambda *a: pytest.fail("must not decode"))
+    assert asr.verify_wake([], 0, 10, cfg) is True
 
 
-def test_sleep_wake_needs_higher_conf(listener, cfg, monkeypatch):
-    monkeypatch.setattr(listener, "free_words", lambda *a: [{"word": "джарвис", "conf": 0.75}, {"word": "проснись", "conf": 0.99}])
-    assert listener.verify_wake(None, [], 0, 10, cfg) is True
-    assert listener.verify_wake(None, [], 0, 10, cfg, need=("проснись",), min_conf=0.85) is False
+def test_sleep_wake_needs_higher_conf(asr, cfg, monkeypatch):
+    monkeypatch.setattr(asr, "free_words", lambda *a: [{"word": "джарвис", "conf": 0.75}, {"word": "проснись", "conf": 0.99}])
+    assert asr.verify_wake([], 0, 10, cfg) is True
+    assert asr.verify_wake([], 0, 10, cfg, need=("проснись",), min_conf=0.85) is False
 
 
 def test_grammar_settles_garbled_safe_command(listener, cfg):

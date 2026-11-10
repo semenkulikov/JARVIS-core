@@ -34,16 +34,16 @@ import jarvis_codemode as CODE
 import jarvis_dialog as DIALOG
 import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
-from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
-                              heard_after, phrase_finished)
+from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake)
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
 from jarvis.adapters.tts import Voice, split_text
 from jarvis.adapters.transport import WebhookTransport
 from jarvis.adapters.outbox import Outbox, read_text
 from jarvis.adapters.status_cache import StatusCache
+from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
-from jarvis.core.routing import Router, grammar_phrases, match_alias
+from jarvis.core.routing import Router, match_alias
 from jarvis.core.state import ListenerFSM, ListenerState, Mode, RequestLedger, Signals
 from jarvis.app import settings as SETTINGS
 from jarvis.app.settings import DEFAULTS
@@ -77,6 +77,8 @@ STATE = ListenerState()
 ROUTER = Router(STATE, lambda: CMDS is not None and bool(getattr(CMDS, "pending_shutdown", None)))
 choose, followup_rescue = ROUTER.choose, ROUTER.followup_rescue
 LEDGER = RequestLedger()
+ASR = VoskASR(STATE)
+capture_phrase, verify_wake = ASR.capture, ASR.verify_wake
 TRANSPORT = WebhookTransport(SIGNALS, LEDGER)
 call_webhook = TRANSPORT.call
 PLAYER = AUDIO.Player(sd)
@@ -383,69 +385,6 @@ def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, e
 
 
 
-def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=None):
-    """returns (text, avg_conf, grammar_text); wake_pause_s ends a bare «Джарвис» sooner."""
-    from vosk import KaldiRecognizer
-    rec = KaldiRecognizer(STATE.model, SR); rec.SetWords(True)
-    try: rec.SetPartialWords(True)
-    except Exception: pass
-    grec = None
-    if cfg.get("grammar_hint", True):
-        try: grec = KaldiRecognizer(STATE.model, SR, json.dumps(grammar_phrases(cfg), ensure_ascii=False)); grec.SetWords(True)
-        except Exception as e: log.info("grammar recognizer failed: %s", e)
-    agc = AGC(cfg)
-    max_s = max_s or float(cfg["phrase_max_s"]); sil = float(cfg["phrase_silence_s"])
-    words = []; gwords = []; t0 = time.time(); last_change = None; partial = ""; pwords = None; cut = True
-    acoustic_last = None; noise_floor = 0.001; samples = 0
-    try:
-        while time.time() - t0 < max_s:
-            try: x = cap.q.get(timeout=0.15)
-            except queue.Empty: x = None
-            if x is not None:
-                samples += len(x)
-                rms = float(np.sqrt(np.mean(x * x)))
-                if rms > max(0.003, noise_floor * 3):
-                    acoustic_last = cap.audio_start + samples / SR
-                else: noise_floor = 0.98 * noise_floor + 0.02 * min(rms, 0.004)
-                b = (agc(x) * 32767).astype(np.int16).tobytes()
-                if grec is not None and grec.AcceptWaveform(b): gwords += json.loads(grec.Result()).get("result", [])
-                if rec.AcceptWaveform(b):
-                    ws = json.loads(rec.Result()).get("result", []); words += ws
-                    if ws and not partial: last_change = time.time()
-                    partial = ""
-                else:
-                    pr = json.loads(rec.PartialResult()); p = pr.get("partial", "")
-                    pwords = pr.get("partial_result") if "partial_result" in pr else (None if p else pwords)
-                    if p != partial:
-                        partial = p
-                        if p: last_change = time.time()
-                if not cap.q.empty(): continue
-            heard = heard_after(words, pwords if partial else [], partial, skip_s)
-            if phrase_finished(time.time(), t0, heard, last_change, acoustic_last, nospeech_s, sil, wake_pause_s, skip_s): cut = False; break
-        words += json.loads(rec.FinalResult()).get("result", [])
-        if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
-    finally:
-        if STATE.capture is cap: STATE.capture = None
-    kept = [w for w in words if w.get("end", 99) > skip_s]
-    kept = strip_wake_words(kept)
-    text = " ".join(w["word"] for w in kept).strip()
-    conf = sum(w.get("conf", 1) for w in kept) / len(kept) if kept else 0.0
-    gk = [w for w in gwords if w.get("end", 99) > skip_s and w["word"] != "[unk]"]
-    gtext = " ".join(w["word"] for w in gk); gconf = sum(w.get("conf", 1) for w in gk) / len(gk) if gk else 0.0
-    gmin = min(agc.gains) if agc.gains else 1
-    log.info("capture: raw=%r -> %r conf=%.2f | grammar=%r conf=%.2f | agc gain min=%.1f (%.1fs)",
-             " ".join(w["word"] for w in words), text, conf, gtext, gconf, gmin, time.time() - t0)
-    if kept:
-        endpoint_lag = max(0.0, time.time() - (cap.audio_start + kept[-1].get("end", 0)))
-        log.info("capture endpoint lag_s=%.3f silence_s=%.2f (audio timestamp estimate)", endpoint_lag, sil)
-    tr = STATE.trace
-    if tr is not None and kept:
-        tr.mark("speech_end", at=time.perf_counter() - endpoint_lag, estimated=True)
-    STATE.last_input_conf = conf
-    STATE.last_capture = {"words": kept, "hit_max": cut and bool(kept)}
-    STATE.last_input_end = time.monotonic() - endpoint_lag if kept else None
-    perf("recognized", confidence=round(conf,3))
-    return text, conf, (gtext if gconf >= 0.75 else "")
 
 
 
@@ -603,23 +542,7 @@ def request_morning(job,cfg,test=False):
     log.info("morning briefing POST date=%s ok=%s",job.get("local_date"),bool(result))
 
 
-def free_words(model, audio, cfg):
-    """Free-vocabulary transcript of a short clip (grammar recognizers force every sound into the wake word)."""
-    from vosk import KaldiRecognizer
-    r = KaldiRecognizer(model, SR); r.SetWords(True); agc = AGC(cfg)
-    for i in range(0, len(audio), CHUNK):
-        r.AcceptWaveform((agc(audio[i:i + CHUNK]) * 32767).astype(np.int16).tobytes())
-    return json.loads(r.FinalResult()).get("result", [])
 
-def verify_wake(model, ring, a, b, cfg, need=(), min_conf=None):
-    """True when a free transcript of [a, b) contains the wake name (and every word in ``need``) confidently."""
-    if not GATE.setting(cfg, "wake_verify_enabled"): return True
-    t0 = time.monotonic(); ws = free_words(model, ring_audio(ring, a, b), cfg)
-    mc = float(min_conf if min_conf is not None else GATE.setting(cfg, "wake_verify_min_conf"))
-    ok = GATE.wake_word_confirmed(ws, mc) and all(any(w.get("word") == n and w.get("conf", 0) >= mc for w in ws) for n in need)
-    log.info("wake verify %s: free=%r (%.2fs)", "OK" if ok else "REJECTED",
-             " ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws), time.monotonic() - t0)
-    return ok
 
 VERIFIER = None
 def speaker_check(ring, end, cfg):
@@ -659,13 +582,12 @@ def main():
     cfg = load_cfg()
     LP.TIMERS = command_controller().timers
     pm=proactive_manager(); next_proactive=0.0
-    from vosk import Model, KaldiRecognizer, SetLogLevel
-    SetLogLevel(-1)
+    ASR.quiet()
     mdir = [d for d in os.listdir(os.path.join(BASE, "models")) if d.startswith("vosk-model")]
     ready = threading.Event(); model_error = []; model_box = []
     def warm_vosk():
         t0 = time.monotonic()
-        try: model_box.append(Model(os.path.join(BASE, "models", mdir[0])))
+        try: model_box.append(ASR.load_model(os.path.join(BASE, "models", mdir[0])))
         except Exception as e: model_error.append(e)
         finally:
             ready.set(); log.info("vosk background warmup %.3fs", time.monotonic()-t0)
@@ -676,13 +598,7 @@ def main():
         if os.path.exists(STOP_FILE):
             RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); OUTBOX.signal.stop(); return
     if model_error: raise model_error[0]
-    model = model_box[0]; STATE.model = model
-    def wake_rec():
-        r = KaldiRecognizer(model, SR, json.dumps(["джарвис", "хей джарвис", "эй джарвис", "[unk]"], ensure_ascii=False))
-        r.SetWords(True); return r
-    def sleep_rec():
-        r = KaldiRecognizer(model, SR, json.dumps(list(SLEEP.WAKE_PHRASES) + [SLEEP.HINT_WORD, "[unk]"], ensure_ascii=False))
-        r.SetWords(True); return r
+    STATE.model = model_box[0]
     srec = None; sbase = 0; wake_check = None
     if sleep_state().active(): log.info("sleep mode active for %.0fs more", sleep_state().remaining())
     oww = None
@@ -706,12 +622,9 @@ def main():
     stream.start()
     log.info("listening (v3.18.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     preload_speaker(cfg)
-    pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
+    pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = ASR.wake_recognizer(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); lastmem = time.monotonic(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0
-    def stop_rec(c):
-        ph = sorted(set(" ".join(_norm_phrase(p)) for p in c.get("stop_phrases", [])) - {""})
-        r = KaldiRecognizer(model, SR, json.dumps(ph + ["[unk]"], ensure_ascii=False)); r.SetWords(True); return r
     def do_stop(reason):
         log.info("STOP barge-in (%s): speech stopped", reason)
         interrupt.set()  # the speech thread stops its own stream
@@ -764,8 +677,8 @@ def main():
                 OUTBOX.purge_cancelled(LEDGER)
             if busy.is_set():
                 if not was_busy:
-                    brec = stop_rec(cfg); bagc = AGC(cfg)
-                    brfree = KaldiRecognizer(model, SR); brfree.SetWords(True); free_last = (0, ""); bframes=0
+                    brec = ASR.stop_recognizer(cfg); bagc = AGC(cfg)
+                    brfree = ASR.recognizer(); free_last = (0, ""); bframes=0
                 was_busy = True
                 if cap is None and not interrupt.is_set() and not STATE.stop_ack_active and not STATE.followup_guard:
                     if os.path.exists(TEST_BARGE):
@@ -806,7 +719,7 @@ def main():
                         pending = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
                 continue
             if was_busy:
-                was_busy = False; last_end = time.time(); wrec = wake_rec(); wbase = pos; wake_check = None; clap.events = []; clap.cur = None
+                was_busy = False; last_end = time.time(); wrec = ASR.wake_recognizer(); wbase = pos; wake_check = None; clap.events = []; clap.cur = None
                 if oww is not None: oww.reset()
                 cfg = load_cfg(); STATE.rid = None
                 if STATE.stop_pending:
@@ -817,18 +730,18 @@ def main():
             if sleeping:
                 # Sleep: no clap, no wake word, no follow-ups. Only a strict «Джарвис, проснись».
                 wake_check = None
-                if srec is None: srec = sleep_rec(); sbase = st
+                if srec is None: srec = ASR.sleep_recognizer(); sbase = st
                 if srec.AcceptWaveform(i16.tobytes()):
                     ws = json.loads(srec.Result()).get("result", [])
                     said = " ".join(w.get("word", "") for w in ws)
                     if SLEEP.is_wake_phrase(said) and min(w.get("conf", 0) for w in ws) >= 0.9:
                         a = sbase + int((ws[0]["start"] - 0.45) * SR); b = sbase + int((ws[-1]["end"] + 0.3) * SR)
-                        if verify_wake(model, ring, a, b, cfg, need=("проснись",), min_conf=GATE.setting(cfg, "sleep_wake_min_conf")):
+                        if verify_wake(ring, a, b, cfg, need=("проснись",), min_conf=GATE.setting(cfg, "sleep_wake_min_conf")):
                             sleep_state().stop("phrase"); srec = None
                             start("sleep_end", text=""); continue
                     elif said == SLEEP.HINT_WORD and ws and ws[0].get("conf", 0) >= 0.9 and sleep_hint_due(cfg):
                         a = sbase + int((ws[0]["start"] - 0.45) * SR); b = sbase + int((ws[-1]["end"] + 0.3) * SR)
-                        if verify_wake(model, ring, a, b, cfg, min_conf=GATE.setting(cfg, "sleep_wake_min_conf")) and owner_confirmed(ring, b, cfg):
+                        if verify_wake(ring, a, b, cfg, min_conf=GATE.setting(cfg, "sleep_wake_min_conf")) and owner_confirmed(ring, b, cfg):
                             STATE.sleep_hint_at = time.time(); start("sleep_hint", text=""); continue
                 continue
             srec = None
@@ -853,7 +766,7 @@ def main():
                     elif ws: log.info("vosk wake rejected conf %.2f", ws[0].get("conf", 0))
                 if not trig and wake_check is not None and pos >= wake_check["b"]:
                     wc, wake_check = wake_check, None
-                    if verify_wake(model, ring, wc["a"], wc["b"], cfg) and speaker_ok(ring, wc["b"], cfg):
+                    if verify_wake(ring, wc["a"], wc["b"], cfg) and speaker_ok(ring, wc["b"], cfg):
                         trig = "wake_word"; frm = wc["frm"]; skip = VOSK_WAKE_SKIP_S if wc["src"] == "vosk" else 0.0
             if trig and time.time() - last_end > cfg["cooldown_s"]:
                 barge_armed = False
