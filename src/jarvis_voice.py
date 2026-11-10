@@ -38,6 +38,7 @@ import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
                               heard_after, phrase_finished)
 from jarvis.core import status as STATUS
+from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, grammar_phrases, match_alias
@@ -66,10 +67,7 @@ load_cfg = CONFIG.load
 PICKER = Picker(DEFAULTS)
 pick = PICKER.pick
 
-SR = 16000
-CHUNK = 1280  # 80 ms, openWakeWord frame
-audio_q = queue.Queue(maxsize=1000)
-levels = {"max": 0.0, "sum": 0.0, "n": 0}
+MIC = MicInput()
 SIGNALS = Signals()
 busy, speaking, interrupt = SIGNALS.busy, SIGNALS.speaking, SIGNALS.interrupt
 FSM = ListenerFSM()
@@ -86,9 +84,6 @@ def sleep_state():
     if SLEEP_STATE is None: SLEEP_STATE = SLEEP.SleepState(os.path.join(BASE, "cache", "sleep.json"))
     return SLEEP_STATE
 
-def cb(indata, frames, t, status):
-    try: audio_q.put_nowait(indata[:, 0].copy())
-    except queue.Full: pass
 
 # ================= TTS =================
 _ENG = {}
@@ -623,22 +618,8 @@ def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, e
 
 # ================= capture after wake =================
 
-class Capture:
-    def __init__(self, pre=None):
-        self.q = queue.Queue()
-        self.audio_start = time.time() - sum(len(x) for x in (pre or [])) / SR
-        for x in pre or []: self.q.put(x)
 
 
-class AGC:
-    def __init__(self, cfg):
-        self.env = 0.05; self.max_g = float(cfg.get("vosk_agc_max_gain", 12)); self.tgt = float(cfg.get("vosk_agc_target_peak", 0.6))
-        self.on = bool(cfg.get("vosk_agc", True)); self.gains = []
-    def __call__(self, x):
-        if not self.on: return x
-        pk = float(np.abs(x).max()); self.env = max(pk, self.env * 0.97, 0.02)
-        g = min(self.max_g, self.tgt / self.env); self.gains.append(g)
-        return np.clip(x * g, -1, 1)
 
 
 
@@ -845,73 +826,7 @@ def handle(trig, cap, text, test, skip_s, trace=None):
         STATE.stop_ack_active = False; FSM.to(Mode.IDLE, "conversation over"); busy.clear()
 
 # ================= clap detector =================
-class ClapDetector:
-    """Clap = sharp onset (attack) + loud vs background + fast decay. Two claps, isolated, 0.12-0.9 s apart.
-    Reverb tails / bounces right after a clap are ignored (clap_tail_s); weak noise (< clap_noise_rel * clap peak) is ignored."""
-    def __init__(self):
-        self.bg = 0.002; self.prev_r = 0.0; self.cur = None; self.events = []; self.last_log = 0; self.last_clap_t = -9; self.last_noise_t = -9
-    def feed(self, x, pos, c):
-        fl = 160
-        for i in range(0, len(x) - fl + 1, fl):
-            f = x[i:i + fl]; r = float(np.sqrt(np.mean(f * f))); pk = float(np.abs(f).max()); t = (pos + i) / SR
-            if self.cur is None:
-                att = r / max(self.prev_r, 1e-5)
-                in_tail = t - self.last_clap_t < c["clap_tail_s"]
-                if pk >= c["clap_min_peak"] and r >= c["clap_ratio"] * self.bg and att >= c["clap_attack"]:
-                    self.cur = {"t": t, "pk": pk, "r": r, "bg": self.bg, "att": att}
-                elif (not in_tail and pk >= c["clap_log_min_peak"] and r >= 4 * self.bg and att >= c["clap_noise_attack"]
-                      and t - self.last_noise_t > 0.1):
-                    self.events.append({"t": t, "ok": False, "pk": pk, "att": att}); self.last_noise_t = t
-                    if t - self.last_log > 0.3:
-                        log.info("clap near-miss: peak=%.3f rms=%.4f bg=%.4f attack=%.1f", pk, r, self.bg, att); self.last_log = t
-                if r < self.bg: self.bg = 0.9 * self.bg + 0.1 * r
-                elif not in_tail: self.bg = 0.998 * self.bg + 0.002 * min(r, 20 * self.bg)
-                self.bg = max(self.bg, 1e-4)
-            else:
-                cu = self.cur; cu["pk"] = max(cu["pk"], pk); cu["r"] = max(cu["r"], r); dur = t - cu["t"]
-                if r < cu["r"] * c["clap_decay"] or dur > c["clap_max_len_s"]:
-                    ok = dur <= c["clap_max_len_s"]
-                    log.info("clap candidate: peak=%.3f rms=%.4f bg=%.4f attack=%.1f dur=%.3f -> %s", cu["pk"], cu["r"], cu["bg"], cu["att"], dur, "ok" if ok else "too long")
-                    self.events.append({"t": cu["t"], "ok": ok, "pk": cu["pk"], "att": cu["att"]}); self.cur = None
-                    self.last_clap_t = t
-            self.prev_r = r
-        now_t = (pos + len(x)) / SR
-        if self.cur is None and self.events and now_t - self.events[-1]["t"] >= c["clap_quiet_s"]:
-            cl = [self.events[-1]]
-            for e in reversed(self.events[:-1]):
-                if cl[0]["t"] - e["t"] < max(c["clap_quiet_s"], c["clap_gap_max_s"]): cl.insert(0, e)
-                else: break
-            self.events = []
-            oks = [e for e in cl if e["ok"]]
-            if not oks: return False
-            ref = max(e["pk"] for e in oks)
-            sig = [e for e in cl if e["ok"] or e["pk"] >= c["clap_noise_rel"] * ref]
-            desc = ", ".join(f"{e['t'] - cl[0]['t']:+.2f}s pk={e['pk']:.2f} att={e['att']:.0f}{'*' if e['ok'] else ''}" for e in cl)
-            if len(sig) == 2 and all(e["ok"] for e in sig):
-                g = sig[1]["t"] - sig[0]["t"]; sim = max(sig[0]["pk"], sig[1]["pk"]) / max(min(sig[0]["pk"], sig[1]["pk"]), 1e-4)
-                if c["clap_gap_min_s"] <= g <= c["clap_gap_max_s"] and sim <= c["clap_peak_similarity"]:
-                    log.info("DOUBLE CLAP gap=%.2f sim=%.1f [%s]", g, sim, desc); return True
-                log.info("clap pair rejected: gap=%.2f sim=%.1f [%s]", g, sim, desc)
-            else:
-                log.info("clap cluster rejected: %d significant (%d clap-like) [%s]", len(sig), len(oks), desc)
-        return False
 
-def pick_device(cfg):
-    keys = [k.lower() for k in cfg.get("mic_name_contains", ["Intel", "Smart Sound", "массив", "Microphone Array"])]
-    devs = sd.query_devices(); apis = sd.query_hostapis(); cands = []
-    for i, d in enumerate(devs):
-        if d["max_input_channels"] < 1: continue
-        n = d["name"].lower()
-        if any(k in n for k in keys):
-            api = apis[d["hostapi"]]["name"]
-            cands.append(({"Windows WASAPI": 0, "MME": 1, "Windows DirectSound": 2}.get(api, 3), i, d["name"], api))
-    for _rank, i, name, api in sorted(cands):
-        try:
-            sd.check_input_settings(device=i, samplerate=SR, channels=1, dtype="float32")
-            log.info("mic selected: [%d] %s (%s)", i, name, api); return i
-        except Exception as e:
-            log.info("mic %d %s (%s) rejected: %s", i, name, api, e)
-    log.warning("no matching mic, using default"); return None
 
 
 
@@ -930,13 +845,6 @@ def request_morning(job,cfg,test=False):
         if not test: proactive_manager().morning_result(job,result,cfg)
     log.info("morning briefing POST date=%s ok=%s",job.get("local_date"),bool(result))
 
-def ring_audio(ring, a, b):
-    """Samples [a, b) from the ring buffer of (start_pos, chunk)."""
-    parts = []
-    for p, c in ring:
-        lo, hi = max(a, p), min(b, p + len(c))
-        if hi > lo: parts.append(c[lo - p:hi - p])
-    return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
 
 def free_words(model, audio, cfg):
     """Free-vocabulary transcript of a short clip (grammar recognizers force every sound into the wake word)."""
@@ -1036,8 +944,8 @@ def main():
         STATE.capture = cap
         threading.Thread(target=handle, args=(trig, cap, text, test, skip_s, SPEED.Trace(trig)), daemon=True).start()
 
-    dev = pick_device(cfg)
-    stream = sd.InputStream(device=dev, samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=cb)
+    dev = pick_device(sd, cfg)
+    stream = MIC.open(sd, dev)
     stream.start()
     log.info("listening (v3.18.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     preload_speaker(cfg)
@@ -1076,9 +984,7 @@ def main():
             if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE.stop_pending and pm.can_speak(cfg):
                 for notice in LP.TIMERS.pop_fired(limit=1): start("timer_fire", text=notice, test=False); break
             if time.time() - lastlvl > cfg["level_log_interval_s"]:
-                n = max(levels["n"], 1)
-                log.info("mic level: peak=%.3f avg_rms=%.4f chunks=%d", levels["max"], levels["sum"] / n, levels["n"])
-                levels.update(max=0.0, sum=0.0, n=0); lastlvl = time.time()
+                MIC.levels.report(); lastlvl = time.time()
             if time.monotonic() - lastmem > float(cfg.get("memory_log_interval_s", 1800)):
                 lastmem = time.monotonic()
                 if not busy.is_set() and RUNTIME.idle_for(STATE.last_spoken_end or 0.0, lastmem) > float(cfg.get("memory_trim_idle_s", 900)):
@@ -1088,10 +994,10 @@ def main():
                 if not busy.is_set() and RUNTIME.memory_over_limit(m["priv"], cfg.get("memory_restart_mb", 0)):
                     log.warning("memory guard: priv=%dMB > %sMB while idle -> restart via supervisor", m["priv"], cfg.get("memory_restart_mb"))
                     STATE.exit_code = RUNTIME.MEMORY_RESTART_CODE; break
-            try: x = audio_q.get(timeout=0.3)
+            try: x = MIC.queue.get(timeout=0.3)
             except queue.Empty: continue
             st = pos; pos += len(x); ring.append((st, x))
-            levels["max"] = max(levels["max"], float(np.abs(x).max())); levels["sum"] += float(np.sqrt(np.mean(x * x))); levels["n"] += 1
+            MIC.levels.add(x)
             i16 = (np.clip(x, -1, 1) * 32767).astype(np.int16)
             cap = STATE.capture
             if cap is not None: cap.q.put(x)
@@ -1154,7 +1060,7 @@ def main():
                 if STATE.stop_pending:
                     STATE.stop_pending = False; pending = None; start("stop_ack", text=""); continue
                 if pending is not None:
-                    pre = [c for (p, c) in ring if p + len(c) > pending]; pending = None; barge_armed = False
+                    pre = frames_after(ring, pending); pending = None; barge_armed = False
                     start("wake_word", pre=pre, skip_s=0.0); continue
             if sleeping:
                 # Sleep: no clap, no wake word, no follow-ups. Only a strict «Джарвис, проснись».
@@ -1201,7 +1107,7 @@ def main():
                 barge_armed = False
                 if trig == "clap": start("clap", text="")
                 else:
-                    pre = [c for (p, c) in ring if p + len(c) > frm]
+                    pre = frames_after(ring, frm)
                     start("wake_word", pre=pre, skip_s=skip)
         except Exception as e:
             log.exception("main loop error: %s", e); time.sleep(0.5)

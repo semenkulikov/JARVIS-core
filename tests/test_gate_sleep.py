@@ -8,6 +8,7 @@ import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 from jarvis.core.followup import FollowupSettings, followup_seconds
 from jarvis.core import routing as ROUTING
+from jarvis.adapters import audio as AUDIO_IN
 
 
 def words(text, conf):
@@ -197,7 +198,7 @@ def test_garbled_wake_turn_says_nothing(listener, cfg, said, monkeypatch):
         return "то есть", 0.65, ""
     monkeypatch.setattr(listener, "capture_phrase", fake_capture)
     monkeypatch.setattr(listener, "free_phrase", lambda *a, **k: pytest.fail("garbage must not reach the server"))
-    listener._handle_turn("wake_word", listener.Capture(), None, False, 0.0)
+    listener._handle_turn("wake_word", AUDIO_IN.Capture(), None, False, 0.0)
     assert said == []
 
 
@@ -208,7 +209,7 @@ def test_not_understood_phrase_never_spoken(listener, cfg, said, monkeypatch):
         listener.STATE.last_capture = {"words": words(t, cf) if t else [], "hit_max": False}
         return t, cf, g
     monkeypatch.setattr(listener, "capture_phrase", fake_capture)
-    listener._handle_turn("wake_word", listener.Capture(), None, False, 0.0)
+    listener._handle_turn("wake_word", AUDIO_IN.Capture(), None, False, 0.0)
     assert not any("расслышал" in s or "разобрал" in s for s in said)
 
 
@@ -254,10 +255,11 @@ def test_silent_after_parts_keeps_parts(listener, cfg, said, outbox):
 
 
 
-def test_ring_audio(listener):
+def test_ring_audio():
     ring = [(0, np.arange(10, dtype=np.float32)), (10, np.arange(10, 20, dtype=np.float32))]
-    assert listener.ring_audio(ring, 5, 15).tolist() == list(range(5, 15))
-    assert listener.ring_audio(ring, 30, 40).size == 0
+    assert AUDIO_IN.ring_audio(ring, 5, 15).tolist() == list(range(5, 15))
+    assert AUDIO_IN.ring_audio(ring, 30, 40).size == 0
+    assert [c[0] for c in AUDIO_IN.frames_after(ring, 9)] == [0.0, 10.0] and len(AUDIO_IN.frames_after(ring, 10)) == 1
 
 
 @pytest.mark.parametrize("free,need,ok", [
