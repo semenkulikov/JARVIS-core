@@ -27,7 +27,6 @@ import jarvis_commands as QUICK
 import jarvis_proactive as PROACTIVE
 import jarvis_runtime as RUNTIME
 import jarvis_audio as AUDIO
-import jarvis_speaker as SPEAKER
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 import jarvis_codemode as CODE
@@ -35,12 +34,13 @@ import jarvis_dialog as DIALOG
 import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake)
-from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
+from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device
 from jarvis.adapters.tts import Voice, split_text
 from jarvis.adapters.transport import WebhookTransport
 from jarvis.adapters.outbox import Outbox, read_text
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.adapters.asr_vosk import VoskASR
+from jarvis.adapters.speaker import SpeakerGate
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, match_alias
@@ -78,6 +78,7 @@ ROUTER = Router(STATE, lambda: CMDS is not None and bool(getattr(CMDS, "pending_
 choose, followup_rescue = ROUTER.choose, ROUTER.followup_rescue
 LEDGER = RequestLedger()
 ASR = VoskASR(STATE)
+SPEAKER_GATE = SpeakerGate(BASE)
 capture_phrase, verify_wake = ASR.capture, ASR.verify_wake
 TRANSPORT = WebhookTransport(SIGNALS, LEDGER)
 call_webhook = TRANSPORT.call
@@ -544,26 +545,8 @@ def request_morning(job,cfg,test=False):
 
 
 
-VERIFIER = None
-def speaker_check(ring, end, cfg):
-    """(ok, score) of the owner-voice check on the audio that ends at the wake word; (True, None) when off."""
-    global VERIFIER
-    if not cfg.get("speaker_verify_enabled"): return True, None
-    if VERIFIER is None: VERIFIER = SPEAKER.SpeakerVerifier(BASE, cfg)
-    VERIFIER.cfg = cfg
-    win = int(float(VERIFIER.setting("speaker_window_s")) * SR)
-    ok, score = VERIFIER.check(ring_audio(ring, end - win, end))
-    if score is not None: log.info("speaker %s score=%.3f threshold=%.3f", "OK" if ok else "REJECTED", score, VERIFIER.threshold())
-    return ok, score
 
-def speaker_ok(ring, end, cfg):
-    """Optional owner-voice check (off by default): True unless the profile rejects the voice."""
-    return speaker_check(ring, end, cfg)[0]
 
-def owner_confirmed(ring, end, cfg):
-    """Stricter than speaker_ok: only True when verification is on and actually scored the owner's voice."""
-    ok, score = speaker_check(ring, end, cfg)
-    return bool(ok and score is not None)
 
 def sleep_hint_due(cfg):
     """A bare «Джарвис» during sleep gets at most one spoken hint per interval."""
@@ -571,12 +554,6 @@ def sleep_hint_due(cfg):
     gap = float(cfg.get("sleep_hint_interval_s", SLEEP.DEFAULTS["sleep_hint_interval_s"]))
     return time.time() - float(STATE.sleep_hint_at or 0) >= gap
 
-def preload_speaker(cfg):
-    """Load the voice profile at startup so the log shows whether owner verification is active."""
-    global VERIFIER
-    if not cfg.get("speaker_verify_enabled"): log.info("speaker verify off"); return
-    VERIFIER = SPEAKER.SpeakerVerifier(BASE, cfg)
-    if VERIFIER.ready(): log.info("speaker verify active threshold=%.3f profile_clips=%s", VERIFIER.threshold(), VERIFIER.profile.get("count"))
 
 def main():
     cfg = load_cfg()
@@ -621,7 +598,7 @@ def main():
     stream = MIC.open(sd, dev)
     stream.start()
     log.info("listening (v3.18.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
-    preload_speaker(cfg)
+    SPEAKER_GATE.preload(cfg)
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = ASR.wake_recognizer(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); lastmem = time.monotonic(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0
@@ -741,7 +718,7 @@ def main():
                             start("sleep_end", text=""); continue
                     elif said == SLEEP.HINT_WORD and ws and ws[0].get("conf", 0) >= 0.9 and sleep_hint_due(cfg):
                         a = sbase + int((ws[0]["start"] - 0.45) * SR); b = sbase + int((ws[-1]["end"] + 0.3) * SR)
-                        if verify_wake(ring, a, b, cfg, min_conf=GATE.setting(cfg, "sleep_wake_min_conf")) and owner_confirmed(ring, b, cfg):
+                        if verify_wake(ring, a, b, cfg, min_conf=GATE.setting(cfg, "sleep_wake_min_conf")) and SPEAKER_GATE.owner_confirmed(ring, b, cfg):
                             STATE.sleep_hint_at = time.time(); start("sleep_hint", text=""); continue
                 continue
             srec = None
@@ -752,7 +729,7 @@ def main():
                     log.info("oww score %.2f", sc)
                     frm = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
                     if sc >= float(GATE.setting(cfg, "oww_strong_threshold")):
-                        if speaker_ok(ring, pos, cfg): trig = "wake_word"
+                        if SPEAKER_GATE.ok(ring, pos, cfg): trig = "wake_word"
                     else: wake_check = {"a": frm, "b": pos + int(0.3 * SR), "frm": frm, "src": "oww"}
                 if wrec.AcceptWaveform(i16.tobytes()):
                     res = json.loads(wrec.Result())
@@ -766,7 +743,7 @@ def main():
                     elif ws: log.info("vosk wake rejected conf %.2f", ws[0].get("conf", 0))
                 if not trig and wake_check is not None and pos >= wake_check["b"]:
                     wc, wake_check = wake_check, None
-                    if verify_wake(ring, wc["a"], wc["b"], cfg) and speaker_ok(ring, wc["b"], cfg):
+                    if verify_wake(ring, wc["a"], wc["b"], cfg) and SPEAKER_GATE.ok(ring, wc["b"], cfg):
                         trig = "wake_word"; frm = wc["frm"]; skip = VOSK_WAKE_SKIP_S if wc["src"] == "vosk" else 0.0
             if trig and time.time() - last_end > cfg["cooldown_s"]:
                 barge_armed = False

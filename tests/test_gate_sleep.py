@@ -330,7 +330,3 @@ def test_sleep_hint_rate_limited(listener, cfg, monkeypatch):
     listener.STATE.sleep_hint_at = listener.time.time()
     assert not listener.sleep_hint_due(cfg)
     assert not listener.sleep_hint_due(dict(cfg, sleep_hint_enabled=False, sleep_hint_interval_s=0))
-
-
-def test_owner_confirmed_needs_real_score(listener, cfg):
-    assert listener.owner_confirmed([], 0, dict(cfg, speaker_verify_enabled=False)) is False

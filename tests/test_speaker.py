@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 import jarvis_speaker as S
+from jarvis.adapters.speaker import SpeakerGate
 
 
 def tone(hz, seconds=1.0, sr=16000):
@@ -110,14 +111,19 @@ def test_make_profile_roundtrip():
     assert p["version"] == 1 and p["count"] == 3 and p["model_sha256"] == S.MODEL_SHA256 and len(p["centroid"]) == 2
 
 
-def test_listener_gate_off_by_default(listener, cfg, monkeypatch):
-    monkeypatch.setattr(listener.SPEAKER, "SpeakerVerifier", lambda *a, **k: pytest.fail("must not construct"))
-    assert listener.speaker_ok([], 16000, cfg) is True
+def test_listener_gate_off_by_default(cfg, monkeypatch, tmp_path):
+    monkeypatch.setattr(S, "SpeakerVerifier", lambda *a, **k: pytest.fail("must not construct"))
+    assert SpeakerGate(str(tmp_path)).ok([], 16000, cfg) is True
 
 
-def test_listener_gate_rejects_stranger(listener, cfg, monkeypatch, tmp_path):
+def test_listener_gate_rejects_stranger(cfg, tmp_path):
     home = make_home(tmp_path, [1.0, 0.0])
     cfg["speaker_verify_enabled"] = True
-    monkeypatch.setattr(listener, "VERIFIER", S.SpeakerVerifier(home, cfg, session_factory=lambda p: FakeSession([0.0, 1.0])))
+    gate = SpeakerGate(str(home))
+    gate.verifier = S.SpeakerVerifier(home, cfg, session_factory=lambda p: FakeSession([0.0, 1.0]))
     ring = [(0, tone(300, 2.0))]
-    assert listener.speaker_ok(ring, 32000, cfg) is False
+    assert gate.ok(ring, 32000, cfg) is False and gate.owner_confirmed(ring, 32000, cfg) is False
+
+
+def test_owner_confirmed_needs_real_score(cfg, tmp_path):
+    assert SpeakerGate(str(tmp_path)).owner_confirmed([], 0, dict(cfg, speaker_verify_enabled=False)) is False
