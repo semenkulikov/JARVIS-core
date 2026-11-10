@@ -7,7 +7,7 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-Current release: [3.12.0](https://github.com/semenkulikov/JARVIS-core/releases/tag/v3.12.0)
+Current version: 3.18.0 — see the [changelog](CHANGELOG.md).
 
 An offline Russian-language voice assistant for Windows. Say "Джарвис" (or clap twice),
 give a command, hear the answer. Speech recognition and speech synthesis run on your
@@ -17,13 +17,23 @@ forwarded to your own AI server through a simple webhook.
 ## Features
 
 - **Activation:** wake word "Джарвис" / "hey Jarvis" (openWakeWord + Vosk) or two claps.
-- **Follow-ups without the wake word:** the microphone stays open for 7 seconds after a
-  reply and 10 seconds after a question, with echo and low-confidence filtering.
+- **Strict wake word:** every wake is re-checked by free recognition; background speech,
+  videos and garbled phrases are dropped silently. Optional owner-voice verification
+  (WeSpeaker ONNX, off by default).
+- **Follow-ups without the wake word:** the microphone stays open for up to 6 seconds after
+  a reply, with echo and low-confidence filtering.
+- **Instant acknowledgements:** «Да, сэр?» on the bare name, «Есть, сэр.» while an action runs.
 - **Local commands:** time, battery, temperature, volume and media keys, screenshots,
   free disk space, screen off and lock, close window, read clipboard, quick notes,
   read-only Git status, open apps and projects.
 - **Timers and recurring reminders** that survive restarts.
-- **Modes:** focus, sleep, workout.
+- **Modes:** focus, sleep (screen lock), workout, and a Jarvis sleep mode that keeps it
+  silent for a set time until «Джарвис, проснись».
+- **Your day from a status cache:** status, all tasks with times, what is left, a morning
+  briefing on demand, Notion projects; anything the cache lacks goes to your server.
+- **Optional integrations:** local FatSecret food logging, health checks of your servers,
+  project test runs, «explain this error» and confirm-in-chat requests for your server.
+- **«Что ты умеешь»:** a spoken summary built from the command registry.
 - **Shutdown with a safety step:** a delay plus a separate spoken confirmation; can be cancelled.
 - **Interruption:** "стоп", "замолчи" and similar phrases cut the speech; a new command
   with the wake word takes priority.
@@ -149,7 +159,8 @@ Latency statistics from the log: `python scripts/latency_summary.py --last 20`.
 - Russian only: commands, speech recognition and synthesis.
 - Recognition and stress placement are not perfect.
 - The wake word and the spoken shutdown confirmation are not authentication. A video
-  or another person can trigger the assistant. Speaker verification is not implemented.
+  or another person can trigger the assistant. The optional speaker verification lowers
+  that risk but is not a security boundary.
 - The server side is not included, so free-form questions need your own backend.
 - Models and third-party libraries have their own licenses.
 
@@ -165,7 +176,6 @@ All documents except this README are in Russian.
 
 ## Roadmap
 
-- Speaker verification, so a recording or another person cannot run system commands.
 - A Windows installer for the environment and the three speech models.
 - Piper as a packaged second voice next to Silero.
 
