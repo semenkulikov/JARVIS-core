@@ -1,9 +1,10 @@
 # Архитектура
 
-Слушатель собран как пакет `src/jarvis/` из четырёх слоёв. `src/jarvis_voice.py` — точка входа
-на десять строк: её запускает `jarvis_supervisor.py`, а она вызывает `jarvis.app.main.run()`.
-Переход к пакету шёл отдельными коммитами без изменения поведения; после каждого проходили тесты,
-ruff и mypy.
+Весь код слушателя — пакет `src/jarvis/` из четырёх слоёв. В `src/` остались три короткие точки
+входа для внешних вызовов: `jarvis_supervisor.py` (его запускает `start_jarvis.vbs`),
+`jarvis_voice.py` (рабочий процесс, вызывает `jarvis.app.main.run()`) и `fatsecret_call.py`
+(командная строка FatSecret). Переход к пакету шёл отдельными коммитами без изменения поведения;
+после каждого проходили тесты, ruff и строгий mypy.
 
 ## Принципы
 
@@ -14,8 +15,9 @@ ruff и mypy.
   кэш статуса описаны `typing.Protocol` в `core.ports`. Другой движок — новый адаптер, а не правка
   цикла. Соответствие адаптеров портам проверяет mypy (`app.context.ports_of`).
 - **Один корень сборки.** Все объекты создаются в `jarvis.app.context.build_app()` и передаются
-  через конструкторы. В пакете нет `global` и модульных экземпляров; то, что нужно не сразу
-  (контроллер быстрых команд, сон, объявления), создаёт `core.lazy.Lazy` при первом обращении.
+  через конструкторы. В пакете нет `global` и модульных экземпляров (это проверяет
+  `tests/test_layers.py`); то, что нужно не сразу (контроллер быстрых команд, сон, объявления),
+  создаёт `core.lazy.Lazy` при первом обращении. Контроллер собирает `app.context.build_controller`.
 - **Команды как плагины.** Обработчик действия регистрируется декоратором `@handles` в модуле
   `jarvis.commands.*`. Новая команда — новый модуль, запись в `jarvis/commands/catalog.py` и тест; цикл и
   разговор не меняются.
@@ -48,6 +50,9 @@ flowchart TB
         WAKE[wake, matching: имя, границы и нормализация фразы]
         STATE[state: автомат и данные разговора]
         CFG[config, followup: значения, проверка, типы]
+        QUICK[quick, numbers, fold: быстрые команды, числа, длительности]
+        RULES[sleep, proactive, projects, food, tasks, codemode, gate, dialog]
+        TEXT[text, vocab, voiceprint, perf, fuzzy]
         MISC[status, phrases, schedule, lazy]
     end
     subgraph adapters[adapters: ввод-вывод]
@@ -59,8 +64,10 @@ flowchart TB
         CACHE[status_cache: status.json]
         PROC[process: память процесса Windows]
         SPK[speaker: проверка голоса]
+        WIN[system, laptop, runtime, credentials, paths: Windows и файлы]
+        STORE[timers, sleep_store, proactive, food_diary, fatsecret, project_tools]
     end
-    LEGACY[jarvis_*.py: команды Windows, текст, объявления, задачи, еда]
+    CTL[commands.controller: быстрые команды через порты]
     CONV --> REG
     CONV --> ROUTE
     LOOP --> AUDIO & ASR & SPK
@@ -68,19 +75,22 @@ flowchart TB
     TTS -.реализует.-> PORTS
     NET -.реализует.-> PORTS
     CACHE -.реализует.-> PORTS
-    ROUTE --> LEGACY
-    REG --> LEGACY
+    WIN -.реализует.-> PORTS
+    STORE -.реализует.-> PORTS
+    REG --> CTL
+    CTL --> PORTS
+    ROUTE --> QUICK
 ```
 
 | Слой | Пакет | Можно импортировать |
 |---|---|---|
-| Ядро | `jarvis.core` | стандартную библиотеку, NumPy, чистые модули `jarvis_text`, `jarvis_gate`, `jarvis_dialog`, `jarvis_commands` (разбор), `jarvis_tasks`, `jarvis_speed` (нечёткий разбор) |
+| Ядро | `jarvis.core` | стандартную библиотеку и NumPy |
 | Адаптеры | `jarvis.adapters` | ядро, драйверы и движки (sounddevice, vosk, torch, piper, urllib, ctypes) |
 | Команды | `jarvis.commands` | ядро; адаптеры приходят через `Services` |
 | Приложение | `jarvis.app` | всё; только здесь создаются объекты |
 
-Модули `src/jarvis_*.py` старше пакета. Они уже разделены по задачам, покрыты тестами и
-импортируются по плоскому имени из тестов и скриптов. Их перенос в пакет — следующий этап плана.
+Скрипты из `scripts/` импортируют пакет напрямую (`from jarvis.core import quick`). Плоских
+модулей вне пакета нет; `tests/test_layers.py` следит, чтобы в `src/` оставались только три точки входа.
 
 ## Порты
 
@@ -105,7 +115,10 @@ class StatusSource(Protocol):
 ```
 
 Реализации: `adapters.tts.Voice` (речь и синтез), `adapters.asr_vosk.VoskASR`,
-`adapters.transport.WebhookTransport`, `adapters.status_cache.StatusCache`. В тестах их заменяют
+`adapters.transport.WebhookTransport`, `adapters.status_cache.StatusCache`. Для быстрых команд —
+`DesktopBackend` (`adapters.system.SystemBackend`), `TimerStore` (`adapters.timers`),
+`ProjectToolsPort` (`adapters.project_tools`), `FoodLog` (`adapters.food_diary`) и `Laptop`
+(модуль `adapters.laptop`). В тестах их заменяют
 простые объекты; настоящие микрофон, сеть и действия Windows запрещены в `tests/conftest.py`.
 
 ## Команды
@@ -116,7 +129,7 @@ class StatusSource(Protocol):
 ```python
 @handles("battery")
 def battery(ctx: CommandContext, al: Alias) -> None:
-    pct, ac = LP.battery()
+    pct, ac = ctx.services.laptop().battery()
     if pct is None: ctx.services.say("Не вижу батарею, сэр.", ctx.cfg); return
     ...
 ```
@@ -124,7 +137,7 @@ def battery(ctx: CommandContext, al: Alias) -> None:
 - `CommandContext` — неизменяемый dataclass: текст, конфигурация, триггер, признак теста и
   `services`.
 - `Services` — порт, который реализует `Conversation`: `say`, `say_reply`, `ask_server`, `pick`,
-  состояние, кэш статуса, контроллер быстрых команд, сон, объявления.
+  состояние, кэш статуса, контроллер быстрых команд, ноутбук, сон, объявления.
 - `registry.load_builtin()` импортирует все модули пакета; у действия один владелец, повторная
   регистрация — ошибка. Действие без обработчика произносит `reply` псевдонима, как раньше.
 - `jarvis/commands/catalog.py` остаётся единым описанием команд для «что ты умеешь» и `docs/COMMANDS.md`;
@@ -145,8 +158,8 @@ def battery(ctx: CommandContext, al: Alias) -> None:
 | `wake_word`, `clap` | цикл: имя, хлопки, прерывание именем | запись фразы, разбор, команда или сервер |
 | `followup` | разговор, окно после ответа | разбор без имени |
 | `stop_ack` | цикл после «стоп» | короткое подтверждение |
-| `proactive` | `jarvis_proactive.Manager` | объявление |
-| `timer_fire` | таймеры `jarvis_commands` | сигнал и подпись таймера |
+| `proactive` | `adapters.proactive.Manager` | объявление |
+| `timer_fire` | таймеры контроллера (`adapters.timers`) | сигнал и подпись таймера |
 | `sleep_end`, `sleep_hint` | сон: «Джарвис, проснись», файл пробуждения, одно «Джарвис» | конец сна, подсказка |
 
 Служебные триггеры разбирает `Conversation._event_turn`; голосовые идут в `handle_turn`.
@@ -228,14 +241,17 @@ stateDiagram-v2
 | 4 | `adapters`: синтез и воспроизведение, сервер и `outbox`, кэш статуса, Vosk, звук, память, голос | сделано |
 | 5 | `commands`: обработчики действий с регистрацией и проверкой полноты | сделано |
 | 6 | `app`: разговор, цикл, корень сборки; `jarvis_voice.py` — тонкая точка входа | сделано |
-| 7 | Перенос `jarvis_*.py` в `jarvis.core` / `jarvis.adapters` с короткими модулями-переходниками | дальше |
-| 8 | Строгий mypy для всего `src`, типизированные секции для всех ключей | дальше |
+| 7 | Перенос `jarvis_*.py` в слои пакета; в `src/` — только три точки входа | сделано |
+| 8 | Строгий mypy без послаблений для `src` и `scripts` в CI | сделано |
+| 9 | Типизированные секции настроек для всех ключей (сейчас — проверка типа по значению по умолчанию и `FollowupSettings`) | дальше |
 
 ## Модули `src/`
 
 | Файл | Строк | Что делает |
 |---|---:|---|
 | `jarvis_voice.py` | 10 | Точка входа для наблюдателя: потоки BLAS, затем `jarvis.app.main.run()` |
+| `jarvis_supervisor.py` | 7 | Точка входа супервизора для start_jarvis.vbs (тонкая обёртка) |
+| `fatsecret_call.py` | 42 | Командная строка FatSecret для внешних вызовов (тонкая обёртка) |
 | `jarvis/app/main.py` | 41 | Журнал, одна копия слушателя, `fatal`, код выхода |
 | `jarvis/app/context.py` | 96 | Корень сборки `build_app()`, проверка портов |
 | `jarvis/app/components.py` | 73 | `Paths` и `Components`: все объекты слушателя |
@@ -243,6 +259,7 @@ stateDiagram-v2
 | `jarvis/app/conversation.py` | 317 | Ход разговора, служебные триггеры, запрос и ответы сервера, продолжение |
 | `jarvis/app/warmup.py` | 64 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
 | `jarvis/app/settings.py` | 106 | Значения по умолчанию и псевдонимы, сборка конфигурации |
+| `jarvis/app/supervisor.py` | 84 | Один рабочий процесс, перезапуск после сбоя, без прав администратора |
 | `jarvis/commands/registry.py` | 46 | `@handles`, поиск модулей, `dispatch` |
 | `jarvis/commands/base.py` | 60 | `CommandContext`, порт `Services` |
 | `jarvis/commands/conversation.py` | 40 | Ответ псевдонима, болтовня, «стоп», «проснись», «что ты умеешь» |
@@ -250,6 +267,8 @@ stateDiagram-v2
 | `jarvis/commands/modes.py` | 28 | Спящий режим, «не беспокоить» |
 | `jarvis/commands/pc.py` | 125 | Клавиши, экран, таймеры, батарея, температура, проекты, программы |
 | `jarvis/commands/server.py` | 32 | Быстрые команды контроллера, псевдонимы на сервер |
+| `jarvis/commands/controller.py` | 149 | Выполнение быстрых команд через внедрённые порты |
+| `jarvis/commands/catalog.py` | 142 | Единый список команд: описание, примеры, «что ты умеешь», таблица в COMMANDS.md |
 | `jarvis/core/ports.py` | 107 | Порты `Protocol` |
 | `jarvis/core/state.py` | 127 | Режимы и переходы, данные разговора, сигналы, отменённые запросы |
 | `jarvis/core/routing.py` | 143 | Псевдонимы, грамматика, выбор между свободным текстом и грамматикой |
@@ -261,6 +280,23 @@ stateDiagram-v2
 | `jarvis/core/followup.py` | 37 | `FollowupSettings` |
 | `jarvis/core/schedule.py` | 32 | Ответ о тренировке |
 | `jarvis/core/lazy.py` | 27 | `Lazy`: объект при первом обращении |
+| `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
+| `jarvis/core/numbers.py` | 41 | Числа и длительности на слух: «полтора часа», «двадцать пять» |
+| `jarvis/core/fold.py` | 6 | Одно написание для сравнения: нижний регистр, «ё» как «е» |
+| `jarvis/core/perf.py` | 45 | Трассировка задержек `PERF event`/`PERF summary` |
+| `jarvis/core/fuzzy.py` | 60 | Осторожный нечёткий матч коротких вопросов только для чтения |
+| `jarvis/core/quick.py` | 81 | Быстрые команды, чистая часть: разбор фраз, длительности, спасение грамматикой |
+| `jarvis/core/proactive.py` | 66 | Правила проактивности: тихие часы, DND, разбор времени, приоритетный вейк |
+| `jarvis/core/codemode.py` | 102 | «Объясни ошибку», запросы с подтверждением в чате |
+| `jarvis/core/projects.py` | 163 | Проекты, чистая часть: фразы, разбор настроек, сопоставление имён, ответы |
+| `jarvis/core/tasks.py` | 186 | «Утренний брифинг», «что ещё осталось», «все задачи», «что по ноушену»: из кэша или с сервера |
+| `jarvis/core/vocab.py` | 29 | Написание слов как в словаре Vosk («ещё», «отчёт») для грамматики |
+| `jarvis/core/gate.py` | 66 | Отбор фраз, обращённых к помощнику: уверенность слов, подтверждение имени |
+| `jarvis/core/sleep.py` | 65 | Фразы и разбор спящего режима слушателя |
+| `jarvis/core/voiceprint.py` | 112 | Голосовой отпечаток: признаки fbank, косинус, профиль и порог |
+| `jarvis/core/migrations.py` | 36 | Версии `config.json`: миграции при каждой загрузке |
+| `jarvis/core/dialog.py` | 91 | Какие команды получают мгновенный отклик, отклик параллельно с выполнением |
+| `jarvis/core/food.py` | 236 | Еда, чистая часть: разбор фразы, сопоставление продукта, итоги и ответы |
 | `jarvis/adapters/tts.py` | 213 | Синтез, кэш WAV, нарезка текста, воспроизведение с прерыванием |
 | `jarvis/adapters/audio.py` | 154 | Микрофон, уровни, усиление, кольцевой буфер, выбор устройства, хлопки |
 | `jarvis/adapters/asr_vosk.py` | 142 | Модель и грамматики Vosk, запись фразы, проверка имени |
@@ -270,40 +306,18 @@ stateDiagram-v2
 | `jarvis/adapters/speaker.py` | 130 | Необязательная проверка голоса владельца |
 | `jarvis/adapters/accent.py` | 73 | Необязательные ударения RUAccent |
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
-| `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
-| `jarvis/core/numbers.py` | 41 | Числа и длительности на слух: «полтора часа», «двадцать пять» |
-| `jarvis/core/fold.py` | 6 | Одно написание для сравнения: нижний регистр, «ё» как «е» |
-| `jarvis/core/perf.py` | 45 | Трассировка задержек `PERF event`/`PERF summary` |
-| `jarvis/core/fuzzy.py` | 60 | Осторожный нечёткий матч коротких вопросов только для чтения |
 | `jarvis/adapters/playback.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis/adapters/fx.py` | 62 | Тембр через NumPy и SciPy |
-| `jarvis/core/quick.py` | 81 | Быстрые команды, чистая часть: разбор фраз, длительности, спасение грамматикой |
-| `jarvis/commands/controller.py` | 149 | Выполнение быстрых команд через внедрённые порты |
 | `jarvis/adapters/system.py` | 128 | Действия на рабочем столе Windows за одним бэкендом |
 | `jarvis/adapters/timers.py` | 67 | Постоянные таймеры, напоминания и объявления |
 | `jarvis/adapters/laptop.py` | 120 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
-| `jarvis/core/proactive.py` | 66 | Правила проактивности: тихие часы, DND, разбор времени, приоритетный вейк |
 | `jarvis/adapters/proactive.py` | 184 | Постоянная очередь проактивных сообщений и утренний брифинг |
 | `jarvis/adapters/runtime.py` | 81 | Одна копия, намеренная остановка, нарастающая пауза после сбоев |
-| `jarvis_supervisor.py` | 7 | Точка входа супервизора для start_jarvis.vbs (тонкая обёртка) |
-| `jarvis/app/supervisor.py` | 84 | Один рабочий процесс, перезапуск после сбоя, без прав администратора |
 | `jarvis/adapters/credentials.py` | 91 | Только свои записи в диспетчере учётных данных Windows |
 | `jarvis/adapters/paths.py` | 39 | Пути рабочего каталога. При импорте файлы не создаёт |
-| `jarvis/core/codemode.py` | 102 | «Объясни ошибку», запросы с подтверждением в чате |
-| `jarvis/core/projects.py` | 163 | Проекты, чистая часть: фразы, разбор настроек, сопоставление имён, ответы |
 | `jarvis/adapters/project_tools.py` | 123 | Проверка серверов по HTTP/TCP и запуск тестов проектов без оболочки |
-| `jarvis/commands/catalog.py` | 142 | Единый список команд: описание, примеры, «что ты умеешь», таблица в COMMANDS.md |
-| `jarvis/core/tasks.py` | 186 | «Утренний брифинг», «что ещё осталось», «все задачи», «что по ноушену»: из кэша или с сервера |
-| `jarvis/core/vocab.py` | 29 | Написание слов как в словаре Vosk («ещё», «отчёт») для грамматики |
-| `jarvis/core/gate.py` | 66 | Отбор фраз, обращённых к помощнику: уверенность слов, подтверждение имени |
-| `jarvis/core/sleep.py` | 65 | Фразы и разбор спящего режима слушателя |
 | `jarvis/adapters/sleep_store.py` | 67 | Время окончания сна на диске |
-| `jarvis/core/voiceprint.py` | 112 | Голосовой отпечаток: признаки fbank, косинус, профиль и порог |
-| `jarvis/core/migrations.py` | 36 | Версии `config.json`: миграции при каждой загрузке |
-| `jarvis/core/dialog.py` | 91 | Какие команды получают мгновенный отклик, отклик параллельно с выполнением |
-| `jarvis/core/food.py` | 236 | Еда, чистая часть: разбор фразы, сопоставление продукта, итоги и ответы |
 | `jarvis/adapters/food_diary.py` | 160 | Кэш продуктов, дневник FatSecret и журнал записей против дублей |
-| `fatsecret_call.py` | 42 | Командная строка FatSecret для внешних вызовов (тонкая обёртка) |
 | `jarvis/adapters/fatsecret.py` | 57 | Клиент OAuth1 для FatSecret |
 
 ## Что лежит только на диске

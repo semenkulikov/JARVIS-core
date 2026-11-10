@@ -67,7 +67,8 @@ The listener is the `src/jarvis/` package in four layers: `core` (pure rules, ty
 ports, the listener state machine), `adapters` (microphone, Vosk, TTS, webhook, files),
 `commands` (one module per area, handlers registered with `@handles("action")`) and `app`
 (the conversation, the microphone loop and the composition root `build_app()`).
-`src/jarvis_voice.py` is the entry point the supervisor starts. Details and diagrams:
+All code lives in the package; `src/` keeps three thin entry points (the supervisor, the
+listener process and the FatSecret CLI). Everything is type-checked with strict mypy. Details and diagrams:
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Requirements

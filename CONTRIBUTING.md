@@ -24,7 +24,7 @@ python -m pip install ruff
 python -m ruff check src tests scripts
 ```
 
-Пакет `src/jarvis/` проверяется mypy (настройки в `pyproject.toml`, как в CI):
+Весь `src/` и `scripts/` проверяются строгим mypy без послаблений (настройки в `pyproject.toml`, как в CI):
 
 ```powershell
 python -m pip install mypy==1.13.0
