@@ -36,11 +36,11 @@ import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
                               heard_after, phrase_finished)
-from jarvis.core import status as STATUS
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
 from jarvis.adapters.tts import Voice, split_text
 from jarvis.adapters.transport import WebhookTransport
 from jarvis.adapters.outbox import Outbox, read_text
+from jarvis.adapters.status_cache import StatusCache
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, grammar_phrases, match_alias
@@ -218,7 +218,7 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
     say("Ответ не пришёл, сэр. Попробуйте ещё раз позже.", cfg)
     return False
 
-CACHE = os.path.join(BASE, "cache", "status.json")
+CACHE = StatusCache(os.path.join(BASE, "cache", "status.json"))
 
 # ================= aliases =================
 
@@ -229,22 +229,9 @@ CACHE = os.path.join(BASE, "cache", "status.json")
 
 
 
-def cached_status(field, cfg):
-    try:
-        with open(CACHE, encoding="utf-8-sig") as f: data = json.load(f)
-        return STATUS.status_answer(data, field, cfg)
-    except Exception as e:
-        log.info("status snapshot unusable: %s", type(e).__name__); return "missing", "", None
-
 def run_tasks(mode, text, cfg, trig, test):
     """Briefing / what is left / all tasks / Notion: from a fresh snapshot, otherwise from the server."""
-    cache, fresh, stamp = None, False, ""
-    try:
-        with open(CACHE, encoding="utf-8-sig") as f: cache = json.load(f)
-        decision, _ = STATUS.cache_age_policy(cache["updated"], cfg); fresh = decision == "fresh"
-        stamp = "Данные на " + STATUS.spoken_time(cache["updated"]) + "."
-    except Exception as e:
-        log.info("tasks: snapshot unusable (%s)", type(e).__name__)
+    cache, fresh, stamp = CACHE.tasks_snapshot(cfg)
     reply, server_text = TASKS.answer(mode, cache if isinstance(cache, dict) else None, fresh, stamp=stamp)
     log.info("tasks %s -> %s", mode, "cache" if reply else "server")
     if reply: say_reply(reply, cfg); return
@@ -287,7 +274,7 @@ def run_alias(al, text, cfg, trig, test):
         return
     if act in ("status", "cache_field"):
         field = al.get("field") if act == "cache_field" else None
-        decision, cached, age = cached_status(field, cfg)
+        decision, cached, age = CACHE.cached_status(field, cfg)
         log.info("status cache policy=%s field=%s age_h=%s", decision, field or "all", None if age is None else round(age,3))
         if decision == "fresh":
             say_reply(cached, cfg); return
@@ -339,13 +326,7 @@ def run_alias(al, text, cfg, trig, test):
         else: subprocess.Popen([exe, path], creationflags=0x08000000)
         ack()
     elif act == "open_github":
-        url = None
-        try:
-            with open(CACHE, encoding="utf-8-sig") as f: pj = json.load(f).get("projects")
-            for p in (pj if isinstance(pj, list) else [pj] if pj else []):
-                u = p if isinstance(p, str) else (p.get("github") or p.get("url") or p.get("repo") or "")
-                if u: url = u if u.startswith("http") else "https://github.com/" + u.strip("/"); break
-        except Exception as e: log.info("projects field unavailable: %s", e)
+        url = CACHE.github_url()
         if not url:
             r = LP.recent_repo(); url = LP.remote_url(r) if r else None; log.info("recent repo %s -> %s", r, url)
         if not url: say("Не нашёл репозиторий, сэр.", cfg); return

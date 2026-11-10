@@ -2,12 +2,13 @@ import json
 
 import jarvis_tasks as T
 from jarvis.core import routing as ROUTING
+from jarvis.adapters.status_cache import StatusCache
 
 
 def _cache(listener, tmp_path, monkeypatch, data):
     p = tmp_path / "status.json"
     p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    monkeypatch.setattr(listener, "CACHE", str(p))
+    monkeypatch.setattr(listener, "CACHE", StatusCache(str(p)))
 
 
 def test_run_tasks_reads_fresh_cache(listener, cfg, monkeypatch, tmp_path):
@@ -34,7 +35,7 @@ def test_run_tasks_without_task_list_asks_server(listener, cfg, monkeypatch, tmp
 
 
 def test_run_tasks_missing_cache_file(listener, cfg, monkeypatch, tmp_path):
-    monkeypatch.setattr(listener, "CACHE", str(tmp_path / "none.json"))
+    monkeypatch.setattr(listener, "CACHE", StatusCache(str(tmp_path / "none.json")))
     posted = []
     monkeypatch.setattr(listener, "free_phrase", lambda text, *a, **k: posted.append(text))
     listener.run_tasks("briefing", "утренний брифинг", cfg, "wake_word", False)
