@@ -29,6 +29,9 @@ SLEEP_RE = re.compile(rf"^(?:{_ENTER}|{_VERB})(?: (?:на|в течение) (?P
 LEGACY_BARE = {"режим сна", "режим сон", "включи режим сна", "включи режим сон"}
 WAKE_PHRASES = ("джарвис проснись", "проснись джарвис", "хей джарвис проснись")
 WAKE_FILE = "wake_up"
+HINT_WORD = "джарвис"
+WAKE_HINT = "Разбудить: Джарвис, проснись."
+DEFAULTS = {"sleep_hint_enabled": True, "sleep_hint_interval_s": 600}
 
 
 def _norm(text: str) -> str:
@@ -51,6 +54,16 @@ def parse(text: str) -> Optional[int]:
 
 def label(secs: int) -> str:
     return Q.duration_label(int(round(secs / 60.0)) * 60 if secs >= 60 else secs)
+
+
+def enter_phrase(secs: int) -> str:
+    """Spoken before going silent, so the owner always hears how long and how to wake Jarvis."""
+    return "Ухожу в спящий режим на " + label(secs) + ", сэр. " + WAKE_HINT
+
+
+def hint_phrase(remaining_s: float) -> str:
+    """Answer to a bare «Джарвис» from the owner while asleep."""
+    return "Я в спящем режиме ещё " + label(max(60, int(remaining_s))) + ", сэр. " + WAKE_HINT
 
 
 def is_wake_phrase(text: str) -> bool:

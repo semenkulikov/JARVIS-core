@@ -290,3 +290,31 @@ def test_grammar_rescue_not_in_followup_or_when_disabled(listener, cfg):
     assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg, followup=True)[0] != "что в гите проекта пример"
     cfg["grammar_command_rescue"] = False
     assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg)[0] != "что в гите проекта пример"
+
+
+def test_enter_phrase_has_duration_words_and_wake_hint():
+    assert SLEEP.enter_phrase(7200) == "Ухожу в спящий режим на два часа, сэр. Разбудить: Джарвис, проснись."
+    assert "на час," in SLEEP.enter_phrase(3600) and "на сорок пять минут," in SLEEP.enter_phrase(2700)
+
+
+def test_hint_phrase_rounds_remaining_minutes():
+    assert SLEEP.hint_phrase(1795).startswith("Я в спящем режиме ещё полчаса, сэр.")
+    assert "ещё минуту" in SLEEP.hint_phrase(5)
+
+
+def test_sleep_alias_announces_how_to_wake(listener, cfg, said, monkeypatch, tmp_path):
+    monkeypatch.setattr(listener, "SLEEP_STATE", SLEEP.SleepState(tmp_path / "sleep.json"))
+    listener.run_alias({"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": 3600}, "засни", cfg, "wake_word", True)
+    assert said == ["Ухожу в спящий режим на час, сэр. Разбудить: Джарвис, проснись."]
+
+
+def test_sleep_hint_rate_limited(listener, cfg, monkeypatch):
+    listener.STATE["sleep_hint_at"] = 0
+    assert listener.sleep_hint_due(cfg)
+    listener.STATE["sleep_hint_at"] = listener.time.time()
+    assert not listener.sleep_hint_due(cfg)
+    assert not listener.sleep_hint_due(dict(cfg, sleep_hint_enabled=False, sleep_hint_interval_s=0))
+
+
+def test_owner_confirmed_needs_real_score(listener, cfg):
+    assert listener.owner_confirmed([], 0, dict(cfg, speaker_verify_enabled=False)) is False

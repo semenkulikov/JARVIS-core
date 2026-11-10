@@ -782,7 +782,7 @@ def run_alias(al, text, cfg, trig, test):
         secs = int(al["seconds"])
         if test: log.info("TEST sleep %ss: no persistent change", secs)
         else: sleep_state().start(secs)
-        say("Перехожу в спящий режим на " + SLEEP.label(secs) + ", сэр.", cfg)
+        say(SLEEP.enter_phrase(secs), cfg)
         return
     if act == "proactive_dnd":
         if test: log.info("TEST DND=%s: no persistent change",al["enabled"])
@@ -1062,6 +1062,9 @@ def _handle_turn(trig, cap, text, test, skip_s):
             return
         if trig == "sleep_end":
             perf("route", route="sleep_end"); say(SLEEP_END_PHRASE, cfg); return
+        if trig == "sleep_hint":
+            perf("route", route="sleep_hint"); STATE["followup_eligible"] = False
+            say(SLEEP.hint_phrase(sleep_state().remaining()), cfg); return
         if trig == "timer_fire":
             perf("route", route="timer_fire")
             notice = text if isinstance(text,dict) else {}
@@ -1293,16 +1296,31 @@ def verify_wake(model, ring, a, b, cfg, need=(), min_conf=None):
     return ok
 
 VERIFIER = None
-def speaker_ok(ring, end, cfg):
-    """Optional owner-voice check on the audio that ends at the wake word (off by default)."""
+def speaker_check(ring, end, cfg):
+    """(ok, score) of the owner-voice check on the audio that ends at the wake word; (True, None) when off."""
     global VERIFIER
-    if not cfg.get("speaker_verify_enabled"): return True
+    if not cfg.get("speaker_verify_enabled"): return True, None
     if VERIFIER is None: VERIFIER = SPEAKER.SpeakerVerifier(BASE, cfg)
     VERIFIER.cfg = cfg
     win = int(float(VERIFIER.setting("speaker_window_s")) * SR)
     ok, score = VERIFIER.check(ring_audio(ring, end - win, end))
     if score is not None: log.info("speaker %s score=%.3f threshold=%.3f", "OK" if ok else "REJECTED", score, VERIFIER.threshold())
-    return ok
+    return ok, score
+
+def speaker_ok(ring, end, cfg):
+    """Optional owner-voice check (off by default): True unless the profile rejects the voice."""
+    return speaker_check(ring, end, cfg)[0]
+
+def owner_confirmed(ring, end, cfg):
+    """Stricter than speaker_ok: only True when verification is on and actually scored the owner's voice."""
+    ok, score = speaker_check(ring, end, cfg)
+    return bool(ok and score is not None)
+
+def sleep_hint_due(cfg):
+    """A bare «Джарвис» during sleep gets at most one spoken hint per interval."""
+    if not cfg.get("sleep_hint_enabled", SLEEP.DEFAULTS["sleep_hint_enabled"]): return False
+    gap = float(cfg.get("sleep_hint_interval_s", SLEEP.DEFAULTS["sleep_hint_interval_s"]))
+    return time.time() - float(STATE.get("sleep_hint_at") or 0) >= gap
 
 def preload_speaker(cfg):
     """Load the voice profile at startup so the log shows whether owner verification is active."""
@@ -1337,7 +1355,7 @@ def main():
         r = KaldiRecognizer(model, SR, json.dumps(["джарвис", "хей джарвис", "эй джарвис", "[unk]"], ensure_ascii=False))
         r.SetWords(True); return r
     def sleep_rec():
-        r = KaldiRecognizer(model, SR, json.dumps(list(SLEEP.WAKE_PHRASES) + ["[unk]"], ensure_ascii=False))
+        r = KaldiRecognizer(model, SR, json.dumps(list(SLEEP.WAKE_PHRASES) + [SLEEP.HINT_WORD, "[unk]"], ensure_ascii=False))
         r.SetWords(True); return r
     srec = None; sbase = 0; wake_check = None
     if sleep_state().active(): log.info("sleep mode active for %.0fs more", sleep_state().remaining())
@@ -1488,6 +1506,10 @@ def main():
                         if verify_wake(model, ring, a, b, cfg, need=("проснись",), min_conf=GATE.setting(cfg, "sleep_wake_min_conf")):
                             sleep_state().stop("phrase"); srec = None
                             start("sleep_end", text=""); continue
+                    elif said == SLEEP.HINT_WORD and ws and ws[0].get("conf", 0) >= 0.9 and sleep_hint_due(cfg):
+                        a = sbase + int((ws[0]["start"] - 0.45) * SR); b = sbase + int((ws[-1]["end"] + 0.3) * SR)
+                        if verify_wake(model, ring, a, b, cfg, min_conf=GATE.setting(cfg, "sleep_wake_min_conf")) and owner_confirmed(ring, b, cfg):
+                            STATE["sleep_hint_at"] = time.time(); start("sleep_hint", text=""); continue
                 continue
             srec = None
             trig = None; frm = None; skip = 0.0
