@@ -3,7 +3,8 @@ import subprocess
 import urllib.error
 import pytest
 import jarvis_commands as Q
-import jarvis_projects as P
+from jarvis.core import projects as P
+from jarvis.adapters.project_tools import ProjectTools
 from test_commands import FakeBackend
 
 CFG = {'servers': [{'name': 'example', 'spoken': ['пример'], 'url': 'https://example.invalid/health'},
@@ -22,7 +23,7 @@ class Conn:
 
 
 def tools(tmp_path, opener=None, connect=None, runner=None):
-    return P.ProjectTools(tmp_path, opener=opener or (lambda req, timeout: Resp(200)),
+    return ProjectTools(tmp_path, opener=opener or (lambda req, timeout: Resp(200)),
                           connect=connect or (lambda addr, timeout: Conn()), runner=runner or pytest.fail)
 
 
@@ -40,7 +41,7 @@ def test_status_of_tasks_is_not_a_server_check():
 
 
 def test_http_health_ok(tmp_path):
-    assert P.ProjectTools.health_reply(tools(tmp_path), 'пример', CFG).startswith('Сервер example отвечает')
+    assert ProjectTools.health_reply(tools(tmp_path), 'пример', CFG).startswith('Сервер example отвечает')
 
 
 def test_http_health_error_code(tmp_path):

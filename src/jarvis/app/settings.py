@@ -15,7 +15,7 @@ from jarvis.core import dialog as DIALOG
 import jarvis_food as FOOD
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
-import jarvis_projects as PROJECTS
+from jarvis.core import projects as PROJECTS
 from jarvis.core import sleep as SLEEP
 import jarvis_speaker as SPEAKER
 from jarvis.core import text as JT

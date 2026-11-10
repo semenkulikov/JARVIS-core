@@ -5,8 +5,9 @@ import base64,ctypes,datetime,difflib,json,logging,math,os,re,shutil,subprocess,
 from pathlib import Path
 from jarvis.adapters import paths as PATHS
 from jarvis.core import codemode as CODE
-import jarvis_projects as PROJECTS
+from jarvis.core import projects as PROJECTS
 import jarvis_food as FOOD
+from jarvis.adapters.project_tools import ProjectTools
 log=logging.getLogger('jarvis')
 
 NUM={'ноль':0,'один':1,'одна':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'одиннадцать':11,'двенадцать':12,'тринадцать':13,'четырнадцать':14,'пятнадцать':15,'шестнадцать':16,'семнадцать':17,'восемнадцать':18,'девятнадцать':19,'двадцать':20,'тридцать':30,'сорок':40,'пятьдесят':50,'шестьдесят':60,'семьдесят':70,'восемьдесят':80,'девяносто':90,'сто':100,'двести':200,'триста':300,'четыреста':400,'пятьсот':500,'шестьсот':600,'семьсот':700,'восемьсот':800,'девятьсот':900,'полтора':1.5,'полторы':1.5}
@@ -260,7 +261,7 @@ class SystemBackend:
 class Controller:
  def __init__(self,base,backend=None,clock=time.monotonic,food_call=None,tools=None):
   self.base=Path(base);self.backend=backend or SystemBackend();self.clock=clock;self.pending_shutdown=None;self.notes_lock=threading.Lock();self.timers=PersistentTimers(self.base/'cache'/'timers.json')
-  self.food_call=food_call;self.tools=tools or PROJECTS.ProjectTools(self.base)
+  self.food_call=food_call;self.tools=tools or ProjectTools(self.base)
  def food(self,cfg):
   call=self.food_call
   if call is None:
