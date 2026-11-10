@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from jarvis.core import numbers as NUMBERS
 import jarvis_commands as Q
 
 DEFAULT_S = 3600
@@ -41,7 +42,7 @@ def parse(text: str) -> Optional[int]:
     m = SLEEP_RE.fullmatch(t)
     if not m:
         return None
-    secs = Q.duration(m["dur"]) if m["dur"] else DEFAULT_S
+    secs = NUMBERS.duration(m["dur"]) if m["dur"] else DEFAULT_S
     return int(min(MAX_S, max(MIN_S, secs or DEFAULT_S)))
 
 

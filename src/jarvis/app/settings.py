@@ -12,7 +12,7 @@ from jarvis.core import codemode as CODE
 import jarvis_commands as QUICK
 from jarvis.adapters import credentials as CREDS
 from jarvis.core import dialog as DIALOG
-import jarvis_food as FOOD
+from jarvis.core import food as FOOD
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
 from jarvis.core import projects as PROJECTS

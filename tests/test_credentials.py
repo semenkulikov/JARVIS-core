@@ -36,12 +36,17 @@ def test_no_backend_errors_or_leaks(tmp_path,monkeypatch):
   def get_password(self,*a):raise OSError('dummy backend unavailable')
  monkeypatch.setattr(C,'backend',lambda:Broken());assert C.get_secret('webhook_auth_header') is None;assert C.webhook({'webhook_auth_header':'dummy_legacy'},tmp_path)=='dummy_legacy'
 def test_fatsecret_signer_mock_http(tmp_path,memory,monkeypatch):
+ from jarvis.adapters import fatsecret as FS
  for n in C.NAMES[1:]:C.set_secret(n,'dummy_'+n)
- candidate=ROOT/'src'/'fatsecret_call.py'
- spec=importlib.util.spec_from_file_location('fatsecret_stage4_fixture',candidate);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);monkeypatch.setattr(m,'__file__',str(tmp_path/'fatsecret'/'fatsecret_call.py'));sent=[]
+ monkeypatch.setenv('FATSECRET_ENV_FILE',str(tmp_path/'fatsecret'/'.env'));sent=[]
  class Response(io.BytesIO):
   def __enter__(self):return self
   def __exit__(self,*a):self.close()
  def fake(req,**kw):sent.append(urllib.parse.parse_qs(req.data.decode()));return Response(b'{"ok":true}')
- monkeypatch.setattr(m,'urlopen',fake);assert m.call('food_entries.get',{'date':'1'})=={'ok':True};assert sent[0]['oauth_consumer_key']==['dummy_FATSECRET_CLIENT_ID'];assert sent[0]['oauth_signature']
- with pytest.raises(ValueError):m.call('food_entries.get',{'oauth_token':'do_not_override'})
+ monkeypatch.setattr(FS,'urlopen',fake);assert FS.call('food_entries.get',{'date':'1'})=={'ok':True};assert sent[0]['oauth_consumer_key']==['dummy_FATSECRET_CLIENT_ID'];assert sent[0]['oauth_signature']
+ with pytest.raises(ValueError):FS.call('food_entries.get',{'oauth_token':'do_not_override'})
+def test_fatsecret_cli_shim_prints_one_json_object(monkeypatch,capsys):
+ spec=importlib.util.spec_from_file_location('fatsecret_cli_fixture',ROOT/'src'/'fatsecret_call.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+ monkeypatch.setattr(m,'call',lambda method,params:{'method':method,**params})
+ assert m.main(['food.get','{"food_id":"1"}'])==0 and json.loads(capsys.readouterr().out)=={'method':'food.get','food_id':'1'}
+ assert m.main(['food.get','[1]'])==1 and json.loads(capsys.readouterr().out)=={'local_error':'params must be a JSON object'}

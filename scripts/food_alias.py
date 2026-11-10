@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import jarvis_food as FOOD  # noqa: E402
+from jarvis.adapters.food_diary import AliasCache  # noqa: E402
+from jarvis.core import food as FOOD  # noqa: E402
 
 
 def metric_serving(food: Dict[str, Any], unit: str) -> Dict[str, Any]:
@@ -34,7 +35,7 @@ def add(home: Path, args: argparse.Namespace, call) -> FOOD.FoodAlias:
     alias = FOOD.FoodAlias(tuple(names), str(args.food_id), str(serving["serving_id"]), args.label or names[0].capitalize(),
                            args.unit, round(float(serving.get("calories") or 0) / n, 4), round(float(serving.get("protein") or 0) / n, 4),
                            float(args.piece_g or 0))
-    cache = FOOD.AliasCache(home / FOOD.DEFAULTS["food_alias_file"])
+    cache = AliasCache(home / FOOD.DEFAULTS["food_alias_file"])
     items: List[FOOD.FoodAlias] = [a for a in cache.load() if a.food_id != alias.food_id]
     cache.save(items + [alias])
     print("saved %s -> %s (%s), %.2f kcal and %.2f g protein per %s" % (
@@ -55,11 +56,11 @@ def main(argv=None) -> int:
     sub.add_parser("list")
     args = ap.parse_args(argv)
     if args.cmd == "list":
-        for x in FOOD.AliasCache(args.home / FOOD.DEFAULTS["food_alias_file"]).load():
+        for x in AliasCache(args.home / FOOD.DEFAULTS["food_alias_file"]).load():
             print(x.label, "|", ",".join(x.names), "|", x.food_id, x.serving_id, x.unit, x.piece_g or "")
         return 0
-    import fatsecret_call
-    add(args.home, args, fatsecret_call.call)
+    from jarvis.adapters.fatsecret import call
+    add(args.home, args, call)
     return 0
 
 

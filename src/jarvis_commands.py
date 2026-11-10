@@ -6,7 +6,8 @@ from pathlib import Path
 from jarvis.adapters import paths as PATHS
 from jarvis.core import codemode as CODE
 from jarvis.core import projects as PROJECTS
-import jarvis_food as FOOD
+from jarvis.core import food as FOOD
+from jarvis.adapters.food_diary import FoodLogger
 from jarvis.adapters.project_tools import ProjectTools
 log=logging.getLogger('jarvis')
 
@@ -265,8 +266,8 @@ class Controller:
  def food(self,cfg):
   call=self.food_call
   if call is None:
-   import fatsecret_call;call=fatsecret_call.call
-  return FOOD.FoodLogger(self.base,call,cfg)
+   from jarvis.adapters import fatsecret;call=fatsecret.call
+  return FoodLogger(self.base,call,cfg)
  def announce(self,text):
   """Spoken later by the listener loop, like a fired timer (respects quiet hours and sleep)."""
   try:self.timers.add(1,text,kind='notice')

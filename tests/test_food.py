@@ -3,7 +3,10 @@ import datetime
 import json
 import pytest
 import jarvis_commands as Q
-import jarvis_food as F
+from pathlib import Path
+
+from jarvis.adapters.food_diary import AliasCache, FoodLogger
+from jarvis.core import food as F
 from test_commands import FakeBackend
 
 NOW = datetime.datetime(2030, 1, 2, 13, 0)
@@ -46,7 +49,7 @@ def home(tmp_path):
 
 def logger(home, diary, clock=lambda: 1000.0, **cfg):
     c = dict(F.DEFAULTS, food_local_enabled=True, nutrition_targets={'calories': 3500, 'protein_g': 150}, **cfg)
-    return F.FoodLogger(home, diary, c, now=lambda: NOW, clock=clock)
+    return FoodLogger(home, diary, c, now=lambda: NOW, clock=clock)
 
 
 @pytest.mark.parametrize('text,amount,unit,food,meal', [
@@ -115,7 +118,7 @@ def test_remaining_reply(home):
 
 
 def test_alias_cache_rejects_close_ties(tmp_path):
-    c = F.AliasCache(tmp_path / 'a.json')
+    c = AliasCache(tmp_path / 'a.json')
     c.save([F.alias_from_dict({'names': ['сыр'], 'food_id': '1', 'serving_id': '1'}),
             F.alias_from_dict({'names': ['сырок'], 'food_id': '2', 'serving_id': '2'})])
     assert c.find('сыр').food_id == '1' and c.find('колбаса') is None
@@ -149,7 +152,7 @@ def test_disabled_by_default_goes_to_server(home, cfg):
 
 def test_food_alias_script_uses_metric_serving(tmp_path):
     import argparse, importlib.util
-    spec = importlib.util.spec_from_file_location('food_alias', str(F.Path(__file__).resolve().parent.parent / 'scripts' / 'food_alias.py'))
+    spec = importlib.util.spec_from_file_location('food_alias', str(Path(__file__).resolve().parent.parent / 'scripts' / 'food_alias.py'))
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     food = {'food': {'food_name': 'Synthetic', 'servings': {'serving': [
         {'serving_id': '5', 'measurement_description': 'cup', 'number_of_units': '1', 'calories': '200', 'protein': '20'},
@@ -158,4 +161,4 @@ def test_food_alias_script_uses_metric_serving(tmp_path):
     alias = m.add(tmp_path, argparse.Namespace(food_id='7', names='творог, творога', label='', unit='g', piece_g=0),
                   lambda method, p: calls.append(method) or food)
     assert calls == ['food.get'] and alias.serving_id == '6' and alias.protein_per_unit == 0.125 and alias.label == 'Творог'
-    assert F.AliasCache(tmp_path / 'cache' / 'food_aliases.json').find('творога').food_id == '7'
+    assert AliasCache(tmp_path / 'cache' / 'food_aliases.json').find('творога').food_id == '7'
