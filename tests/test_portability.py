@@ -36,16 +36,20 @@ def test_transport_allowlist(listener,cfg,monkeypatch,kind,extra):
  assert 'unexpected_private_value' not in p and 'webhook_auth_header' not in p
  assert all(p[k]==v for k,v in extra.items())
 
-def test_sentence_streaming_without_audio(listener,cfg,monkeypatch):
+def test_sentence_streaming_without_audio(cfg,monkeypatch,tmp_path):
+ import jarvis_audio,sounddevice
+ from jarvis.adapters.tts import Voice
+ from jarvis.core.state import ListenerFSM,ListenerState,Mode,Signals
  first_played=threading.Event();seen=[];plays=[]
  def synth(text,settings):
   seen.append(text)
   if len(seen)==2:assert first_played.wait(1),'First sentence was not played while the second synthesized'
   return np.zeros(16,dtype=np.float32),16000
  def silent_play(*args,**kwargs):plays.append(True);first_played.set()
- monkeypatch.setattr(listener,'get_audio',synth)
- monkeypatch.setattr(listener.sd,'play',silent_play)
- monkeypatch.setattr(listener.sd,'wait',lambda:None)
- listener.interrupt.clear()
- assert listener.say('Первая фраза. Вторая фраза.',dict(cfg,tts_gap_s=0))
+ monkeypatch.setattr(sounddevice,'play',silent_play)
+ monkeypatch.setattr(sounddevice,'wait',lambda:None)
+ fsm=ListenerFSM(Mode.PROCESSING);voice=Voice(str(tmp_path),ListenerState(),Signals(),fsm,jarvis_audio.Player(sounddevice))
+ monkeypatch.setattr(voice,'get_audio',synth)
+ assert voice.say('Первая фраза. Вторая фраза.',dict(cfg,tts_gap_s=0))
+ assert voice.state.last_reply=='Первая фраза. Вторая фраза.' and fsm.mode is Mode.PROCESSING and fsm.invalid==0
  assert seen==['Первая фраза.','Вторая фраза.'] and len(plays)==2

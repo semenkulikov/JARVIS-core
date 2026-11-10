@@ -39,6 +39,7 @@ from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_S
                               heard_after, phrase_finished)
 from jarvis.core import status as STATUS
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
+from jarvis.adapters.tts import Voice, split_text
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, grammar_phrases, match_alias
@@ -76,6 +77,8 @@ ROUTER = Router(STATE, lambda: CMDS is not None and bool(getattr(CMDS, "pending_
 choose, followup_rescue = ROUTER.choose, ROUTER.followup_rescue
 LEDGER = RequestLedger()
 PLAYER = AUDIO.Player(sd)
+VOICE = Voice(BASE, STATE, SIGNALS, FSM, PLAYER)
+say, get_audio, beep = VOICE.say, VOICE.get_audio, VOICE.beep
 SLEEP_STATE = None
 WAKE_FILE = os.path.join(BASE, SLEEP.WAKE_FILE)
 SLEEP_END_PHRASE = "Я снова на связи, сэр."
@@ -85,120 +88,16 @@ def sleep_state():
     return SLEEP_STATE
 
 
-# ================= TTS =================
-_ENG = {}
 
-def _cache_path(text, cfg, ext):
-    import hashlib
-    sig = json.dumps(["v3.8-stress2", JT.accent_state(), cfg.get("tts_engine"), cfg.get("silero_model"), cfg.get("stress_dict"), cfg.get("phrase_rewrites"),
-                      cfg.get("fx"), cfg.get("silero_speaker"), cfg.get("silero_rate"), cfg.get("piper_voice"), text], ensure_ascii=False)
-    cdir = os.path.join(BASE, "cache", "tts"); os.makedirs(cdir, exist_ok=True)
-    return os.path.join(cdir, hashlib.md5(sig.encode("utf-8")).hexdigest() + ext)
 
-def _silero_model(cfg):
-    import torch
-    if "silero_thr" not in _ENG:
-        torch.set_num_threads(int(cfg.get("tts_threads", 3))); _ENG["silero_thr"] = 1
-    mid = cfg.get("silero_model", "v5_6_ru")
-    if _ENG.get("silero_id") != mid:
-        p = os.path.join(BASE, "models", "silero", mid + ".pt")
-        _ENG["silero"] = torch.package.PackageImporter(p).load_pickle("tts_models", "model"); _ENG["silero_id"] = mid
-    return _ENG["silero"]
 
-def _xml_escape(t):
-    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-_SYN_LOCK = threading.Lock()
 
-def synth_local(text, cfg):
-    with _SYN_LOCK:
-        return _synth_local(text, cfg)
 
-def _synth_local(text, cfg):
-    e = cfg.get("tts_engine", "silero")
-    if e == "silero":
-        m = _silero_model(cfg)
-        kw = dict(speaker=cfg.get("silero_speaker", "eugene"), sample_rate=48000, put_accent=True, put_yo=True)
-        if str(_ENG.get("silero_id", "")).startswith("v5"): kw.update(put_stress_homo=True, put_yo_homo=True)
-        rate = cfg.get("silero_rate", "fast")
-        def one(t):
-            try:
-                return m.apply_tts(ssml_text=f'<speak><prosody rate="{rate}">{_xml_escape(t)}</prosody></speak>', **kw)
-            except Exception as ex:
-                log.info("silero ssml failed (%s), plain text", type(ex).__name__ if cfg.get("private_tts") else ex)
-                return m.apply_tts(text=t[:900], **kw)
-        try:
-            return one(text).numpy().astype(np.float32), 48000
-        except Exception as ex:
-            log.warning("silero failed on chunk (%s), per-sentence fallback", type(ex).__name__ if cfg.get("private_tts") else ex)
-        outs = []
-        for p in [x for x in re.split(r'(?<=[.!?…,;:])\s+', text) if x.strip()]:
-            try: outs.append(one(p).numpy().astype(np.float32)); outs.append(np.zeros(int(48000 * 0.1), np.float32))
-            except Exception as ex2: log.warning("silero skip part %r: %s", "[private clipboard text]" if cfg.get("private_tts") else p[:60], type(ex2).__name__)
-        if not outs: raise RuntimeError("silero produced nothing")
-        return np.concatenate(outs), 48000
-    if e == "piper":
-        from piper import PiperVoice, SynthesisConfig
-        k = "piper:" + cfg.get("piper_voice", "ruslan")
-        if k not in _ENG:
-            _ENG[k] = PiperVoice.load(os.path.join(BASE, "models", "piper", f"ru_RU-{cfg.get('piper_voice','ruslan')}-medium.onnx"))
-        v = _ENG[k]
-        chunks = [c.audio_float_array for c in v.synthesize(text, syn_config=SynthesisConfig(length_scale=float(cfg.get("piper_length_scale", 0.85))))]
-        return np.concatenate(chunks).astype(np.float32), v.config.sample_rate
-    raise ValueError("unknown engine " + e)
 
-def _wav_write(p, a, sr):
-    import wave
-    tmp = p + "." + uuid.uuid4().hex + ".tmp"
-    try:
-        with wave.open(tmp, "wb") as w:
-            w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
-            w.writeframes((np.clip(a, -1, 1) * 32767).astype(np.int16).tobytes())
-        os.replace(tmp, p)
-    finally:
-        if os.path.exists(tmp): os.remove(tmp)
 
-def _wav_read(p):
-    import wave
-    with wave.open(p, "rb") as w:
-        sr = w.getframerate(); d = w.readframes(w.getnframes())
-    return np.frombuffer(d, dtype=np.int16).astype(np.float32) / 32767, sr
 
-def split_text(text, limit=170):
-    out = []
-    for sent in re.split(r"(?<=[.!?…])\s+|\n+", text):
-        sent = sent.strip()
-        if not sent: continue
-        if len(sent) <= limit: out.append(sent); continue
-        cur = ""
-        for piece in re.split(r"(?<=[,;:])\s+", sent):
-            if cur and len(cur) + len(piece) + 1 > limit: out.append(cur); cur = piece
-            else: cur = (cur + " " + piece).strip()
-        if cur: out.append(cur)
-    # Preserve sentence boundaries, especially the very first short sentence.
-    # Bound even punctuation-free text by word boundaries.
-    bounded = []
-    for item in out:
-        while len(item) > limit:
-            cut = item.rfind(" ", 0, limit + 1)
-            if cut <= 0: cut = limit
-            bounded.append(item[:cut].strip()); item = item[cut:].strip()
-        if item: bounded.append(item)
-    return bounded
 
-def get_audio(text, cfg):
-    cp = _cache_path(text, cfg, ".wav")
-    if os.path.exists(cp): return _wav_read(cp)
-    norm = JT.normalize(text, cfg)
-    a, sr = synth_local(norm, cfg)
-    fx = cfg.get("fx", {"enabled": True})
-    if fx.get("enabled", True):
-        import jarvis_fx
-        a, sr = jarvis_fx.apply(a, sr, fx)
-    if len(text) <= 240 and not cfg.get("private_tts",False):
-        try: _wav_write(cp, a, sr)
-        except Exception: pass
-    return a, sr
 
 def precache(cfg):
     # Warm the first server ack before RUAccent has finished loading as well.
@@ -236,65 +135,7 @@ def precache(cfg):
 
 
 
-def say(text, cfg, role="reply", private=False):
-    """Speak text; synthesis of the next chunk overlaps playback. Returns False if interrupted/failed."""
-    text = (text or "").strip()
-    if not text: return True
-    log.info("SAY start (%d chars): %s", len(text), "[private clipboard text]" if private else text[:800])
-    if interrupt.is_set(): return False
-    if private: cfg = dict(cfg, private_tts=True)
-    chunks = split_text(text, int(cfg.get("tts_chunk_chars", 170)))
-    q = queue.Queue(maxsize=2); err = []; cancelled = threading.Event()
-    def enqueue(item):
-        while not cancelled.is_set() and not interrupt.is_set():
-            try: q.put(item, timeout=0.1); return True
-            except queue.Full: pass
-        return False
-    def prod():
-        for ch in chunks:
-            if cancelled.is_set() or interrupt.is_set(): break
-            try:
-                item = get_audio(ch, cfg)
-                if not enqueue(item): return
-            except Exception as e: err.append(e); log.warning("tts chunk failed: %s", e)
-        enqueue(None)
-    threading.Thread(target=prod, daemon=True).start()
-    speaking.set(); played = 0; t0 = time.time(); STATE.speaking_text = text.lower().replace("ё", "е")
-    prev_mode = FSM.mode; FSM.to(Mode.SPEAKING, role)
-    try:
-        while True:
-            if interrupt.is_set(): break
-            try: item = q.get(timeout=0.1)
-            except queue.Empty: continue
-            if item is None or interrupt.is_set(): break
-            a, sr = item
-            if played == 0: log.info("tts first chunk ready in %.2fs", time.time() - t0)
-            gap = np.zeros(int(sr * float(cfg.get("tts_gap_s", 0.08))), np.float32)
-            perf("first_audio", audio_role=role)
-            perf("first_ack_audio" if role == "ack" else "first_reply_audio")
-            PLAYER.play(np.concatenate([a, gap]), sr, interrupt.is_set); played += 1
-        if interrupt.is_set():
-            log.info("speech interrupted after %d/%d chunks", played, len(chunks)); return False
-        if played == 0:
-            log.warning("TTS produced nothing, chime instead: %s", "[private clipboard text]" if private else text[:200])
-            try: beep()
-            except Exception: pass
-            return False
-        STATE.last_spoken = text; STATE.last_spoken_end = time.monotonic()
-        STATE.speech_serial += 1
-        if role == "reply":
-            STATE.reply_parts.append(text)
-            STATE.last_reply = " ".join(STATE.reply_parts)
-            STATE.last_reply_private = private or STATE.last_reply_private if len(STATE.reply_parts)>1 else bool(private)
-        log.info("SPOKE(%d chunks): %s", played, "[private clipboard text]" if private else text[:200]); return True
-    except Exception as e:
-        log.warning("TTS/playback failed (%s)", e); return False
-    finally:
-        cancelled.set(); speaking.clear(); STATE.speaking_text = ""; FSM.restore(prev_mode)
 
-def beep():
-    t = np.linspace(0, 0.12, int(SR * 0.12), False)
-    PLAYER.play((0.25 * np.sin(2 * np.pi * 880 * t)).astype(np.float32), SR)
 
 
 

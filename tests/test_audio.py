@@ -86,5 +86,7 @@ def test_idle_waits_for_playback():
 
 def test_listener_has_no_cross_thread_stop():
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "src" / "jarvis_voice.py").read_text(encoding="utf-8")
-    assert "sd.stop()" not in src and "sd.wait()" not in src
+    root = Path(__file__).resolve().parent.parent / "src"
+    files = [root / "jarvis_voice.py", *sorted((root / "jarvis").rglob("*.py"))]
+    src = "".join(f.read_text(encoding="utf-8") for f in files)
+    assert len(files) > 5 and "sd.stop()" not in src and "sd.wait()" not in src
