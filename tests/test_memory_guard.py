@@ -1,7 +1,7 @@
 """Idle memory telemetry helpers."""
 import pytest
 
-import jarvis_runtime as R
+from jarvis.adapters import runtime as R
 
 
 @pytest.mark.parametrize("priv,limit,over", [(5000, 4096, True), (3000, 4096, False), (9999, 0, False), (9999, None, False), (9999, "x", False)])

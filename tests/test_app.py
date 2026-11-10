@@ -6,8 +6,8 @@ import runpy
 import numpy as np
 import pytest
 
-import jarvis_paths
-import jarvis_runtime as RUNTIME
+from jarvis.adapters import paths as jarvis_paths
+from jarvis.adapters import runtime as RUNTIME
 from jarvis.adapters.audio import CHUNK, ClapDetector
 from jarvis.app import listener as L
 from jarvis.app import main as MAIN

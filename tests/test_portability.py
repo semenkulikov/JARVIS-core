@@ -3,7 +3,7 @@ import json,threading
 from pathlib import Path
 import numpy as np
 import pytest
-import jarvis_paths as P
+from jarvis.adapters import paths as P
 import laptop
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -39,7 +39,8 @@ def test_transport_allowlist(cfg,monkeypatch,kind,extra):
  assert all(p[k]==v for k,v in extra.items())
 
 def test_sentence_streaming_without_audio(cfg,monkeypatch,tmp_path):
- import jarvis_audio,sounddevice
+ import sounddevice
+ from jarvis.adapters import playback as jarvis_audio
  from jarvis.adapters.tts import Voice
  from jarvis.core.state import ListenerFSM,ListenerState,Mode,Signals
  first_played=threading.Event();seen=[];plays=[]

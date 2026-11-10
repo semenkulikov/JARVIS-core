@@ -63,7 +63,7 @@ def parse_duration_s(text):
     return int(n * unit)
 
 # ---------- projects ----------
-from jarvis_paths import PROJECTS_DIR
+from jarvis.adapters.paths import PROJECTS_DIR
 PROJ_DIR = str(PROJECTS_DIR)
 
 def _spoken(name, latin_fn):

@@ -15,7 +15,8 @@ def app(tmp_path):
  return build_app(tmp_path/'home',sd=SD)
 @pytest.fixture(autouse=True)
 def guards(monkeypatch):
- import jarvis_credentials as C,jarvis_commands as Q,laptop
+ import jarvis_commands as Q, laptop
+ from jarvis.adapters import credentials as C
  monkeypatch.setattr(urllib.request,'urlopen',forbidden)
  monkeypatch.setattr(C,'backend',lambda:None)
  for name in ('_run','mute','volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk','window_ocr'):

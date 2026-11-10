@@ -30,7 +30,7 @@ def test_example_config_is_current():
 
 
 def test_listener_applies_migrations(monkeypatch, tmp_path):
-    import jarvis_credentials as CREDS
+    from jarvis.adapters import credentials as CREDS
     from jarvis.app import settings
     (tmp_path / "config.json").write_text('{"phrase_silence_s": 1.0}', encoding="utf-8")
     monkeypatch.setattr(CREDS, "webhook", lambda cfg, base: "")

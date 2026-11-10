@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import jarvis_audio as AUDIO
+from jarvis.adapters import playback as AUDIO
 import jarvis_commands as QUICK
 from jarvis.adapters import proactive as PROACTIVE
 from jarvis.adapters.accent import Accentizer

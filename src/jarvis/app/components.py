@@ -60,7 +60,7 @@ class Components:
     asr: VoskASR
     speaker: SpeakerGate
     transport: WebhookTransport
-    player: Any                 # jarvis_audio.Player
+    player: Any                 # jarvis.adapters.playback.Player
     accent: Accentizer
     voice: Voice
     outbox: Outbox

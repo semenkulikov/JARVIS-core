@@ -93,7 +93,7 @@ def wait_for(pred: Callable[[], bool], timeout: float, step: float = 0.5) -> boo
 
 def listener_running(home: Path) -> bool:
     sys.path.insert(0, str(REPO / "src"))
-    import jarvis_runtime as R  # Windows mutex probe; both legacy and repo names
+    from jarvis.adapters import runtime as R  # Windows mutex probe; both legacy and repo names
     legacy = "Local\\SemJarvis_" + R.mutex_name(home, "listener").split("_", 1)[1]
     import ctypes
     k = ctypes.WinDLL("kernel32", use_last_error=True)

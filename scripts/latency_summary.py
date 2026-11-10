@@ -2,7 +2,7 @@
 import argparse, json, statistics, sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent/"src"))
-from jarvis_paths import HOME
+from jarvis.adapters.paths import HOME
 
 PAIRS=[('wake->recognized','wake','recognized'),('speech_end->recognized','speech_end','recognized'),('recognized->route','recognized','route'),('route->ack','route','ack_start'),('ack->file','ack_start','first_server_file'),('file->reply_audio','first_server_file','first_reply_audio'),('wake->audio','wake','first_audio'),('wake->done','wake','done')]
 def load(path):

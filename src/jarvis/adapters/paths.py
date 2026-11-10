@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]  # src/jarvis/adapters/paths.py
 SOURCE_DIR = PROJECT_ROOT / "src"
 
 

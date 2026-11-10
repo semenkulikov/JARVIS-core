@@ -1,7 +1,7 @@
 import importlib.util,io,json,urllib.parse
 from pathlib import Path
 import pytest
-import jarvis_credentials as C
+from jarvis.adapters import credentials as C
 ROOT=Path(__file__).resolve().parent.parent
 class MemoryBackend:
  def __init__(self):self.values={}

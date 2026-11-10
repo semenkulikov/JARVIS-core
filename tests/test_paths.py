@@ -2,7 +2,7 @@
 
 import pytest
 
-import jarvis_paths as P
+from jarvis.adapters import paths as P
 
 
 def test_log_dir_default_and_env(monkeypatch, tmp_path):
@@ -31,7 +31,7 @@ def test_credential_prefix(monkeypatch, value, expected):
 
 
 def test_credentials_use_prefix(monkeypatch):
-    import jarvis_credentials as C
+    from jarvis.adapters import credentials as C
     monkeypatch.setenv("JARVIS_CREDENTIAL_PREFIX", "Sem.Jarvis.")
     assert C.service("webhook_auth_header") == "Sem.Jarvis.webhook_auth_header"
     with pytest.raises(ValueError):

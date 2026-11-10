@@ -2,7 +2,7 @@
 import argparse,getpass,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent/'src'))
-import jarvis_credentials as C
+from jarvis.adapters import credentials as C
 
 def main():
  p=argparse.ArgumentParser(description=__doc__)

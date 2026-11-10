@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 
-import jarvis_audio as A
+from jarvis.adapters import playback as A
 
 
 class FakeStream:
@@ -87,6 +87,7 @@ def test_idle_waits_for_playback():
 def test_listener_has_no_cross_thread_stop():
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent / "src"
-    files = [root / "jarvis_voice.py", *sorted((root / "jarvis").rglob("*.py"))]
+    # Only the playback adapter owns the stream; everything else asks it to stop.
+    files = [root / "jarvis_voice.py", *sorted(p for p in (root / "jarvis").rglob("*.py") if p.name != "playback.py")]
     src = "".join(f.read_text(encoding="utf-8") for f in files)
     assert len(files) > 5 and "sd.stop()" not in src and "sd.wait()" not in src

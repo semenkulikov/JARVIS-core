@@ -1,5 +1,5 @@
 import pytest
-import jarvis_runtime as R
+from jarvis.adapters import runtime as R
 import jarvis_supervisor as S
 @pytest.mark.parametrize('n,expected',[(0,2),(1,2),(2,4),(3,8),(4,16),(5,32),(6,64),(7,128),(8,256),(9,300),(20,300),(100000,300)])
 def test_backoff(n,expected):assert R.crash_delay(n)==expected

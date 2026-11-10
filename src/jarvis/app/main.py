@@ -5,8 +5,8 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-import jarvis_paths as PATHS
-import jarvis_runtime as RUNTIME
+from jarvis.adapters import paths as PATHS
+from jarvis.adapters import runtime as RUNTIME
 
 LOG_FILE = "jarvis_voice.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"

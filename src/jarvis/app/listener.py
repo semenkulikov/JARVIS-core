@@ -19,7 +19,7 @@ import numpy as np
 
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
-import jarvis_runtime as RUNTIME
+from jarvis.adapters import runtime as RUNTIME
 from jarvis.core import sleep as SLEEP
 import laptop as LP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, frames_after, pick_device

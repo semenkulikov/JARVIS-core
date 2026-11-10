@@ -4,9 +4,9 @@ Intentional stop exits supervisor too; only an explicit VBS start resumes it.
 import logging,os,subprocess,sys,time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-import jarvis_runtime as R
-import jarvis_paths as PATHS
-from jarvis_paths import HOME, SOURCE_DIR
+from jarvis.adapters import runtime as R
+from jarvis.adapters import paths as PATHS
+from jarvis.adapters.paths import HOME, SOURCE_DIR
 BASE=HOME
 log=logging.getLogger('jarvis.supervisor')
 

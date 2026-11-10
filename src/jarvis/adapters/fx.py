@@ -1,8 +1,15 @@
-# "AI butler" post-processing chain (numpy/scipy). All params configurable via cfg["fx"].
+"""The "AI butler" post-processing chain (numpy/scipy). All params configurable via cfg["fx"]."""
+from __future__ import annotations
+
+from typing import Any, Mapping
+
 import numpy as np
+from numpy.typing import NDArray
 from scipy import signal
 
-FX_DEFAULTS = {
+Audio = NDArray[Any]
+
+FX_DEFAULTS: dict[str, Any] = {
     "enabled": True,
     "pitch": 0.95,          # <1 lowers pitch (resample; also slows by same factor, compensated by faster TTS rate)
     "ring_hz": 45.0, "ring_mix": 0.10,        # subtle metallic ring-mod layer
@@ -12,14 +19,16 @@ FX_DEFAULTS = {
     "lowcut_hz": 70,
 }
 
-def _shelf(x, sr, f, db):
+
+def _shelf(x: Audio, sr: int, f: float, db: float) -> Audio:
     # high-shelf via parallel highpassed component
     if abs(db) < 0.1: return x
     b, a = signal.butter(2, f / (sr / 2), "high")
     g = 10 ** (db / 20) - 1
     return x + g * signal.lfilter(b, a, x)
 
-def apply(x, sr, p=None):
+
+def apply(x: Audio, sr: int, p: Mapping[str, Any] | None = None) -> tuple[Audio, int]:
     c = dict(FX_DEFAULTS); c.update(p or {})
     if not c.get("enabled", True) or len(x) == 0: return x.astype(np.float32), sr
     x = x.astype(np.float64)
@@ -48,6 +57,6 @@ def apply(x, sr, p=None):
     x = _shelf(x, sr, c["shelf_hz"], c["shelf_db"])
     if c["lowcut_hz"]:
         b, a = signal.butter(2, c["lowcut_hz"] / (sr / 2), "high"); x = signal.lfilter(b, a, x)
-    pk = np.max(np.abs(x)) or 1
+    pk = float(np.max(np.abs(x))) or 1.0
     x = x / pk * 0.89
     return x.astype(np.float32), sr

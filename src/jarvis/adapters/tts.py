@@ -144,8 +144,8 @@ class Voice:
         a, sr = self.synth_local(norm, cfg)
         fx = cfg.get("fx", {"enabled": True})
         if fx.get("enabled", True):
-            import jarvis_fx
-            a, sr = jarvis_fx.apply(a, sr, fx)
+            from jarvis.adapters import fx as FX
+            a, sr = FX.apply(a, sr, fx)
         if len(text) <= 240 and not cfg.get("private_tts",False):
             try: _wav_write(cp, a, sr)
             except Exception: pass

@@ -10,7 +10,7 @@ from typing import Any
 
 from jarvis.core import codemode as CODE
 import jarvis_commands as QUICK
-import jarvis_credentials as CREDS
+from jarvis.adapters import credentials as CREDS
 from jarvis.core import dialog as DIALOG
 import jarvis_food as FOOD
 from jarvis.core import gate as GATE

@@ -8,15 +8,15 @@ from urllib.error import HTTPError
 URL = "https://platform.fatsecret.com/rest/server.api"
 
 def jarvis_credentials_path():
-    from jarvis_paths import HOME
+    from jarvis.adapters.paths import HOME
     return HOME / ".env"
 
 def call(method, extra):
     import sys
     voice=Path(__file__).resolve().parent
     if str(voice) not in sys.path:sys.path.insert(0,str(voice))
-    import jarvis_credentials
-    env = jarvis_credentials.fatsecret_env(dict(os.environ),Path(os.environ.get('FATSECRET_ENV_FILE', str(jarvis_credentials_path()))))
+    from jarvis.adapters import credentials as CREDS
+    env = CREDS.fatsecret_env(dict(os.environ),Path(os.environ.get('FATSECRET_ENV_FILE', str(jarvis_credentials_path()))))
     names = ["FATSECRET_CLIENT_ID", "FATSECRET_OAUTH1_CONSUMER_SECRET", "FATSECRET_ACCESS_TOKEN", "FATSECRET_ACCESS_SECRET"]
     if not all(env.get(k) for k in names):
         raise ValueError("Missing OAuth1 credentials; check Windows Credential Manager or restricted environment file")
