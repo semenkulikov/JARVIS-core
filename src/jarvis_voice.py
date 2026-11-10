@@ -135,7 +135,7 @@ DEFAULTS = {
     "cooldown_s": 1.0, "reply_timeout_s": 240, "server_notice_s": 90.0, "server_down_wait_s": 45.0, "server_down_ttl_s": 1800.0, "cache_max_age_h": 2.5,
     "workout_days": [], "workout_time": "12:00",
     "projects_dir": "",
-    "level_log_interval_s": 300,
+    "level_log_interval_s": 300, "memory_log_interval_s": 1800, "memory_restart_mb": 4096, "memory_trim_idle_s": 900,
     "aliases": DEFAULT_ALIASES,
 }
 
@@ -370,12 +370,17 @@ def trim_memory():
     log.info("memory: %s", mem_str())
 
 def mem_str():
+    m = mem_info()
+    return f"ws={m['ws']}MB priv={m['priv']}MB peak_ws={m['peak_ws']}MB"
+
+def mem_info():
+    """Working set / private commit of this process in MB (Windows)."""
     class PMC(ctypes.Structure):
         _fields_ = [("cb", wintypes.DWORD), ("a", wintypes.DWORD)] + [(n, ctypes.c_size_t) for n in ("pws", "ws", "a1", "a2", "a3", "a4", "pf", "ppf", "priv")]
     k = ctypes.windll.kernel32; k.GetCurrentProcess.restype = wintypes.HANDLE
     k.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
     p = PMC(); p.cb = ctypes.sizeof(p); k.K32GetProcessMemoryInfo(k.GetCurrentProcess(), ctypes.byref(p), p.cb)
-    return f"ws={p.ws >> 20}MB priv={p.priv >> 20}MB peak_ws={p.pws >> 20}MB"
+    return {"ws": p.ws >> 20, "priv": p.priv >> 20, "peak_ws": p.pws >> 20}
 
 def say(text, cfg, role="reply", private=False):
     """Speak text; synthesis of the next chunk overlaps playback. Returns False if interrupted/failed."""
@@ -1333,7 +1338,7 @@ def main():
     stream.start()
     log.info("listening (v3.14.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
-    last_end = 0.0; lastlvl = time.time(); was_busy = False; barge_armed = False; pending = None
+    last_end = 0.0; lastlvl = time.time(); lastmem = time.monotonic(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0
     def stop_rec(c):
         ph = sorted(set(" ".join(_norm_phrase(p)) for p in c.get("stop_phrases", [])) - {""})
@@ -1369,6 +1374,15 @@ def main():
                 n = max(levels["n"], 1)
                 log.info("mic level: peak=%.3f avg_rms=%.4f chunks=%d", levels["max"], levels["sum"] / n, levels["n"])
                 levels.update(max=0.0, sum=0.0, n=0); lastlvl = time.time()
+            if time.monotonic() - lastmem > float(cfg.get("memory_log_interval_s", 1800)):
+                lastmem = time.monotonic()
+                if not busy.is_set() and RUNTIME.idle_for(STATE.get("last_spoken_end") or 0.0, lastmem) > float(cfg.get("memory_trim_idle_s", 900)):
+                    trim_memory()  # pages come back on demand; frees RAM for calls between uses
+                m = mem_info()
+                log.info("memory: ws=%dMB priv=%dMB peak_ws=%dMB threads=%d", m["ws"], m["priv"], m["peak_ws"], threading.active_count())
+                if not busy.is_set() and RUNTIME.memory_over_limit(m["priv"], cfg.get("memory_restart_mb", 0)):
+                    log.warning("memory guard: priv=%dMB > %sMB while idle -> restart via supervisor", m["priv"], cfg.get("memory_restart_mb"))
+                    STATE["exit_code"] = RUNTIME.MEMORY_RESTART_CODE; break
             try: x = audio_q.get(timeout=0.3)
             except queue.Empty: continue
             st = pos; pos += len(x); ring.append((st, x))
@@ -1491,3 +1505,4 @@ if __name__ == "__main__":
     except Exception as e:
         log.exception("fatal: %s", e); raise
     finally: guard.close()
+    if STATE.get("exit_code"): raise SystemExit(STATE["exit_code"])

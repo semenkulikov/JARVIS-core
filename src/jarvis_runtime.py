@@ -29,3 +29,14 @@ def exists(base,role):
  return False
 
 def crash_delay(failures,minimum=2,maximum=300):return min(maximum,minimum*2**max(0,min(16,failures-1)))
+
+MEMORY_RESTART_CODE=75  # non-zero, not intentional: the supervisor relaunches after 2 s
+def memory_over_limit(priv_mb,limit_mb):
+ """True when private commit exceeds a positive limit (0/None disables the guard)."""
+ try:limit=float(limit_mb or 0)
+ except (TypeError,ValueError):return False
+ return limit>0 and float(priv_mb)>limit
+
+def idle_for(last_activity,now):
+ """Seconds since the last activity timestamp (monotonic); 0 activity means since boot."""
+ return max(0.0,float(now)-float(last_activity or 0.0))
