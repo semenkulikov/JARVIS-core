@@ -4,4 +4,4 @@ See docs/ARCHITECTURE.md. The flat ``jarvis_*`` modules in ``src/`` predate the 
 imported by their plain names; ``jarvis_voice.py`` remains the process entry point.
 """
 
-__version__ = "3.18.0"
+__version__ = "3.19.0"

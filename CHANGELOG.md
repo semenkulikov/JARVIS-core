@@ -3,6 +3,20 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Номера версий — [семантические](https://semver.org/lang/ru/).
 
+## [3.19.0] — 2026-11-10
+
+### Изменено
+
+- Слушатель разделён на пакет `src/jarvis/` из четырёх слоёв: `core` (правила, порты, автомат состояний), `adapters` (микрофон, Vosk, синтез, webhook, файлы), `commands` и `app` с единым корнем сборки. `src/jarvis_voice.py` остался точкой входа для наблюдателя и скрипта запуска; поведение, настройки, журнал и `outbox` не изменились. Схемы и план — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- Голосовые команды — обработчики `@handles("действие")` в `src/jarvis/commands/`: новая команда добавляется отдельным модулем, без правки цикла слушателя.
+- Режим слушателя (ожидание, запись, обработка, речь, продолжение, сон) — автомат с проверкой переходов; недопустимый переход пишется в журнал предупреждением.
+- Значение неверного типа в `config.json` пишется в журнал (`config value …`) и, как раньше, не мешает запуску.
+- Проверка на GitHub: ruff с правилами pyflakes и bugbear, mypy для пакета `jarvis`.
+
+### Исправлено
+
+- `scripts/deploy_home.py` пишет путь в скрипте запуска с разделителями Windows на любой ОС.
+
 ## [3.18.0] — 2026-11-10
 
 ### Добавлено
@@ -83,5 +97,10 @@
 - Тесты без моделей, звука и сети. Проверка запускается на Windows и Linux.
 - Документация на русском, README на двух языках, шаблоны задач, `pyproject.toml` с версией и ruff.
 
+[3.19.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.18.0...v3.19.0
+[3.18.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.17.0...v3.18.0
+[3.17.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.16.0...v3.17.0
+[3.16.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.15.0...v3.16.0
+[3.15.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.12.0...v3.14.0
 [3.12.0]: https://github.com/semenkulikov/JARVIS-core/releases/tag/v3.12.0
