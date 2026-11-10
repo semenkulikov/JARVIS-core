@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.asr_vosk import VoskASR
@@ -71,3 +71,4 @@ class Components:
     laptop: Laptop
     sleep: Lazy[Any]            # jarvis.adapters.sleep_store.SleepState
     proactive: Lazy[Any]        # jarvis.adapters.proactive.Manager
+    input_volume: Callable[[], float | None] = lambda: None  # Windows microphone level, read only

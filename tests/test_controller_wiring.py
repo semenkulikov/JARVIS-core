@@ -30,3 +30,12 @@ def test_food_logger_reads_fatsecret_per_call(tmp_path, cfg):
     seen = []
     c = build_controller(tmp_path, food_call=lambda method, params: seen.append(method) or {"food_entries": None})
     assert "белка" in c.food(dict(cfg, nutrition_targets={})).remaining() and seen == ["food_entries.get"]
+
+
+def test_input_volume_is_read_only_and_never_raises(monkeypatch):
+    from jarvis.adapters.system import SystemBackend
+    calls = []
+    def audio(self, mode, value, flow=0):
+        calls.append((mode, flow)); raise OSError("no Core Audio")
+    monkeypatch.setattr(SystemBackend, "_audio", audio)
+    assert SystemBackend().input_volume() is None and calls == [("get", 1)]

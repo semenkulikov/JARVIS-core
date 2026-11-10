@@ -143,6 +143,8 @@ class Listener:
         from jarvis import __version__
         log.info("listening (v%s) on device %s: %s", __version__, dev,
                  sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+        level = c.input_volume()
+        if level is not None: log.info("windows input volume %.0f%% (default microphone, not changed)", level * 100)
         c.speaker.preload(cfg)
         lp.wrec = c.asr.wake_recognizer(); lp.lastlvl = time.time(); lp.lastmem = time.monotonic()
         while True:

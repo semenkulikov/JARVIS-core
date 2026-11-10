@@ -85,6 +85,7 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         controller=controller, laptop=LAPTOP,
         sleep=Lazy(lambda: SleepState(os.path.join(paths.cache, "sleep.json"))),
         proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),
+        input_volume=SystemBackend().input_volume if os.name == "nt" else (lambda: None),
     )
     conversation = Conversation(c)
     warmup = Warmup(c)

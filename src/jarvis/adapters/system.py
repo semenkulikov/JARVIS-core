@@ -30,7 +30,11 @@ class SystemBackend:
         return subprocess.run(args,capture_output=True,text=True,timeout=timeout,creationflags=0x08000000 if os.name=='nt' else 0)
     def mute(self, muted: bool) -> None:self._audio('mute',bool(muted))
     def volume(self, value: float) -> None:self._audio('volume',float(value)/100)
-    def _audio(self, mode: str, value: float) -> None:
+    def input_volume(self) -> float | None:
+        """Windows level (0..1) of the default microphone, read only; None when Core Audio is unavailable."""
+        try:return self._audio('get',0.0,flow=1)
+        except Exception:return None  # logging aid only: never break the listener over it
+    def _audio(self, mode: str, value: float, flow: int = 0) -> float | None:
         class GUID(ctypes.Structure):_fields_=[('d1',ctypes.c_uint32),('d2',ctypes.c_uint16),('d3',ctypes.c_uint16),('d4',ctypes.c_ubyte*8)]
         def guid(s: str) -> GUID:return GUID.from_buffer_copy(uuid.UUID(s).bytes_le)
         def method(ptr: Any, slot: int, *argtypes: Any) -> Any:
@@ -46,15 +50,18 @@ class SystemBackend:
         try:
             cls=guid('BCDE0395-E52F-467C-8E3D-C4579291692E');iid=guid('A95664D2-9614-4F35-A746-DE8DB63617E6')
             check(ole.CoCreateInstance(ctypes.byref(cls),None,23,ctypes.byref(iid),ctypes.byref(enum)))
-            check(method(enum,4,ctypes.c_int,ctypes.c_int,ctypes.POINTER(ctypes.c_void_p))(enum,0,1,ctypes.byref(device)))
+            check(method(enum,4,ctypes.c_int,ctypes.c_int,ctypes.POINTER(ctypes.c_void_p))(enum,flow,1,ctypes.byref(device)))
             iid=guid('5CDF2C82-841E-4546-9722-0CF74078229A')
             check(method(device,3,ctypes.POINTER(GUID),ctypes.c_uint,ctypes.c_void_p,ctypes.POINTER(ctypes.c_void_p))(device,ctypes.byref(iid),23,None,ctypes.byref(volume)))
             if mode=='mute':check(method(volume,14,ctypes.c_int,ctypes.c_void_p)(volume,int(value),None))
+            elif mode=='get':
+                level=ctypes.c_float();check(method(volume,9,ctypes.POINTER(ctypes.c_float))(volume,ctypes.byref(level)));return float(level.value)
             else:check(method(volume,7,ctypes.c_float,ctypes.c_void_p)(volume,value,None))
         finally:
             for ptr in (volume,device,enum):
                 if ptr:method(ptr,2)(ptr)
             if initialized:ole.CoUninitialize()
+        return None
     def clipboard(self, limit: int) -> tuple[str, bool]:
         u=_WIN.windll.user32;k=_WIN.windll.kernel32
         u.GetClipboardData.restype=ctypes.c_void_p;k.GlobalLock.argtypes=[ctypes.c_void_p];k.GlobalLock.restype=ctypes.c_void_p;k.GlobalSize.argtypes=[ctypes.c_void_p];k.GlobalSize.restype=ctypes.c_size_t;k.GlobalUnlock.argtypes=[ctypes.c_void_p]
