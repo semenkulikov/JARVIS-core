@@ -1,6 +1,6 @@
 [project]
 name = "jarvis-voice-assistant"
-version = "3.15.0"
+version = "3.16.0"
 description = "Офлайн-голосовой помощник для Windows на русском языке"
 readme = "README.md"
 requires-python = ">=3.12"

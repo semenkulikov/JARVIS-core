@@ -1,4 +1,4 @@
-# Jarvis voice assistant 3.15.0
+# Jarvis voice assistant 3.16.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
 import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib, shlex, urllib.parse
@@ -1305,6 +1305,13 @@ def speaker_ok(ring, end, cfg):
     if score is not None: log.info("speaker %s score=%.3f threshold=%.3f", "OK" if ok else "REJECTED", score, VERIFIER.threshold())
     return ok
 
+def preload_speaker(cfg):
+    """Load the voice profile at startup so the log shows whether owner verification is active."""
+    global VERIFIER
+    if not cfg.get("speaker_verify_enabled"): log.info("speaker verify off"); return
+    VERIFIER = SPEAKER.SpeakerVerifier(BASE, cfg)
+    if VERIFIER.ready(): log.info("speaker verify active threshold=%.3f profile_clips=%s", VERIFIER.threshold(), VERIFIER.profile.get("count"))
+
 def main():
     cfg = load_cfg()
     LP.TIMERS = command_controller().timers
@@ -1354,7 +1361,8 @@ def main():
     dev = pick_device(cfg)
     stream = sd.InputStream(device=dev, samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=cb)
     stream.start()
-    log.info("listening (v3.15.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+    log.info("listening (v3.16.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+    preload_speaker(cfg)
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); lastmem = time.monotonic(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0
