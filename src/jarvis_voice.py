@@ -3,8 +3,6 @@ import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
 import json, time, uuid, queue, threading, logging, subprocess, datetime, re, collections, shlex, urllib.parse
 from logging.handlers import RotatingFileHandler
-import ctypes
-from ctypes import wintypes
 import numpy as np
 import sounddevice as sd
 
@@ -40,6 +38,7 @@ import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
                               heard_after, phrase_finished)
 from jarvis.core import status as STATUS
+from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, grammar_phrases, match_alias
 from jarvis.core.state import ListenerFSM, ListenerState, Mode, RequestLedger, Signals
@@ -239,28 +238,8 @@ def precache(cfg):
         log.info("template precache done (%d bounded time/number sentences)", len(templates))
     trim_memory()
 
-def trim_memory():
-    import gc
-    gc.collect()
-    try:
-        k = ctypes.windll.kernel32; k.GetCurrentProcess.restype = wintypes.HANDLE
-        k.SetProcessWorkingSetSize.argtypes = [wintypes.HANDLE, ctypes.c_ssize_t, ctypes.c_ssize_t]
-        k.SetProcessWorkingSetSize(k.GetCurrentProcess(), -1, -1)
-    except Exception as e: log.info("trim failed: %s", e)
-    log.info("memory: %s", mem_str())
 
-def mem_str():
-    m = mem_info()
-    return f"ws={m['ws']}MB priv={m['priv']}MB peak_ws={m['peak_ws']}MB"
 
-def mem_info():
-    """Working set / private commit of this process in MB (Windows)."""
-    class PMC(ctypes.Structure):
-        _fields_ = [("cb", wintypes.DWORD), ("a", wintypes.DWORD)] + [(n, ctypes.c_size_t) for n in ("pws", "ws", "a1", "a2", "a3", "a4", "pf", "ppf", "priv")]
-    k = ctypes.windll.kernel32; k.GetCurrentProcess.restype = wintypes.HANDLE
-    k.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
-    p = PMC(); p.cb = ctypes.sizeof(p); k.K32GetProcessMemoryInfo(k.GetCurrentProcess(), ctypes.byref(p), p.cb)
-    return {"ws": p.ws >> 20, "priv": p.priv >> 20, "peak_ws": p.pws >> 20}
 
 def say(text, cfg, role="reply", private=False):
     """Speak text; synthesis of the next chunk overlaps playback. Returns False if interrupted/failed."""
