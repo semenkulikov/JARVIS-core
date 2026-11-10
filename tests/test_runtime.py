@@ -1,6 +1,6 @@
 import pytest
 from jarvis.adapters import runtime as R
-import jarvis_supervisor as S
+from jarvis.app import supervisor as S
 @pytest.mark.parametrize('n,expected',[(0,2),(1,2),(2,4),(3,8),(4,16),(5,32),(6,64),(7,128),(8,256),(9,300),(20,300),(100000,300)])
 def test_backoff(n,expected):assert R.crash_delay(n)==expected
 
@@ -51,3 +51,13 @@ def test_mutex_guard_with_fake_native_api(tmp_path,monkeypatch):
    if not self.items[name]:del self.items[name]
  k=Kernel();monkeypatch.setattr(ctypes,'WinDLL',lambda *a,**kw:k,raising=False);monkeypatch.setattr(ctypes,'get_last_error',lambda:k.err,raising=False);monkeypatch.setattr(ctypes,'set_last_error',lambda value:setattr(k,'err',value),raising=False)
  first=R.Singleton(tmp_path,'listener');assert first.acquire();assert R.exists(tmp_path,'listener');second=R.Singleton(tmp_path,'listener');assert not second.acquire();first.close();assert not R.exists(tmp_path,'listener');assert second.acquire();second.close()
+
+def test_launcher_shims_point_into_the_package():
+ import jarvis_supervisor,jarvis_voice
+ assert jarvis_supervisor.run is S.run and jarvis_supervisor.entry is S.entry and jarvis_voice.run.__module__=='jarvis.app.main'
+
+def test_supervisor_imports_only_the_stdlib():
+ import subprocess,sys
+ code="import sys,jarvis_supervisor;print(sorted(m for m in ('numpy','scipy','sounddevice','onnxruntime','vosk','torch') if m in sys.modules))"
+ out=subprocess.run([sys.executable,'-c',code],cwd=str(S.PATHS.SOURCE_DIR),capture_output=True,text=True,timeout=60)
+ assert out.returncode==0 and out.stdout.strip()=='[]',out.stderr
