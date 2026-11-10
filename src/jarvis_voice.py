@@ -32,6 +32,7 @@ import jarvis_proactive as PROACTIVE
 import jarvis_credentials as CREDS
 import jarvis_runtime as RUNTIME
 import jarvis_migrations as MIGRATIONS
+import jarvis_audio as AUDIO
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 CMDS = None
@@ -197,6 +198,7 @@ speaking = threading.Event()
 interrupt = threading.Event()   # wake word during busy -> stop speech/handler
 STATE = {"capture": None, "model": None, "speaking_text": "", "rid": None, "stop_pending": False, "stop_ack_active": False, "followup_guard": False, "followup_eligible": False, "last_spoken": "", "last_spoken_end": 0.0, "speech_serial": 0, "trace": None, "last_reply": "", "last_reply_private": False, "reply_parts": [], "last_input_conf": 1.0, "last_input_end": None, "last_capture": None, "dropped": False}
 CANCELLED = {}  # rid -> time
+PLAYER = AUDIO.Player(sd)
 SLEEP_STATE = None
 WAKE_FILE = os.path.join(BASE, SLEEP.WAKE_FILE)
 SLEEP_END_PHRASE = "Я снова на связи, сэр."
@@ -410,7 +412,7 @@ def say(text, cfg, role="reply", private=False):
             gap = np.zeros(int(sr * float(cfg.get("tts_gap_s", 0.08))), np.float32)
             perf("first_audio", audio_role=role)
             perf("first_ack_audio" if role == "ack" else "first_reply_audio")
-            sd.play(np.concatenate([a, gap]), sr); sd.wait(); played += 1
+            PLAYER.play(np.concatenate([a, gap]), sr, interrupt.is_set); played += 1
         if interrupt.is_set():
             log.info("speech interrupted after %d/%d chunks", played, len(chunks)); return False
         if played == 0:
@@ -432,7 +434,7 @@ def say(text, cfg, role="reply", private=False):
 
 def beep():
     t = np.linspace(0, 0.12, int(SR * 0.12), False)
-    sd.play((0.25 * np.sin(2 * np.pi * 880 * t)).astype(np.float32), SR); sd.wait()
+    PLAYER.play((0.25 * np.sin(2 * np.pi * 880 * t)).astype(np.float32), SR)
 
 # ================= helpers =================
 DAYS_ACC = ["понедельник", "вторник", "среду", "четверг", "пятницу", "субботу", "воскресенье"]
@@ -1338,13 +1340,13 @@ def main():
         r = KaldiRecognizer(model, SR, json.dumps(ph + ["[unk]"], ensure_ascii=False)); r.SetWords(True); return r
     def do_stop(reason):
         log.info("STOP barge-in (%s): speech stopped", reason)
-        interrupt.set(); sd.stop()
+        interrupt.set()  # the speech thread stops its own stream
         if STATE.get("rid"): CANCELLED[STATE["rid"]] = time.time()
         STATE["stop_pending"] = True
     while True:
         try:
             if os.path.exists(STOP_FILE):
-                RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); log.info("stop file -> intentional exit"); interrupt.set(); sd.stop(); break
+                RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); log.info("stop file -> intentional exit"); interrupt.set(); PLAYER.idle(1.0); break
             if not busy.is_set() and os.path.exists(TEST_TRIGGER):
                 tt = read_part(TEST_TRIGGER).strip(); os.remove(TEST_TRIGGER); cfg = load_cfg()
                 log.info("test_trigger %r", tt)
@@ -1402,7 +1404,7 @@ def main():
                             free_last = (time.monotonic(), fr.get("text", "") if fc >= 0.5 else "")
                             if PROACTIVE.priority_candidate(fr.get("text",""),fc,STATE["speaking_text"],cfg) and any(w.get("word") in ("джарвис","жарвис","джервис","дарвис","гарвис","джарви","джави","jarvis") and w.get("conf",0)>=float(cfg.get("priority_wake_min_conf",.85)) for w in fw[:3]):
                                 log.info("PRIORITY vosk wake conf=%.2f -> interrupt and capture",fc)
-                                interrupt.set(); sd.stop()
+                                interrupt.set()
                                 if STATE.get("rid"): CANCELLED[STATE["rid"]]=time.time()
                                 wake=next((w for w in fw[:3] if w.get("word") in ("джарвис","жарвис","джервис","дарвис","гарвис","джарви","джави","jarvis")),None)
                                 pending=borigin+int((wake.get("start",0) if wake else 0)*SR)-int(.25*SR)
@@ -1422,7 +1424,7 @@ def main():
                 if cap is None and oww is not None and not STATE["stop_ack_active"] and not STATE["followup_guard"]:
                     if sc < 0.2: barge_armed = True
                     elif barge_armed and sc >= cfg["barge_in_threshold"] and not interrupt.is_set():
-                        log.info("BARGE-IN oww %.2f -> interrupt", sc); interrupt.set(); sd.stop()
+                        log.info("BARGE-IN oww %.2f -> interrupt", sc); interrupt.set()
                         if STATE.get("rid"): CANCELLED[STATE["rid"]] = time.time()
                         pending = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
                 continue
