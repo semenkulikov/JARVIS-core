@@ -39,7 +39,7 @@ def guards(monkeypatch):
 def cfg(listener,monkeypatch):
  c=copy.deepcopy(listener.DEFAULTS)
  c['aliases']=c['aliases']+copy.deepcopy(listener.SMALLTALK_ALIASES)
- c['stress_dict']=dict(dict(listener.PROACTIVE.STRESS,**listener.QUICK.STRESS),**(c.get('stress_dict') or {}))
+ c['stress_dict']=dict(dict(listener.PROACTIVE.STRESS,**listener.QUICK.STRESS,**listener.DIALOG.STRESS),**(c.get('stress_dict') or {}))
  c['followup_enabled']=False
  monkeypatch.setattr(listener,'load_cfg',lambda:c)
  return c

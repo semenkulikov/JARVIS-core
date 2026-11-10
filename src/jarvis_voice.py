@@ -39,6 +39,7 @@ import jarvis_sleep as SLEEP
 import jarvis_codemode as CODE
 import jarvis_projects as PROJECTS
 import jarvis_food as FOOD
+import jarvis_dialog as DIALOG
 CMDS = None
 def command_controller():
     global CMDS
@@ -126,7 +127,6 @@ DEFAULTS = {
     "followup_echo_guard_s": 0.3, "followup_min_conf": 0.65, "followup_max_turns": 8,
     "wake_prebuffer_s": 1.6, "phrase_wait_s": 1.5, "phrase_silence_s": 0.95, "phrase_max_s": 10.0, "followup_listen_s": 7.0,
     "ack_command": ["Есть, сэр.", "Как прикажете, сэр.", "Будет сделано, сэр.", "Слушаюсь, сэр.", "Сию минуту, сэр.", "Уже делаю, сэр."],
-    "ack_wake": ["Да, сэр?", "Слушаю, сэр.", "К вашим услугам, сэр.", "Чем могу помочь, сэр?"],
     "ack_free": ["Да, сэр.", "Слушаюсь, сэр.", "Секунду, сэр."],
     "ack_wait": ["Минуту, сэр, уточняю.", "Секунду, сэр.", "Почти готово, сэр."],
     "ack_not_understood": ["Простите, сэр, не расслышал. Повторите, пожалуйста."],
@@ -147,7 +147,7 @@ _CFG = {"m": None, "c": None}
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
-for _mod in (CODE, PROJECTS, FOOD): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 def load_cfg():
     p = os.path.join(BASE, "config.json")
@@ -168,7 +168,7 @@ def load_cfg():
         LP.PROJ_DIR = os.path.expanduser(os.path.expandvars(cfg["projects_dir"]))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg,BASE)
     cfg["aliases"] = [a for a in (cfg.get("aliases") or DEFAULT_ALIASES) if not a.get("name", "").startswith("chat_")] + SMALLTALK_ALIASES
-    cfg["stress_dict"] = dict(dict(PROACTIVE.STRESS, **QUICK.STRESS), **(cfg.get("stress_dict") or {}))
+    cfg["stress_dict"] = dict(dict(PROACTIVE.STRESS, **QUICK.STRESS, **DIALOG.STRESS), **(cfg.get("stress_dict") or {}))
     _CFG.update(m=m, c=cfg)
     return cfg
 
@@ -182,9 +182,10 @@ def pick(cfg, key):
 
 def all_phrases(cfg):
     out = []
-    for k in ("fast_ack", "ack_status", "ack_stop", "ack_command", "ack_wake", "ack_free", "ack_wait", "ack_not_understood"):
+    for k in ("fast_ack", "ack_status", "ack_stop", "ack_command", "ack_free", "ack_wait", "ack_not_understood"):
         v = cfg.get(k) or []
         out += [v] if isinstance(v, str) else list(v)
+    out += DIALOG.phrase_lists(cfg)
     for al in SMALLTALK_ALIASES:
         for r in al["replies"]:
             if "{" not in r: out.append(r)
@@ -790,9 +791,13 @@ def run_alias(al, text, cfg, trig, test):
         say(PROACTIVE.REPLIES[0 if al["enabled"] else 1],cfg)
         return
     if act == "quick2":
-        keep = command_controller().execute(al,text,cfg,say,lambda value,**kw:free_phrase(value,cfg,trig,test,**kw),
+        key = DIALOG.ack_key(al); spoken = pick(cfg, key) if key else ""
+        # After an instant ack a server fallback must not add a second one.
+        fwd_ack = {"ack": "", "listener_ack": spoken} if spoken else {}
+        run = lambda speak: command_controller().execute(al,text,cfg,speak,lambda value,**kw:free_phrase(value,cfg,trig,test,**{**fwd_ack, **kw}),
                 last_reply=STATE.get("last_reply", ""),last_private=STATE.get("last_reply_private",False),trigger=trig,
                 confidence=STATE.get("last_input_conf",1),test=test)
+        keep = DIALOG.ack_then(say, cfg, spoken, run)
         if not keep: STATE["followup_eligible"] = False
         return
     if act in ("status", "cache_field"):
@@ -889,7 +894,7 @@ def run_alias(al, text, cfg, trig, test):
 def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, extra_payload=None):
     trace = STATE.get("trace")
     rid = trace.rid if trace is not None else str(uuid.uuid4()); res = []; STATE["rid"] = rid
-    chosen_ack = ack if ack is not None else cfg.get("fast_ack", "Сейчас, сэр.")
+    chosen_ack = ack if ack is not None else (pick(cfg, "ack_server") or cfg.get("fast_ack", "Сейчас, сэр."))
     acknowledged = chosen_ack if listener_ack is None else listener_ack
     kind = kind or ("status" if natural_status_alias(text) else "free")
     log.info("FREE -> webhook rid=%s kind=%s listener_ack=%r: %r", rid, kind, acknowledged, text)
@@ -936,8 +941,13 @@ def grammar_phrases(cfg):
     ph += QUICK.PHRASES + PROACTIVE.PHRASES
     return sorted(set(ph)) + ["[unk]"]
 
-def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None):
-    """returns (text, avg_conf, grammar_text)"""
+def only_wake_heard(words, partial):
+    """True while everything recognised so far is the wake name (plus «хей» and the like)."""
+    toks = [w.get("word", "") for w in words] + (partial or "").split()
+    return bool(toks) and all(WAKE_TOK.match(t) for t in toks)
+
+def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=None):
+    """returns (text, avg_conf, grammar_text); wake_pause_s ends a bare «Джарвис» sooner."""
     from vosk import KaldiRecognizer
     rec = KaldiRecognizer(STATE["model"], SR); rec.SetWords(True)
     grec = None
@@ -972,7 +982,8 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None):
                 if not cap.q.empty(): continue
             has = bool(words) or bool(partial)
             if not has and time.time() - t0 > nospeech_s and (acoustic_last is None or time.time() - acoustic_last > 0.5): cut = False; break
-            if has and last_change and time.time() - last_change > sil and (acoustic_last is None or time.time() - acoustic_last > sil): cut = False; break
+            lim = wake_pause_s if wake_pause_s is not None and only_wake_heard(words, partial) else sil
+            if has and last_change and time.time() - last_change > lim and (acoustic_last is None or time.time() - acoustic_last > lim): cut = False; break
         words += json.loads(rec.FinalResult()).get("result", [])
         if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
     finally:
@@ -1075,7 +1086,8 @@ def _handle_turn(trig, cap, text, test, skip_s):
             say(notice.get("label") or "Сэр, время вышло.", cfg); return
         ok = True
         if text is None:
-            text, conf, g = ("", 0, "") if cap is None else capture_phrase(cap, cfg, float(cfg["phrase_wait_s"]), skip_s)
+            pause = float(cfg.get("wake_ack_after_s", DIALOG.DEFAULTS["wake_ack_after_s"])) if trig in ("wake_word", "clap") else None
+            text, conf, g = ("", 0, "") if cap is None else capture_phrase(cap, cfg, float(cfg["phrase_wait_s"]), skip_s, wake_pause_s=pause)
             text, ok = choose(text, conf, g, cfg)
             if STATE["dropped"]: return
         else:

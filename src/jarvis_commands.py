@@ -256,17 +256,6 @@ class SystemBackend:
   lines=r.stdout.splitlines();branch=lines[0][3:] if lines and lines[0].startswith('## ') else 'неизвестна';changed=sum(not x.startswith('## ') for x in lines)
   return 'Проект '+Path(path).name+'. Ветка '+branch+'. '+('Незакоммиченных изменений нет.' if not changed else 'Изменённых или новых файлов: '+str(changed)+'.')
 
-def with_ack(fn,say,cfg,ack):
- """Run fn while a short acknowledgement plays; re-raise its exception afterwards."""
- box={}
- def run():
-  try:box['value']=fn()
-  except Exception as e:box['error']=e
- th=threading.Thread(target=run,name='quick-work',daemon=True);th.start();th.join(0.25)
- if th.is_alive():say(ack,cfg,role='ack');th.join()
- if 'error' in box:raise box['error']
- return box.get('value')
-
 class Controller:
  def __init__(self,base,backend=None,clock=time.monotonic,food_call=None,tools=None):
   self.base=Path(base);self.backend=backend or SystemBackend();self.clock=clock;self.pending_shutdown=None;self.notes_lock=threading.Lock();self.timers=PersistentTimers(self.base/'cache'/'timers.json')
@@ -348,14 +337,14 @@ class Controller:
    if cmd=='todoist_add':forward(a['task_text'],kind='todoist_add',extra_payload={'task_text':a['task_text']});return True
    if cmd==CODE.EXPLAIN_KIND:return self.explain_error(cfg,say,forward)
    if cmd==CODE.CONFIRM_KIND:forward(CODE.confirm_text(text),kind=CODE.CONFIRM_KIND,extra_payload=CODE.confirm_payload(a));return True
-   if cmd=='server_health':say(with_ack(lambda:self.tools.health_reply(a.get('target',''),cfg),say,cfg,'Проверяю, сэр.'),cfg);return True
+   if cmd=='server_health':say(self.tools.health_reply(a.get('target',''),cfg),cfg);return True
    if cmd=='project_tests':say(self.tools.start_tests(a.get('project',''),cfg,lambda run:self.announce(PROJECTS.tests_phrase(run))),cfg);return True
    if cmd=='nutrition_left':
-    try:say(with_ack(lambda:self.food(cfg).remaining(a.get('focus','protein')),say,cfg,'Смотрю дневник, сэр.'),cfg)
+    try:say(self.food(cfg).remaining(a.get('focus','protein')),cfg)
     except Exception as e:log.warning('local nutrition read failed (%s)',type(e).__name__);forward(text,kind='free')
     return True
    if cmd=='food_log' and cfg.get('food_local_enabled'):
-    res=with_ack(lambda:self.food(cfg).log_text(a['food_text']),say,cfg,'Записываю, сэр.')
+    res=self.food(cfg).log_text(a['food_text'])
     if res.status in ('logged','duplicate','failed'):say(res.spoken,cfg);return True
     log.info('food_log local fallback to server (%s)',res.reason or res.status)
    if cmd=='food_log':forward(a['food_text'],kind='food_log',extra_payload={'food_text':a['food_text'],'confirmation_policy':'chat_if_ambiguous'});return True

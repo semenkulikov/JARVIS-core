@@ -29,6 +29,8 @@
 | `outbox_watch_enabled` / `outbox_event_batch_s` | true / 0,02. Чтение `outbox` по событиям файлов |
 | `outbox_watch_rescan_s` / `outbox_poll_s` | 1 / 0,12. Повторный обход и запасной опрос |
 | `fast_ack` / `ack_*` | Короткие реплики, их можно синтезировать заранее. `ack_stop` не оставляйте пустым |
+| `ack_wake` / `ack_action` / `ack_lookup` / `ack_food` / `ack_server` | Мгновенные отклики: на голое имя, на действие, на проверку, на запись еды, на запрос к серверу. Списки, одна и та же фраза подряд не звучит. Все синтезируются при запуске |
+| `wake_ack_after_s` | 0,7. Пауза после голого «Джарвис», после которой звучит «Да, сэр?» |
 | `intent_fuzzy_threshold` / `intent_fuzzy_margin` | 88 / 7. Осторожный локальный разбор. Не для произвольных действий системы |
 | `template_precache` / `time_preload_minutes` | true / 3. Ограниченный набор целых фраз в кэше |
 | `cache_max_age_h` / `cache_stale_read_max_age_h` | 2,5 / 3. До какого возраста читать снимок с датой |
