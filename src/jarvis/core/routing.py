@@ -24,6 +24,8 @@ log = logging.getLogger("jarvis")
 READ_ONLY_ACTIONS = ("status", "cache_field", "time", "workout", "tasks", "capabilities")
 # Never taken from the grammar recognizer alone: writes, timers, sleep, shutdown and anything sent on.
 GRAMMAR_NEVER_ACTIONS = ("webhook", "jarvis_sleep", "timer", "open_project")
+# Safe to take from a confident grammar reading when the free transcript is a near miss of it («открой эту» -> «открой ютуб»).
+GRAMMAR_CLOSE_ACTIONS = READ_ONLY_ACTIONS + ("open",)
 GRAMMAR_NEVER_CMDS = ("food_log", "todoist_add", "note", "shutdown_prepare", "shutdown_confirm", "volume", "timer", "reminder")
 
 
@@ -153,6 +155,9 @@ class Router:
             return text, True
         if not followup and cfg.get("grammar_command_rescue", True) and QUICK.grammar_rescue(text, gtext, ga, float(cfg.get("grammar_rescue_min_ratio", 0.6))):
             log.info("grammar command wins: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
+        if confident and ga and ga.get("action") in GRAMMAR_CLOSE_ACTIONS and text and difflib.SequenceMatcher(
+                None, " ".join(norm_phrase(text)), " ".join(norm_phrase(gtext))).ratio() >= float(cfg.get("grammar_close_min_ratio", 0.75)):
+            log.info("confident grammar wins over a near miss: %r (free %r conf %.2f, grammar conf %.2f)", gtext, text, conf, gconf); return gtext, True
         if incomplete_fragment(text):
             return self.drop("fragment", text)
         safe_grammar = ga and ga.get("action") in READ_ONLY_ACTIONS + ("smalltalk", "stop")

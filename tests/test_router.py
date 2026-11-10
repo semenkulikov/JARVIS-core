@@ -12,3 +12,9 @@ def test_free_not_local_action(app,cfg,text):
 def test_low_confidence_cannot_act(app,cfg,text):assert app.c.router.choose(text,.1,'',cfg)[1] is False
 @pytest.mark.parametrize('text,confidence,echo,wanted',[('джарвис время',.99,'Сэр, слушаю.',True),('он сказал джарвис',.99,'Сэр.',False),('джарвис',.2,'Сэр.',False),('джарвис',1,'Я Джарвис.',False)])
 def test_priority(app,cfg,text,confidence,echo,wanted):assert PROACTIVE.priority_candidate(text,confidence,echo,cfg)==wanted
+def test_confident_grammar_wins_over_a_near_miss(app,cfg):
+ app.c.router.state.last_capture={'words':[{'word':'открой','conf':1.0},{'word':'эту','conf':1.0}],'grammar_conf':1.0}
+ assert app.c.router.choose('открой эту',1.0,'открой ютуб',cfg)==('открой ютуб',True)
+ assert app.c.router.choose('открой эту',1.0,'открой ютуб',cfg,followup=True)[0]!='открой ютуб'
+ app.c.router.state.last_capture={'words':[{'word':'открой','conf':1.0},{'word':'эту','conf':1.0}],'grammar_conf':0.8}
+ assert app.c.router.choose('открой эту',1.0,'открой ютуб',cfg)[0]!='открой ютуб'
