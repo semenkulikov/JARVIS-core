@@ -16,3 +16,14 @@ def test_stresses(text,expected):assert T.apply_dict(text,{})==expected
 def test_pipeline_no_model(text):
  result=T.normalize(text,{},accent=False)
  assert isinstance(result,str) and result
+
+
+@pytest.mark.parametrize('src,out', [('Тесты зелёные.', 'Тэсты зелёные.'), ('запуск тестов', 'запуск тэстов'),
+                                     ('тестирование', 'тестирование'), ('тест', 'тэст'), ('протесты', 'протесты')])
+def test_tests_pronounced_with_hard_t(src, out):
+    assert T.pronounce(src) == out
+
+
+def test_slushayu_stressed_on_first_syllable():
+    out = T.normalize('Слушаю, сэр. Тесты прошли.', {}, accent=False)
+    assert 'Сл+ушаю' in out and 'Т+эсты' in out

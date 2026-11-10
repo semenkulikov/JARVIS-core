@@ -18,7 +18,7 @@ DEFAULTS: Dict[str, object] = {
     "wake_ack_after_s": 0.7,
 }
 # Stress marks (Silero '+') for words the acks and sleep phrases use.
-STRESS = {w.replace("+", ""): w for w in ["выполн+яю", "слуш+аю", "сл+ушаюсь", "просн+ись", "разбуд+ить", "сп+ящий", "сп+ящем", "реж+име",
+STRESS = {w.replace("+", ""): w for w in ["выполн+яю", "сл+ушаю", "сл+ушаюсь", "просн+ись", "разбуд+ить", "сп+ящий", "сп+ящем", "реж+име",
                                            "зап+исываю", "смотр+ю", "провер+яю", "прик+ажете", "усл+угам", "ух+ожу", "полтор+а"]}
 ACK_KEYS = ("ack_action", "ack_lookup", "ack_food", "ack_server")
 
