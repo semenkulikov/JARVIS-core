@@ -29,6 +29,8 @@ ALL = re.compile(_LEAD + r"(?:" + _RETELL + r"\s+)?(?:мне\s+)?(?:все|вс�
                  _LEAD + _RETELL + r"\s+" + _TASK + r"\s+все$|" + _LEAD + r"список (?:всех )?" + _TASK + r"$")
 NOTION = re.compile(r"\b(?:ноушен\w*|ношен\w*|нош\w*н|notion)\b|" + _LEAD + r"(?:что|че)?\s*(?:по\s+)?" + _TASK +
                     r"\s+по\s+проектам$|" + _LEAD + r"что (?:еще )?(?:надо|нужно) (?:сделать )?по проектам$")
+CAPABILITIES = re.compile(r"\bчто (?:ты )?(?:умеешь|можешь)(?: делать)?\b|\bтвои (?:возможности|команды|функции)\b|"
+                          r"\bкакие (?:у тебя )?(?:есть )?(?:команды|функции|возможности)\b|\bсписок (?:твоих )?команд\b|^(?:помощь|справка)$")
 AWAKE = re.compile(_LEAD + r"(?:проснись|просыпайся|ты спишь|не спи)$")
 
 AWAKE_REPLY = "Я не сплю, сэр. Слушаю."
@@ -36,7 +38,8 @@ AWAKE_REPLY = "Я не сплю, сэр. Слушаю."
 # Extra grammar phrases (the Vosk grammar recognizer only knows what it is given).
 PHRASES = ["утренний брифинг", "брифинг", "утренняя сводка", "что ещё осталось", "чё ещё осталось", "что осталось",
            "что ещё надо сделать", "перескажи все задачи", "расскажи все задачи", "задачи все перескажи", "все задачи",
-           "перечисли все задачи", "задачи по проектам", "что по проектам в ноушене", "проснись"]
+           "перечисли все задачи", "задачи по проектам", "что по проектам в ноушене", "что ты умеешь", "что ты можешь",
+           "какие у тебя команды", "проснись"]
 
 SERVER_TEXT = {
     "briefing": "Утренний брифинг: коротко календарь, задачи, питание и проекты на сегодня.",
@@ -54,6 +57,8 @@ def intent(text: str) -> Optional[dict]:
         return None
     if AWAKE.search(t):
         return {"name": "awake", "action": "awake"}
+    if CAPABILITIES.search(t):
+        return {"name": "capabilities", "action": "capabilities"}
     if _MUTATE.search(t):
         return None
     for mode, rx in (("notion", NOTION), ("briefing", BRIEFING), ("all", ALL), ("left", LEFT)):

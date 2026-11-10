@@ -42,6 +42,7 @@ import jarvis_food as FOOD
 import jarvis_dialog as DIALOG
 import jarvis_vocab as VOCAB
 import jarvis_tasks as TASKS
+import jarvis_registry as REGISTRY
 CMDS = None
 def command_controller():
     global CMDS
@@ -819,6 +820,9 @@ def run_alias(al, text, cfg, trig, test):
         return
     if act == "awake":
         say(TASKS.AWAKE_REPLY, cfg); return
+    if act == "capabilities":
+        for line in REGISTRY.log_lines(): log.info("capabilities: %s", line)
+        say_reply(REGISTRY.capabilities_phrase(), cfg); return
     if act == "tasks":
         run_tasks(al["mode"], text, cfg, trig, test); return
     if act == "proactive_dnd":

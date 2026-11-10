@@ -22,6 +22,12 @@ def test_task_intents(text, mode):
     assert T.intent(text) == {"name": "tasks_" + mode, "action": "tasks", "mode": mode}
 
 
+@pytest.mark.parametrize("text", ["что ты умеешь", "то есть что ты умеешь", "что ты можешь", "какие у тебя есть команды",
+                                  "твои возможности", "список команд", "помощь"])
+def test_capabilities_intent(text):
+    assert T.intent(text)["action"] == "capabilities"
+
+
 @pytest.mark.parametrize("text", ["проснись", "джарвис проснись", "есть проснись", "просыпайся"])
 def test_awake_intent(text):
     assert T.intent(text)["action"] == "awake"

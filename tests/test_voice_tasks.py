@@ -40,13 +40,15 @@ def test_run_tasks_missing_cache_file(listener, cfg, monkeypatch, tmp_path):
     assert posted == [T.SERVER_TEXT["briefing"]]
 
 
-def test_awake_replies_locally(listener, cfg, monkeypatch):
+def test_awake_and_capabilities_reply_locally(listener, cfg, monkeypatch):
     said = []
     monkeypatch.setattr(listener, "say", lambda t, c, **k: said.append(t) or True)
+    monkeypatch.setattr(listener, "say_reply", lambda t, c, **k: said.append(t))
     listener.run_alias(listener.match_alias("проснись", cfg), "проснись", cfg, "wake_word", False)
-    assert said == [T.AWAKE_REPLY]
+    listener.run_alias(listener.match_alias("что ты умеешь", cfg), "что ты умеешь", cfg, "wake_word", False)
+    assert said[0] == T.AWAKE_REPLY and said[1].startswith("Умею вот что, сэр:")
 
 
 def test_grammar_has_new_phrases(listener, cfg):
     g = listener.grammar_phrases(cfg)
-    assert "утренний брифинг" in g and "что ещё осталось" in g and "выруби экран" in g
+    assert "утренний брифинг" in g and "что ещё осталось" in g and "выруби экран" in g and "что ты умеешь" in g
