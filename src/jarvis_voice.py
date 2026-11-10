@@ -1044,6 +1044,16 @@ def drop(reason, text):
     log.info("dropped silently (%s): %r", reason, text)
     return "", False
 
+READ_ONLY_ACTIONS = ("status", "cache_field", "time", "workout", "tasks", "capabilities")
+
+def followup_rescue(text, gtext, cfg):
+    """Low-confidence follow-up: accept the grammar reading of a read-only question when the free text agrees on a content word."""
+    ga = match_alias(gtext, cfg) if gtext else None
+    if not (text and ga and ga.get("action") in READ_ONLY_ACTIONS): return ""
+    free = [t for t in _norm_phrase(text) if len(t) >= 4]
+    gram = [t for t in _norm_phrase(gtext) if len(t) >= 4]
+    return gtext if any(_tok_match(a, b) for a in free for b in gram) else ""
+
 def choose(text, conf, gtext, cfg, followup=False):
     """pick final phrase + whether it is understood"""
     STATE["dropped"] = False
@@ -1052,7 +1062,7 @@ def choose(text, conf, gtext, cfg, followup=False):
     al = match_alias(text, cfg) if text else None
     ga = match_alias(gtext, cfg) if gtext else None
     if al:
-        if al.get("action") in ("status","cache_field","time","workout") and conf<float(cfg.get("min_conf",0.55)) and not (gtext and ga):
+        if al.get("action") in READ_ONLY_ACTIONS and conf<float(cfg.get("min_conf",0.55)) and not (gtext and ga):
             log.info("local intent rejected: low ASR confidence %.2f",conf); return text,False
         if al.get("action") in ("quick2","proactive_dnd","jarvis_sleep") and conf<float(cfg.get("min_conf",0.55)):
             log.info("quick command rejected: low ASR confidence %.2f",conf); return text, False
@@ -1066,7 +1076,7 @@ def choose(text, conf, gtext, cfg, followup=False):
         log.info("grammar command wins: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
     if incomplete_fragment(text):
         return drop("fragment", text)
-    safe_grammar = ga and ga.get("action") in ("smalltalk", "status", "cache_field", "time", "workout", "stop")
+    safe_grammar = ga and ga.get("action") in READ_ONLY_ACTIONS + ("smalltalk", "stop")
     if gtext and safe_grammar and not followup and (not text or conf < 0.8):
         log.info("grammar hint wins: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
     if not text: return "", False
@@ -1191,6 +1201,9 @@ def handle(trig, cap, text, test, skip_s, trace=None):
             cap = Capture(); STATE["capture"] = cap; STATE["followup_guard"] = False
             text, conf, grammar = capture_phrase(cap, cfg, window, max_s=window + float(cfg["phrase_max_s"]))
             if interrupt.is_set(): break
+            if text and conf < float(cfg.get("followup_min_conf", 0.65)):
+                rescued = followup_rescue(text, grammar, cfg)
+                if rescued: log.info("follow-up grammar wins: %r (free %r conf %.2f)", rescued, text, conf); text, conf = rescued, 1.0
             if not text or conf < float(cfg.get("followup_min_conf", 0.65)):
                 STATE["trace"].finish("silence")
                 log.info("follow-up close: silence/low confidence text=%r conf=%.2f", text, conf); break
