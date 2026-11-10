@@ -274,3 +274,19 @@ def test_sleep_wake_needs_higher_conf(listener, cfg, monkeypatch):
     monkeypatch.setattr(listener, "free_words", lambda *a: [{"word": "джарвис", "conf": 0.75}, {"word": "проснись", "conf": 0.99}])
     assert listener.verify_wake(None, [], 0, 10, cfg) is True
     assert listener.verify_wake(None, [], 0, 10, cfg, need=("проснись",), min_conf=0.85) is False
+
+
+def test_grammar_settles_garbled_safe_command(listener, cfg):
+    assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg) == ("что в гите проекта пример", True)
+
+
+@pytest.mark.parametrize("text,gtext", [("почему небо голубое", "помедленнее"),
+                                        ("добав двести грамм торга", "добавь двести грамм творога")])
+def test_grammar_never_forces_free_questions_or_writes(listener, cfg, text, gtext):
+    assert listener.choose(text, 0.9, gtext, cfg)[0] != gtext
+
+
+def test_grammar_rescue_not_in_followup_or_when_disabled(listener, cfg):
+    assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg, followup=True)[0] != "что в гите проекта пример"
+    cfg["grammar_command_rescue"] = False
+    assert listener.choose("что пить проекта пример", 0.9, "что в гите проекта пример", cfg)[0] != "что в гите проекта пример"

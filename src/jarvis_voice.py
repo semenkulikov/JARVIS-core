@@ -1029,6 +1029,8 @@ def choose(text, conf, gtext, cfg, followup=False):
         if al.get("action") == "smalltalk" and not exact and conf < 0.8 and ga and ga.get("action") == "smalltalk":
             log.info("grammar smalltalk wins over fuzzy guess: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
         return text, True
+    if not followup and cfg.get("grammar_command_rescue", True) and QUICK.grammar_rescue(text, gtext, ga, float(cfg.get("grammar_rescue_min_ratio", 0.6))):
+        log.info("grammar command wins: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
     if incomplete_fragment(text):
         return drop("fragment", text)
     safe_grammar = ga and ga.get("action") in ("smalltalk", "status", "cache_field", "time", "workout", "stop")

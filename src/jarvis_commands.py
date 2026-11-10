@@ -1,7 +1,7 @@
 """Stage 2: pure parsing, persistent local timers and explicitly requested desktop actions.
 No actions happen on import. Every OS-facing operation lives behind SystemBackend for silent tests.
 """
-import base64,ctypes,datetime,json,logging,math,os,re,shutil,subprocess,threading,time,uuid
+import base64,ctypes,datetime,difflib,json,logging,math,os,re,shutil,subprocess,threading,time,uuid
 from pathlib import Path
 import jarvis_paths as PATHS
 import jarvis_codemode as CODE
@@ -89,6 +89,14 @@ def match(text,cfg=None):
  if m:return a('git',project=m[2] or '',which='last' if m[1]=='последний коммит' else 'status')
  if re.match(r'^(?:добавь|запиши|внеси)\b',t) and re.search(r'грамм|килограмм|\bкг\b|творог|молок|куриц|яйц|завтрак|обед|ужин|перекус|в дневник питания|в еду',t):return a('food_log',food_text=text.strip())
  return None
+
+# Commands without lasting side effects that the grammar recognizer may settle when the free
+# transcript is a garbled version of the same phrase (see scripts/eval_asr.py).
+GRAMMAR_SAFE=frozenset({'repeat','mute','screenshot','disk','clipboard_read','clipboard_translate','clipboard_summary','explain_error','confirm_in_chat','server_health','project_tests','nutrition_left','git','timer_cancel','shutdown_cancel'})
+def grammar_rescue(text,gtext,alias,min_ratio=.6):
+ """True when gtext names a safe command and the free transcript is close to it."""
+ if not (text and gtext and alias and alias.get('action')=='quick2' and alias.get('cmd') in GRAMMAR_SAFE):return False
+ return difflib.SequenceMatcher(None,norm(text),norm(gtext)).ratio()>=min_ratio
 
 class PersistentTimers:
  def __init__(self,path,clock=time.time):
