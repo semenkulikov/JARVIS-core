@@ -153,7 +153,7 @@ def test_run_sleep_alias_starts_sleep(listener, cfg, said, monkeypatch, tmp_path
     al = listener.match_alias("спящий режим на тридцать минут", cfg)
     listener.run_alias(al, "спящий режим на тридцать минут", cfg, "wake_word", False)
     assert st.active() and 1790 < st.remaining() <= 1800
-    assert said and "спящий режим" in said[0] and listener.STATE["followup_eligible"] is False
+    assert said and "спящий режим" in said[0] and listener.STATE.followup_eligible is False
 
 
 def test_run_sleep_alias_test_mode_no_state(listener, cfg, said, monkeypatch, tmp_path):
@@ -164,35 +164,35 @@ def test_run_sleep_alias_test_mode_no_state(listener, cfg, said, monkeypatch, tm
 
 
 def test_low_conf_sleep_rejected(listener, cfg):
-    listener.STATE["last_capture"] = None
+    listener.STATE.last_capture = None
     assert listener.choose("засни на час", 0.4, "", cfg) == ("засни на час", False)
 
 
 @pytest.mark.parametrize("text,conf,followup,hit_max", GARBAGE)
 def test_choose_drops_garbage_silently(listener, cfg, text, conf, followup, hit_max):
-    listener.STATE["last_capture"] = {"words": words(text, conf), "hit_max": hit_max}
+    listener.STATE.last_capture = {"words": words(text, conf), "hit_max": hit_max}
     assert listener.choose(text, conf, "", cfg, followup=followup) == ("", False)
-    assert listener.STATE["dropped"] is True
+    assert listener.STATE.dropped is True
 
 
 def test_choose_continuous_speech_dropped(listener, cfg):
-    listener.STATE["last_capture"] = {"words": words("какая погода завтра", 0.95), "hit_max": True}
+    listener.STATE.last_capture = {"words": words("какая погода завтра", 0.95), "hit_max": True}
     assert listener.choose("какая погода завтра", 0.95, "", cfg) == ("", False)
 
 
 def test_choose_clear_free_phrase_passes(listener, cfg):
-    listener.STATE["last_capture"] = {"words": words("какая погода завтра", 0.95), "hit_max": False}
+    listener.STATE.last_capture = {"words": words("какая погода завтра", 0.95), "hit_max": False}
     assert listener.choose("какая погода завтра", 0.95, "", cfg) == ("какая погода завтра", True)
 
 
 def test_followup_ignores_grammar_guess(listener, cfg):
-    listener.STATE["last_capture"] = {"words": words("в вашем", 0.85), "hit_max": False}
+    listener.STATE.last_capture = {"words": words("в вашем", 0.85), "hit_max": False}
     assert listener.choose("в вашем", 0.85, "статус по задачам", cfg, followup=True)[1] is False
 
 
 def test_garbled_wake_turn_says_nothing(listener, cfg, said, monkeypatch):
     def fake_capture(cap, c, nospeech, skip_s=0.0, max_s=None):
-        listener.STATE["last_capture"] = {"words": words("то есть", 0.65), "hit_max": False}
+        listener.STATE.last_capture = {"words": words("то есть", 0.65), "hit_max": False}
         return "то есть", 0.65, ""
     monkeypatch.setattr(listener, "capture_phrase", fake_capture)
     monkeypatch.setattr(listener, "free_phrase", lambda *a, **k: pytest.fail("garbage must not reach the server"))
@@ -204,7 +204,7 @@ def test_not_understood_phrase_never_spoken(listener, cfg, said, monkeypatch):
     seq = iter([("", 0.0, ""), ("знать", 0.48, "")])
     def fake_capture(cap, c, nospeech, skip_s=0.0, max_s=None):
         t, cf, g = next(seq)
-        listener.STATE["last_capture"] = {"words": words(t, cf) if t else [], "hit_max": False}
+        listener.STATE.last_capture = {"words": words(t, cf) if t else [], "hit_max": False}
         return t, cf, g
     monkeypatch.setattr(listener, "capture_phrase", fake_capture)
     listener._handle_turn("wake_word", listener.Capture(), None, False, 0.0)
@@ -233,7 +233,7 @@ def outbox(listener, cfg, said, monkeypatch, tmp_path):
     monkeypatch.setattr(listener, "OUTBOX", str(tmp_path))
     monkeypatch.setattr(listener, "DONE", str(tmp_path))
     monkeypatch.setattr(listener, "OUTBOX_SIGNAL", _Sig())
-    listener.interrupt.clear(); listener.SERVER["down_since"] = None
+    listener.interrupt.clear(); listener.LEDGER.down_since = None
     cfg.update(reply_timeout_s=3.0, server_notice_s=5.0, server_down_wait_s=5.0)
     return tmp_path
 
@@ -316,9 +316,9 @@ def test_sleep_alias_announces_how_to_wake(listener, cfg, said, monkeypatch, tmp
 
 
 def test_sleep_hint_rate_limited(listener, cfg, monkeypatch):
-    listener.STATE["sleep_hint_at"] = 0
+    listener.STATE.sleep_hint_at = 0
     assert listener.sleep_hint_due(cfg)
-    listener.STATE["sleep_hint_at"] = listener.time.time()
+    listener.STATE.sleep_hint_at = listener.time.time()
     assert not listener.sleep_hint_due(cfg)
     assert not listener.sleep_hint_due(dict(cfg, sleep_hint_enabled=False, sleep_hint_interval_s=0))
 

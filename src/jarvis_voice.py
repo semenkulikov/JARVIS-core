@@ -41,6 +41,7 @@ import jarvis_registry as REGISTRY
 from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_SKIP_S, strip_wake, strip_wake_words,
                               heard_after, phrase_finished)
 from jarvis.core import status as STATUS
+from jarvis.core.state import ListenerFSM, ListenerState, Mode, RequestLedger, Signals
 from jarvis.app import settings as SETTINGS
 from jarvis.app.settings import DEFAULTS
 from jarvis.core.phrases import Picker, all_phrases, smalltalk_reply
@@ -57,8 +58,7 @@ import jarvis_speed as SPEED
 OUTBOX_SIGNAL = SPEED.OutboxSignal(OUTBOX)
 
 def perf(event, **meta):
-    tr = STATE.get("trace")
-    if tr is not None: tr.mark(event, **meta)
+    STATE.perf(event, **meta)
 
 
 CONFIG = SETTINGS.config_store(BASE)
@@ -70,11 +70,11 @@ SR = 16000
 CHUNK = 1280  # 80 ms, openWakeWord frame
 audio_q = queue.Queue(maxsize=1000)
 levels = {"max": 0.0, "sum": 0.0, "n": 0}
-busy = threading.Event()        # a handler is running
-speaking = threading.Event()
-interrupt = threading.Event()   # wake word during busy -> stop speech/handler
-STATE = {"capture": None, "model": None, "speaking_text": "", "rid": None, "stop_pending": False, "stop_ack_active": False, "followup_guard": False, "followup_eligible": False, "last_spoken": "", "last_spoken_end": 0.0, "speech_serial": 0, "trace": None, "last_reply": "", "last_reply_private": False, "reply_parts": [], "last_input_conf": 1.0, "last_input_end": None, "last_capture": None, "dropped": False}
-CANCELLED = {}  # rid -> time
+SIGNALS = Signals()
+busy, speaking, interrupt = SIGNALS.busy, SIGNALS.speaking, SIGNALS.interrupt
+FSM = ListenerFSM()
+STATE = ListenerState()
+LEDGER = RequestLedger()
 PLAYER = AUDIO.Player(sd)
 SLEEP_STATE = None
 WAKE_FILE = os.path.join(BASE, SLEEP.WAKE_FILE)
@@ -282,7 +282,8 @@ def say(text, cfg, role="reply", private=False):
             except Exception as e: err.append(e); log.warning("tts chunk failed: %s", e)
         enqueue(None)
     threading.Thread(target=prod, daemon=True).start()
-    speaking.set(); played = 0; t0 = time.time(); STATE["speaking_text"] = text.lower().replace("ё", "е")
+    speaking.set(); played = 0; t0 = time.time(); STATE.speaking_text = text.lower().replace("ё", "е")
+    prev_mode = FSM.mode; FSM.to(Mode.SPEAKING, role)
     try:
         while True:
             if interrupt.is_set(): break
@@ -302,17 +303,17 @@ def say(text, cfg, role="reply", private=False):
             try: beep()
             except Exception: pass
             return False
-        STATE["last_spoken"] = text; STATE["last_spoken_end"] = time.monotonic()
-        STATE["speech_serial"] += 1
+        STATE.last_spoken = text; STATE.last_spoken_end = time.monotonic()
+        STATE.speech_serial += 1
         if role == "reply":
-            STATE.setdefault("reply_parts", []).append(text)
-            STATE["last_reply"] = " ".join(STATE["reply_parts"])
-            STATE["last_reply_private"] = private or STATE.get("last_reply_private",False) if len(STATE["reply_parts"])>1 else bool(private)
+            STATE.reply_parts.append(text)
+            STATE.last_reply = " ".join(STATE.reply_parts)
+            STATE.last_reply_private = private or STATE.last_reply_private if len(STATE.reply_parts)>1 else bool(private)
         log.info("SPOKE(%d chunks): %s", played, "[private clipboard text]" if private else text[:200]); return True
     except Exception as e:
         log.warning("TTS/playback failed (%s)", e); return False
     finally:
-        cancelled.set(); speaking.clear(); STATE["speaking_text"] = ""
+        cancelled.set(); speaking.clear(); STATE.speaking_text = ""; FSM.restore(prev_mode)
 
 def beep():
     t = np.linspace(0, 0.12, int(SR * 0.12), False)
@@ -365,7 +366,7 @@ def post(cfg, payload):
 def post_retry(cfg, payload, total=30, independent=False):
     t0 = time.time(); err = None
     while time.time() - t0 < total:
-        if not independent and (interrupt.is_set() or payload.get("request_id") in CANCELLED): return None
+        if not independent and (interrupt.is_set() or LEDGER.is_cancelled(payload.get("request_id"))): return None
         try: return post(cfg, payload)
         except Exception as e:
             err = e; log.warning("webhook attempt failed: %s code=%s", type(e).__name__, getattr(e, "code", None))
@@ -430,16 +431,12 @@ def log_outbox(p, rid, label, txt, t0):
 
 SERVER_DOWN_PHRASE = "Сервер не отвечает, сэр. Локальные команды работают."
 SERVER_SLOW_PHRASE = "Сервер пока молчит, сэр. Подожду ещё немного."
-SERVER = {"down_since": None}
 
-def server_recently_down(cfg, now=None):
-    t = SERVER.get("down_since")
-    return t is not None and ((now or time.time()) - t) < float(cfg.get("server_down_ttl_s", 1800))
 
 def wait_replies(rid, cfg, listener_ack="", kind="free"):
-    t0 = time.time(); n = 1; fillers = 0; STATE["rid"] = rid
+    t0 = time.time(); n = 1; fillers = 0; STATE.rid = rid
     real_data_seen = False; server_seen = False; slow_noticed = False
-    was_down = server_recently_down(cfg, t0)
+    was_down = LEDGER.recently_down(cfg, t0)
     def speak_part(txt):
         nonlocal real_data_seen
         if GATE.is_silent_reply(txt):
@@ -454,11 +451,11 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
     while time.time() - t0 < cfg["reply_timeout_s"]:
         OUTBOX_SIGNAL.clear()
         if not server_seen and (os.path.exists(final) or os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt"))):
-            server_seen = True; SERVER["down_since"] = None
+            server_seen = True; LEDGER.down_since = None
         el = time.time() - t0
         if not server_seen and was_down and el > float(cfg.get("server_down_wait_s", 45)):
             # Server already failed recently: do not hang for the full timeout again.
-            CANCELLED[rid] = time.time(); SERVER["down_since"] = time.time()
+            LEDGER.cancel(rid); LEDGER.down_since = time.time()
             log.warning("server still silent rid=%s after %.0fs (down since earlier) -> local fallback", rid, el)
             say(SERVER_DOWN_PHRASE, cfg); return False
         if not server_seen and not was_down and not slow_noticed and el > float(cfg.get("server_notice_s", 90)):
@@ -469,7 +466,7 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
                 and not os.path.exists(final) and not os.path.exists(os.path.join(OUTBOX, f"{rid}.{n}.txt")):
             fillers += 1; say("Ответ ещё готовится, сэр.", cfg)
         if interrupt.is_set():
-            CANCELLED[rid] = time.time(); log.info("reply wait for %s abandoned (interrupted), rid cancelled", rid); return False
+            LEDGER.cancel(rid); log.info("reply wait for %s abandoned (interrupted), rid cancelled", rid); return False
         part = os.path.join(OUTBOX, f"{rid}.{n}.txt")
         if os.path.exists(part) or os.path.exists(final): perf("first_server_file")
         if os.path.exists(part) and ready_part(part):
@@ -485,7 +482,7 @@ def wait_replies(rid, cfg, listener_ack="", kind="free"):
         OUTBOX_SIGNAL.wait(cfg)
     log.warning("reply timeout for %s", rid)
     if not server_seen and not real_data_seen:
-        SERVER["down_since"] = time.time(); CANCELLED[rid] = time.time()
+        LEDGER.down_since = time.time(); LEDGER.cancel(rid)
         log.warning("server marked unresponsive (no outbox file for rid=%s)", rid)
         say(SERVER_DOWN_PHRASE, cfg); return False
     say("Ответ не пришёл, сэр. Попробуйте ещё раз позже.", cfg)
@@ -579,7 +576,7 @@ def run_alias(al, text, cfg, trig, test):
     ack = lambda: say(reply or pick(cfg, "ack_command"), cfg, role="ack")
     log.info("ALIAS %s (%s) <- %r", al.get("name", "?"), act, text)
     if act == "jarvis_sleep":
-        STATE["followup_eligible"] = False
+        STATE.followup_eligible = False
         secs = int(al["seconds"])
         if test: log.info("TEST sleep %ss: no persistent change", secs)
         else: sleep_state().start(secs)
@@ -602,10 +599,10 @@ def run_alias(al, text, cfg, trig, test):
         # After an instant ack a server fallback must not add a second one.
         fwd_ack = {"ack": "", "listener_ack": spoken} if spoken else {}
         run = lambda speak: command_controller().execute(al,text,cfg,speak,lambda value,**kw:free_phrase(value,cfg,trig,test,**{**fwd_ack, **kw}),
-                last_reply=STATE.get("last_reply", ""),last_private=STATE.get("last_reply_private",False),trigger=trig,
-                confidence=STATE.get("last_input_conf",1),test=test)
+                last_reply=STATE.last_reply,last_private=STATE.last_reply_private,trigger=trig,
+                confidence=STATE.last_input_conf,test=test)
         keep = DIALOG.ack_then(say, cfg, spoken, run)
-        if not keep: STATE["followup_eligible"] = False
+        if not keep: STATE.followup_eligible = False
         return
     if act in ("status", "cache_field"):
         field = al.get("field") if act == "cache_field" else None
@@ -699,8 +696,8 @@ def run_alias(al, text, cfg, trig, test):
         say(reply, cfg)
 
 def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, extra_payload=None):
-    trace = STATE.get("trace")
-    rid = trace.rid if trace is not None else str(uuid.uuid4()); res = []; STATE["rid"] = rid
+    trace = STATE.trace
+    rid = trace.rid if trace is not None else str(uuid.uuid4()); res = []; STATE.rid = rid
     chosen_ack = ack if ack is not None else (pick(cfg, "ack_server") or cfg.get("fast_ack", "Сейчас, сэр."))
     acknowledged = chosen_ack if listener_ack is None else listener_ack
     kind = kind or ("status" if natural_status_alias(text) else "free")
@@ -710,7 +707,7 @@ def free_phrase(text, cfg, trig, test, ack=None, listener_ack=None, kind=None, e
     say(chosen_ack, cfg, role="ack")
     while th.is_alive() and not interrupt.is_set(): th.join(0.1)
     if interrupt.is_set():
-        CANCELLED[rid] = time.time(); log.info("webhook request abandoned rid=%s", rid); return
+        LEDGER.cancel(rid); log.info("webhook request abandoned rid=%s", rid); return
     if res and res[0]: wait_replies(rid, cfg, listener_ack=acknowledged, kind=kind)
     else: say("Не получилось отправить запрос, сэр.", cfg)
 
@@ -751,12 +748,12 @@ def grammar_phrases(cfg):
 def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=None):
     """returns (text, avg_conf, grammar_text); wake_pause_s ends a bare «Джарвис» sooner."""
     from vosk import KaldiRecognizer
-    rec = KaldiRecognizer(STATE["model"], SR); rec.SetWords(True)
+    rec = KaldiRecognizer(STATE.model, SR); rec.SetWords(True)
     try: rec.SetPartialWords(True)
     except Exception: pass
     grec = None
     if cfg.get("grammar_hint", True):
-        try: grec = KaldiRecognizer(STATE["model"], SR, json.dumps(grammar_phrases(cfg), ensure_ascii=False)); grec.SetWords(True)
+        try: grec = KaldiRecognizer(STATE.model, SR, json.dumps(grammar_phrases(cfg), ensure_ascii=False)); grec.SetWords(True)
         except Exception as e: log.info("grammar recognizer failed: %s", e)
     agc = AGC(cfg)
     max_s = max_s or float(cfg["phrase_max_s"]); sil = float(cfg["phrase_silence_s"])
@@ -790,7 +787,7 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=No
         words += json.loads(rec.FinalResult()).get("result", [])
         if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
     finally:
-        if STATE["capture"] is cap: STATE["capture"] = None
+        if STATE.capture is cap: STATE.capture = None
     kept = [w for w in words if w.get("end", 99) > skip_s]
     kept = strip_wake_words(kept)
     text = " ".join(w["word"] for w in kept).strip()
@@ -803,18 +800,18 @@ def capture_phrase(cap, cfg, nospeech_s, skip_s=0.0, max_s=None, wake_pause_s=No
     if kept:
         endpoint_lag = max(0.0, time.time() - (cap.audio_start + kept[-1].get("end", 0)))
         log.info("capture endpoint lag_s=%.3f silence_s=%.2f (audio timestamp estimate)", endpoint_lag, sil)
-    tr = STATE.get("trace")
+    tr = STATE.trace
     if tr is not None and kept:
         tr.mark("speech_end", at=time.perf_counter() - endpoint_lag, estimated=True)
-    STATE["last_input_conf"] = conf
-    STATE["last_capture"] = {"words": kept, "hit_max": cut and bool(kept)}
-    STATE["last_input_end"] = time.monotonic() - endpoint_lag if kept else None
+    STATE.last_input_conf = conf
+    STATE.last_capture = {"words": kept, "hit_max": cut and bool(kept)}
+    STATE.last_input_end = time.monotonic() - endpoint_lag if kept else None
     perf("recognized", confidence=round(conf,3))
     return text, conf, (gtext if gconf >= 0.75 else "")
 
 def drop(reason, text):
     """Garbled / background speech: log it and stay silent."""
-    STATE["dropped"] = True
+    STATE.dropped = True
     log.info("dropped silently (%s): %r", reason, text)
     return "", False
 
@@ -830,7 +827,7 @@ def followup_rescue(text, gtext, cfg):
 
 def choose(text, conf, gtext, cfg, followup=False):
     """pick final phrase + whether it is understood"""
-    STATE["dropped"] = False
+    STATE.dropped = False
     if text and filler_only(text) and not (CMDS is not None and getattr(CMDS, "pending_shutdown", None)):
         log.info("filler-only/echo transcript ignored: %r", text); return "", False
     al = match_alias(text, cfg) if text else None
@@ -854,7 +851,7 @@ def choose(text, conf, gtext, cfg, followup=False):
     if gtext and safe_grammar and not followup and (not text or conf < 0.8):
         log.info("grammar hint wins: %r (free %r conf %.2f)", gtext, text, conf); return gtext, True
     if not text: return "", False
-    meta = STATE.get("last_capture") or {}
+    meta = STATE.last_capture or {}
     words = meta.get("words") or [{"word": w, "conf": conf} for w in _norm_phrase(text)]
     reason = GATE.reject_reason(words, cfg, followup=followup, hit_max=bool(meta.get("hit_max")))
     if reason: return drop(reason, text)
@@ -866,7 +863,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
         log.info("TRIGGER %s%s", trig, " (test)" if test else "")
         if trig == "stop_ack":
             perf("route", route="stop_ack")
-            STATE["stop_ack_active"] = True
+            STATE.stop_ack_active = True
             ack = pick(cfg, "ack_stop"); log.info("stop ack begin: %s interrupt=%s", ack, interrupt.is_set())
             result = say(ack, cfg, role="stop_ack")
             log.info("stop ack complete: played=%s", result); return
@@ -875,7 +872,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
             perf("route",route="proactive_"+str(item.get("kind","file")))
             try:
                 if item.get("expires") is None or time.time()<item["expires"]:
-                    STATE["followup_eligible"]=True
+                    STATE.followup_eligible=True
                     say(item.get("text",""),cfg)
             finally:
                 if not test: proactive_manager().complete(item,interrupt.is_set())
@@ -883,7 +880,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
         if trig == "sleep_end":
             perf("route", route="sleep_end"); say(SLEEP_END_PHRASE, cfg); return
         if trig == "sleep_hint":
-            perf("route", route="sleep_hint"); STATE["followup_eligible"] = False
+            perf("route", route="sleep_hint"); STATE.followup_eligible = False
             say(SLEEP.hint_phrase(sleep_state().remaining()), cfg); return
         if trig == "timer_fire":
             perf("route", route="timer_fire")
@@ -897,18 +894,20 @@ def _handle_turn(trig, cap, text, test, skip_s):
         if text is None:
             pause = float(cfg.get("wake_ack_after_s", DIALOG.DEFAULTS["wake_ack_after_s"])) if trig == "wake_word" else None
             text, conf, g = ("", 0, "") if cap is None else capture_phrase(cap, cfg, float(cfg["phrase_wait_s"]), skip_s, wake_pause_s=pause)
+            FSM.to(Mode.PROCESSING, "captured")
             text, ok = choose(text, conf, g, cfg)
-            if STATE["dropped"]: return
+            if STATE.dropped: return
         else:
             text = strip_wake(_norm_phrase(text))
             if trig != "followup":
-                STATE["last_input_conf"] = 1.0
-                STATE["last_input_end"] = None
+                STATE.last_input_conf = 1.0
+                STATE.last_input_end = None
         if not text:
             say(pick(cfg, "ack_wake"), cfg, role="wake")
             if interrupt.is_set(): return
-            cap2 = Capture(); STATE["capture"] = cap2
+            cap2 = Capture(); STATE.capture = cap2; FSM.to(Mode.LISTENING, "after wake ack")
             text, conf, g = capture_phrase(cap2, cfg, float(cfg["followup_listen_s"]))
+            FSM.to(Mode.PROCESSING, "captured")
             raw2 = text
             text, ok = choose(text, conf, g, cfg)
             if not text and (not g or filler_only(raw2)):
@@ -918,16 +917,16 @@ def _handle_turn(trig, cap, text, test, skip_s):
             # Never "sorry, I did not catch that": unclear input is dropped silently.
             log.info("not understood -> silent: %r", text); return
         perf("recognized")
-        confirmation = command_controller().confirmation(text,trig,STATE.get("last_input_conf",0),heard_at=STATE.get("last_input_end"))
+        confirmation = command_controller().confirmation(text,trig,STATE.last_input_conf,heard_at=STATE.last_input_end)
         al = ({"name":"shutdown_confirmation", "action":"quick2", "cmd":"shutdown_confirm", **confirmation} if confirmation is not None else match_alias(text,cfg))
         perf("route", route=(al.get("name", "local") if al else "webhook"))
-        STATE["followup_eligible"] = not (al and al.get("action") == "stop")
+        STATE.followup_eligible = not (al and al.get("action") == "stop")
         if al: run_alias(al, text, cfg, trig, test)
         else: free_phrase(text, cfg, trig, test)
     except Exception as e:
         log.exception("handle error: %s", e)
     finally:
-        STATE["capture"] = None; STATE["stop_ack_active"] = False
+        STATE.capture = None; STATE.stop_ack_active = False
 
 
 
@@ -935,58 +934,59 @@ def handle(trig, cap, text, test, skip_s, trace=None):
     """Own the entire short conversation; only silence/stop/limit returns to wake mode."""
     try:
         turns = 0
-        STATE["trace"] = trace or SPEED.Trace(trig)
-        STATE["trace"].meta["test"] = bool(test)
+        FSM.to(Mode.LISTENING if (text is None and cap is not None) else Mode.PROCESSING, trig)
+        STATE.trace = trace or SPEED.Trace(trig)
+        STATE.trace.meta["test"] = bool(test)
         while True:
-            STATE["reply_parts"] = []
-            STATE["followup_eligible"] = False
-            serial = STATE["speech_serial"]
+            STATE.reply_parts = []
+            STATE.followup_eligible = False
+            serial = STATE.speech_serial
             _handle_turn(trig, cap, text, test, skip_s)
-            STATE["trace"].finish("interrupted" if interrupt.is_set() else "done")
+            STATE.trace.finish("interrupted" if interrupt.is_set() else "done")
             cfg = load_cfg(); fs = FollowupSettings.from_cfg(cfg)
             if interrupt.is_set() or not fs.enabled: break
-            if not STATE["followup_eligible"] or STATE["speech_serial"] == serial: break
+            if not STATE.followup_eligible or STATE.speech_serial == serial: break
             if turns >= fs.max_turns:
                 log.info("follow-up turn limit -> wake mode"); break
-            spoken = STATE["last_spoken"]
+            spoken = STATE.last_spoken
             window = fs.window_for(spoken)
             if CMDS is not None and CMDS.pending_shutdown:
                 window = max(0.0,CMDS.pending_shutdown["expires"]-CMDS.clock())
             if window <= 0: break
             guard = fs.echo_guard_s
-            STATE["followup_guard"] = True
+            STATE.followup_guard = True
             # Based on actual playback end, not synthesis start or webhook acknowledgement.
-            delay = max(0.0, STATE["last_spoken_end"] + guard - time.monotonic())
+            delay = max(0.0, STATE.last_spoken_end + guard - time.monotonic())
             if interrupt.wait(delay): break
             log.info("follow-up open window_s=%.1f guard_s=%.2f question=%s turn=%d", window, guard, spoken.rstrip().endswith("?"), turns+1)
-            STATE["trace"] = SPEED.Trace("followup")
-            STATE["trace"].meta["test"] = bool(test)
-            cap = Capture(); STATE["capture"] = cap; STATE["followup_guard"] = False
+            STATE.trace = SPEED.Trace("followup")
+            STATE.trace.meta["test"] = bool(test)
+            cap = Capture(); STATE.capture = cap; STATE.followup_guard = False; FSM.to(Mode.FOLLOWUP, "window")
             text, conf, grammar = capture_phrase(cap, cfg, window, max_s=window + float(cfg["phrase_max_s"]))
             if interrupt.is_set(): break
             if text and conf < fs.min_conf:
                 rescued = followup_rescue(text, grammar, cfg)
                 if rescued: log.info("follow-up grammar wins: %r (free %r conf %.2f)", rescued, text, conf); text, conf = rescued, 1.0
             if not text or conf < fs.min_conf:
-                STATE["trace"].finish("silence")
+                STATE.trace.finish("silence")
                 log.info("follow-up close: silence/low confidence text=%r conf=%.2f", text, conf); break
             if followup_echo(text, spoken):
-                STATE["trace"].finish("echo")
+                STATE.trace.finish("echo")
                 log.info("follow-up close: likely speaker echo %r", text); break
             chosen, ok = choose(text, conf, grammar, cfg, followup=True)
             if not ok or not chosen:
-                STATE["trace"].finish("fragment")
+                STATE.trace.finish("fragment")
                 log.info("follow-up close: fragment/garbage %r", text); break
-            text = chosen; cap = None; skip_s = 0.0; trig = "followup"; turns += 1
+            text = chosen; cap = None; skip_s = 0.0; trig = "followup"; turns += 1; FSM.to(Mode.PROCESSING, "follow-up")
             log.info("follow-up accepted conf=%.2f text=%r", conf, text)
     except Exception:
         log.exception("conversation handler error")
     finally:
-        if STATE.get("trace") is not None: STATE["trace"].finish("interrupted" if interrupt.is_set() else "done")
-        STATE["trace"] = None
+        if STATE.trace is not None: STATE.trace.finish("interrupted" if interrupt.is_set() else "done")
+        STATE.trace = None
         if CMDS is not None: CMDS.clear_pending()
-        STATE["capture"] = None; STATE["followup_guard"] = False
-        STATE["stop_ack_active"] = False; busy.clear()
+        STATE.capture = None; STATE.followup_guard = False
+        STATE.stop_ack_active = False; FSM.to(Mode.IDLE, "conversation over"); busy.clear()
 
 # ================= clap detector =================
 class ClapDetector:
@@ -1125,7 +1125,7 @@ def sleep_hint_due(cfg):
     """A bare «Джарвис» during sleep gets at most one spoken hint per interval."""
     if not cfg.get("sleep_hint_enabled", SLEEP.DEFAULTS["sleep_hint_enabled"]): return False
     gap = float(cfg.get("sleep_hint_interval_s", SLEEP.DEFAULTS["sleep_hint_interval_s"]))
-    return time.time() - float(STATE.get("sleep_hint_at") or 0) >= gap
+    return time.time() - float(STATE.sleep_hint_at or 0) >= gap
 
 def preload_speaker(cfg):
     """Load the voice profile at startup so the log shows whether owner verification is active."""
@@ -1155,7 +1155,7 @@ def main():
         if os.path.exists(STOP_FILE):
             RUNTIME.mark_stop(BASE); os.remove(STOP_FILE); OUTBOX_SIGNAL.stop(); return
     if model_error: raise model_error[0]
-    model = model_box[0]; STATE["model"] = model
+    model = model_box[0]; STATE.model = model
     def wake_rec():
         r = KaldiRecognizer(model, SR, json.dumps(["джарвис", "хей джарвис", "эй джарвис", "[unk]"], ensure_ascii=False))
         r.SetWords(True); return r
@@ -1177,7 +1177,7 @@ def main():
     def start(trig, pre=None, text=None, test=False, skip_s=0.0):
         interrupt.clear(); busy.set()
         cap = Capture(pre) if (text is None and pre is not None) else None
-        STATE["capture"] = cap
+        STATE.capture = cap
         threading.Thread(target=handle, args=(trig, cap, text, test, skip_s, SPEED.Trace(trig)), daemon=True).start()
 
     dev = pick_device(cfg)
@@ -1194,8 +1194,8 @@ def main():
     def do_stop(reason):
         log.info("STOP barge-in (%s): speech stopped", reason)
         interrupt.set()  # the speech thread stops its own stream
-        if STATE.get("rid"): CANCELLED[STATE["rid"]] = time.time()
-        STATE["stop_pending"] = True
+        LEDGER.cancel(STATE.rid)
+        STATE.stop_pending = True
     while True:
         try:
             if os.path.exists(STOP_FILE):
@@ -1207,16 +1207,17 @@ def main():
                 elif tt.lower() in ("", "wake", "джарвис", "хей джарвис"): start("wake_word", text="", test=True)
                 else: start("wake_word", text=tt, test=True)
             sleeping = sleep_state().active()
+            if not busy.is_set() and not was_busy: FSM.to(Mode.SLEEP if sleeping else Mode.IDLE, "sleep" if sleeping else "awake")
             if not busy.is_set() and not was_busy and sleep_state().poll(WAKE_FILE):
                 srec = None; start("sleep_end", text=""); continue
             if time.monotonic()>=next_proactive:
                 next_proactive=time.monotonic()+max(1,float(cfg.get("proactive_tick_s",5)))
                 job=pm.tick(cfg)
                 if job: threading.Thread(target=request_morning,args=(job,dict(cfg)),name="morning-post",daemon=True).start()
-                if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE["stop_pending"]:
+                if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE.stop_pending:
                     item=pm.take(cfg)
                     if item: start("proactive",text=item)
-            if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE["stop_pending"] and pm.can_speak(cfg):
+            if not sleeping and not busy.is_set() and not was_busy and pending is None and not STATE.stop_pending and pm.can_speak(cfg):
                 for notice in LP.TIMERS.pop_fired(limit=1): start("timer_fire", text=notice, test=False); break
             if time.time() - lastlvl > cfg["level_log_interval_s"]:
                 n = max(levels["n"], 1)
@@ -1224,25 +1225,25 @@ def main():
                 levels.update(max=0.0, sum=0.0, n=0); lastlvl = time.time()
             if time.monotonic() - lastmem > float(cfg.get("memory_log_interval_s", 1800)):
                 lastmem = time.monotonic()
-                if not busy.is_set() and RUNTIME.idle_for(STATE.get("last_spoken_end") or 0.0, lastmem) > float(cfg.get("memory_trim_idle_s", 900)):
+                if not busy.is_set() and RUNTIME.idle_for(STATE.last_spoken_end or 0.0, lastmem) > float(cfg.get("memory_trim_idle_s", 900)):
                     trim_memory()  # pages come back on demand; frees RAM for calls between uses
                 m = mem_info()
                 log.info("memory: ws=%dMB priv=%dMB peak_ws=%dMB threads=%d", m["ws"], m["priv"], m["peak_ws"], threading.active_count())
                 if not busy.is_set() and RUNTIME.memory_over_limit(m["priv"], cfg.get("memory_restart_mb", 0)):
                     log.warning("memory guard: priv=%dMB > %sMB while idle -> restart via supervisor", m["priv"], cfg.get("memory_restart_mb"))
-                    STATE["exit_code"] = RUNTIME.MEMORY_RESTART_CODE; break
+                    STATE.exit_code = RUNTIME.MEMORY_RESTART_CODE; break
             try: x = audio_q.get(timeout=0.3)
             except queue.Empty: continue
             st = pos; pos += len(x); ring.append((st, x))
             levels["max"] = max(levels["max"], float(np.abs(x).max())); levels["sum"] += float(np.sqrt(np.mean(x * x))); levels["n"] += 1
             i16 = (np.clip(x, -1, 1) * 32767).astype(np.int16)
-            cap = STATE["capture"]
+            cap = STATE.capture
             if cap is not None: cap.q.put(x)
             sc = max(oww.predict(i16).values()) if oww is not None else 0.0
             if time.time() - last_clean > 2:
                 last_clean = time.time()
-                for rid_c, tc in list(CANCELLED.items()):
-                    if time.time() - tc > 900: CANCELLED.pop(rid_c, None); continue
+                for rid_c, tc in list(LEDGER.cancelled.items()):
+                    if time.time() - tc > 900: LEDGER.cancelled.pop(rid_c, None); continue
                     for fn in os.listdir(OUTBOX):
                         if fn.startswith(rid_c):
                             try: os.remove(os.path.join(OUTBOX, fn)); log.info("dropped cancelled outbox part %s", fn)
@@ -1252,7 +1253,7 @@ def main():
                     brec = stop_rec(cfg); bagc = AGC(cfg)
                     brfree = KaldiRecognizer(model, SR); brfree.SetWords(True); free_last = (0, ""); bframes=0
                 was_busy = True
-                if cap is None and not interrupt.is_set() and not STATE["stop_ack_active"] and not STATE["followup_guard"]:
+                if cap is None and not interrupt.is_set() and not STATE.stop_ack_active and not STATE.followup_guard:
                     if os.path.exists(TEST_BARGE):
                         tb = read_part(TEST_BARGE).strip(); os.remove(TEST_BARGE); log.info("test_bargein %r (speaking=%s)", tb, speaking.is_set())
                         do_stop("test: " + tb); continue
@@ -1264,10 +1265,10 @@ def main():
                             fw = fr.get("result", [])
                             fc = sum(w.get("conf",0) for w in fw) / max(1,len(fw))
                             free_last = (time.monotonic(), fr.get("text", "") if fc >= 0.5 else "")
-                            if PROACTIVE.priority_candidate(fr.get("text",""),fc,STATE["speaking_text"],cfg) and any(w.get("word") in PRIORITY_WAKE_WORDS and w.get("conf",0)>=float(cfg.get("priority_wake_min_conf",.85)) for w in fw[:3]):
+                            if PROACTIVE.priority_candidate(fr.get("text",""),fc,STATE.speaking_text,cfg) and any(w.get("word") in PRIORITY_WAKE_WORDS and w.get("conf",0)>=float(cfg.get("priority_wake_min_conf",.85)) for w in fw[:3]):
                                 log.info("PRIORITY vosk wake conf=%.2f -> interrupt and capture",fc)
                                 interrupt.set()
-                                if STATE.get("rid"): CANCELLED[STATE["rid"]]=time.time()
+                                LEDGER.cancel(STATE.rid)
                                 wake=next((w for w in fw[:3] if w.get("word") in PRIORITY_WAKE_WORDS),None)
                                 pending=borigin+int((wake.get("start",0) if wake else 0)*SR)-int(.25*SR)
                                 continue
@@ -1275,7 +1276,7 @@ def main():
                             ws = json.loads(brec.Result()).get("result", [])
                             if ws:
                                 conf = sum(w.get("conf", 0) for w in ws) / len(ws); ph = " ".join(w["word"] for w in ws)
-                                echo = any(w["word"].replace("ё", "е") in STATE["speaking_text"] for w in ws)
+                                echo = any(w["word"].replace("ё", "е") in STATE.speaking_text for w in ws)
                                 partial_free = json.loads(brfree.PartialResult()).get("partial", "")
                                 recent_free = free_last[1] if time.monotonic() - free_last[0] < 1.2 else ""
                                 corroborated = corroborated_stop(ph, partial_free) or corroborated_stop(ph, recent_free)
@@ -1283,19 +1284,19 @@ def main():
                                 log.info("barge-in candidate %r conf=%.2f echo=%s speaking=%s free=%r corroborated=%s -> %s", ph, conf, echo, speaking.is_set(), partial_free or recent_free, corroborated, "STOP" if ok else "ignored")
                                 if ok: do_stop(ph); continue
                     except Exception as e: log.info("barge recognizer error: %s", e)
-                if cap is None and oww is not None and not STATE["stop_ack_active"] and not STATE["followup_guard"]:
+                if cap is None and oww is not None and not STATE.stop_ack_active and not STATE.followup_guard:
                     if sc < 0.2: barge_armed = True
                     elif barge_armed and sc >= cfg["barge_in_threshold"] and not interrupt.is_set():
                         log.info("BARGE-IN oww %.2f -> interrupt", sc); interrupt.set()
-                        if STATE.get("rid"): CANCELLED[STATE["rid"]] = time.time()
+                        LEDGER.cancel(STATE.rid)
                         pending = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
                 continue
             if was_busy:
                 was_busy = False; last_end = time.time(); wrec = wake_rec(); wbase = pos; wake_check = None; clap.events = []; clap.cur = None
                 if oww is not None: oww.reset()
-                cfg = load_cfg(); STATE["rid"] = None
-                if STATE["stop_pending"]:
-                    STATE["stop_pending"] = False; pending = None; start("stop_ack", text=""); continue
+                cfg = load_cfg(); STATE.rid = None
+                if STATE.stop_pending:
+                    STATE.stop_pending = False; pending = None; start("stop_ack", text=""); continue
                 if pending is not None:
                     pre = [c for (p, c) in ring if p + len(c) > pending]; pending = None; barge_armed = False
                     start("wake_word", pre=pre, skip_s=0.0); continue
@@ -1314,7 +1315,7 @@ def main():
                     elif said == SLEEP.HINT_WORD and ws and ws[0].get("conf", 0) >= 0.9 and sleep_hint_due(cfg):
                         a = sbase + int((ws[0]["start"] - 0.45) * SR); b = sbase + int((ws[-1]["end"] + 0.3) * SR)
                         if verify_wake(model, ring, a, b, cfg, min_conf=GATE.setting(cfg, "sleep_wake_min_conf")) and owner_confirmed(ring, b, cfg):
-                            STATE["sleep_hint_at"] = time.time(); start("sleep_hint", text=""); continue
+                            STATE.sleep_hint_at = time.time(); start("sleep_hint", text=""); continue
                 continue
             srec = None
             trig = None; frm = None; skip = 0.0
@@ -1358,4 +1359,4 @@ if __name__ == "__main__":
     except Exception as e:
         log.exception("fatal: %s", e); raise
     finally: guard.close()
-    if STATE.get("exit_code"): raise SystemExit(STATE["exit_code"])
+    if STATE.exit_code: raise SystemExit(STATE.exit_code)
