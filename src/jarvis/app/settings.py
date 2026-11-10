@@ -17,7 +17,7 @@ from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
 from jarvis.core import projects as PROJECTS
 from jarvis.core import sleep as SLEEP
-import jarvis_speaker as SPEAKER
+from jarvis.core import voiceprint as SPEAKER
 from jarvis.core import text as JT
 from jarvis.core.config import ConfigStore, merge_aliases
 from jarvis.core.phrases import SMALLTALK_ALIASES

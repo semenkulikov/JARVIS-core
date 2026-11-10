@@ -27,7 +27,8 @@ from typing import List
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import jarvis_speaker as S  # noqa: E402
+from jarvis.adapters.speaker import SpeakerVerifier, file_sha256  # noqa: E402
+from jarvis.core import voiceprint as S  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import deploy_home as D  # noqa: E402
@@ -52,7 +53,7 @@ def download_model(target: Path) -> None:
     print("downloading", S.MODEL_URL)
     with urllib.request.urlopen(S.MODEL_URL, timeout=120) as r, open(tmp, "wb") as f:
         shutil.copyfileobj(r, f)
-    digest = S.file_sha256(tmp)
+    digest = file_sha256(tmp)
     if digest != S.MODEL_SHA256:
         os.remove(tmp)
         raise SystemExit("model checksum mismatch: %s" % digest)
@@ -114,7 +115,7 @@ def main(argv=None) -> int:
         cfg.update(json.loads((a.home / "config.json").read_text(encoding="utf-8-sig")))
     except OSError:
         pass
-    verifier = S.SpeakerVerifier(a.home, cfg)
+    verifier = SpeakerVerifier(a.home, cfg)
     model = verifier._path("speaker_model")
     if not model.exists():
         if not a.download:

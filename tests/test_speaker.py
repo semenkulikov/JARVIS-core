@@ -4,7 +4,9 @@ import json
 import numpy as np
 import pytest
 
-import jarvis_speaker as S
+from jarvis.adapters import speaker as speaker_adapter
+from jarvis.adapters.speaker import SpeakerVerifier
+from jarvis.core import voiceprint as S
 from jarvis.adapters.speaker import SpeakerGate
 
 
@@ -75,34 +77,34 @@ def make_home(tmp_path, centroid, threshold=0.6):
 
 
 def test_disabled_by_default_never_loads(tmp_path):
-    v = S.SpeakerVerifier(tmp_path, {}, session_factory=lambda p: pytest.fail("must not load"))
+    v = SpeakerVerifier(tmp_path, {}, session_factory=lambda p: pytest.fail("must not load"))
     assert v.check(tone(300, 2)) == (True, None)
 
 
 def test_accepts_owner_and_rejects_stranger(tmp_path):
     home = make_home(tmp_path, [1.0, 0.0, 0.0])
-    owner = S.SpeakerVerifier(home, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([0.9, 0.1, 0.0]))
+    owner = SpeakerVerifier(home, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([0.9, 0.1, 0.0]))
     ok, score = owner.check(tone(300, 2))
     assert ok and score > 0.9
-    stranger = S.SpeakerVerifier(home, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([0.1, 1.0, 0.0]))
+    stranger = SpeakerVerifier(home, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([0.1, 1.0, 0.0]))
     ok, score = stranger.check(tone(300, 2))
     assert not ok and score < 0.6
 
 
 def test_config_threshold_overrides_profile(tmp_path):
     home = make_home(tmp_path, [1.0, 0.0], threshold=0.99)
-    v = S.SpeakerVerifier(home, {"speaker_verify_enabled": True, "speaker_threshold": 0.5}, session_factory=lambda p: FakeSession([0.8, 0.6]))
+    v = SpeakerVerifier(home, {"speaker_verify_enabled": True, "speaker_threshold": 0.5}, session_factory=lambda p: FakeSession([0.8, 0.6]))
     assert v.check(tone(300, 2))[0] is True and v.threshold() == 0.5
 
 
 def test_short_audio_is_not_judged(tmp_path):
     home = make_home(tmp_path, [1.0, 0.0])
-    v = S.SpeakerVerifier(home, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([0.0, 1.0]))
+    v = SpeakerVerifier(home, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([0.0, 1.0]))
     assert v.check(tone(300, 0.3)) == (True, None)
 
 
 def test_missing_profile_fails_open(tmp_path):
-    v = S.SpeakerVerifier(tmp_path, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([1.0]))
+    v = SpeakerVerifier(tmp_path, {"speaker_verify_enabled": True}, session_factory=lambda p: FakeSession([1.0]))
     assert v.check(tone(300, 2)) == (True, None) and v.error
 
 
@@ -112,7 +114,7 @@ def test_make_profile_roundtrip():
 
 
 def test_listener_gate_off_by_default(cfg, monkeypatch, tmp_path):
-    monkeypatch.setattr(S, "SpeakerVerifier", lambda *a, **k: pytest.fail("must not construct"))
+    monkeypatch.setattr(speaker_adapter, "SpeakerVerifier", lambda *a, **k: pytest.fail("must not construct"))
     assert SpeakerGate(str(tmp_path)).ok([], 16000, cfg) is True
 
 
@@ -120,7 +122,7 @@ def test_listener_gate_rejects_stranger(cfg, tmp_path):
     home = make_home(tmp_path, [1.0, 0.0])
     cfg["speaker_verify_enabled"] = True
     gate = SpeakerGate(str(home))
-    gate.verifier = S.SpeakerVerifier(home, cfg, session_factory=lambda p: FakeSession([0.0, 1.0]))
+    gate.verifier = SpeakerVerifier(home, cfg, session_factory=lambda p: FakeSession([0.0, 1.0]))
     ring = [(0, tone(300, 2.0))]
     assert gate.ok(ring, 32000, cfg) is False and gate.owner_confirmed(ring, 32000, cfg) is False
 

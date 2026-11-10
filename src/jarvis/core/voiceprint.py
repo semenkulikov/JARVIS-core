@@ -1,23 +1,17 @@
-"""Optional speaker verification: react only to the enrolled owner's voice.
+"""Voiceprint math for the optional owner-voice check: fbank features, cosine, profile and threshold.
 
 Off by default (``speaker_verify_enabled``). Uses the WeSpeaker ResNet34 ONNX model
 (26.5 MB, 256-d embeddings) through onnxruntime, which openWakeWord already needs, and a
 NumPy Kaldi-compatible fbank frontend, so no extra Python packages are required.
 Enrollment: ``scripts/enroll_speaker.py`` writes ``<home>/speaker/profile.json``.
+The model session and verifier live in jarvis.adapters.speaker.
 """
 from __future__ import annotations
 
-import hashlib
-import json
-import logging
-import os
 import time
-from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Optional, Sequence
 
 import numpy as np
-
-log = logging.getLogger("jarvis")
 
 SR = 16000
 MODEL_NAME = "voxceleb_resnet34_LM.onnx"
@@ -51,7 +45,7 @@ def _mel_banks(n_fft: int, n_mels: int, sr: int, low: float = 20.0, high: Option
     return banks
 
 
-_BANKS: dict = {}
+_BANKS: dict[tuple[int, int, int], np.ndarray] = {}
 
 
 def fbank(wave: np.ndarray, sr: int = SR, n_mels: int = 80) -> np.ndarray:
@@ -82,7 +76,7 @@ def trim_silence(audio: np.ndarray, rel: float = 0.1, frame: int = 320) -> np.nd
     if n == 0:
         return a
     rms = np.sqrt(np.mean(a[: n * frame].reshape(n, frame) ** 2, axis=1))
-    loud = np.nonzero(rms >= rel * float(rms.max()))[0] if rms.max() > 0 else []
+    loud = np.nonzero(rms >= rel * float(rms.max()))[0] if rms.max() > 0 else np.zeros(0, np.int64)
     if len(loud) == 0:
         return a[:0]
     return a[loud[0] * frame:(loud[-1] + 1) * frame]
@@ -111,87 +105,7 @@ def suggest_threshold(embeddings: Sequence[np.ndarray]) -> float:
     return round(min(0.6, max(0.35, mu - max(0.1, 3 * sd))), 3)
 
 
-def make_profile(embeddings: Sequence[np.ndarray], model_sha256: str = MODEL_SHA256) -> dict:
+def make_profile(embeddings: Sequence[np.ndarray], model_sha256: str = MODEL_SHA256) -> dict[str, Any]:
     return {"version": PROFILE_VERSION, "model_sha256": model_sha256, "created": time.time(),
             "threshold": suggest_threshold(embeddings), "centroid": centroid(embeddings).round(6).tolist(),
             "count": len(embeddings)}
-
-
-def file_sha256(path: os.PathLike | str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
-
-
-# ------------------------------------------------------------------ verifier
-class SpeakerVerifier:
-    """Lazy model + profile; ``check`` never raises and fails open when not ready."""
-
-    def __init__(self, home: os.PathLike | str, cfg: Mapping[str, Any], session_factory=None):
-        self.home = Path(home)
-        self.cfg = cfg
-        self._factory = session_factory
-        self._session = None
-        self.profile: Optional[dict] = None
-        self.error: Optional[str] = None
-
-    def setting(self, key: str) -> Any:
-        return self.cfg.get(key, DEFAULTS[key])
-
-    def _path(self, key: str) -> Path:
-        p = Path(str(self.setting(key)))
-        return p if p.is_absolute() else self.home / p
-
-    def ready(self) -> bool:
-        if self._session is not None and self.profile is not None:
-            return True
-        if self.error:
-            return False
-        try:
-            self.profile = json.loads(self._path("speaker_profile").read_text(encoding="utf-8"))
-            if self.profile.get("version") != PROFILE_VERSION or len(self.profile.get("centroid") or []) == 0:
-                raise ValueError("profile_invalid")
-            self._session = (self._factory or _onnx_session)(self._path("speaker_model"))
-            return True
-        except Exception as e:  # missing profile/model: verification is skipped, logged once
-            self.error = type(e).__name__
-            log.warning("speaker verification unavailable (%s); not filtering", self.error)
-            return False
-
-    def embed(self, audio: np.ndarray) -> np.ndarray:
-        feats = fbank(audio)[None, :, :]
-        if self._session is None:
-            self._session = (self._factory or _onnx_session)(self._path("speaker_model"))
-        name = self._session.get_inputs()[0].name
-        return np.asarray(self._session.run(None, {name: feats})[0][0], dtype=np.float32)
-
-    def threshold(self) -> float:
-        value = self.setting("speaker_threshold")
-        return float(value if value is not None else (self.profile or {}).get("threshold", 0.5))
-
-    def check(self, audio: np.ndarray) -> Tuple[bool, Optional[float]]:
-        """(accepted, score). Disabled / not ready / too short -> (True, None)."""
-        if not self.setting("speaker_verify_enabled") or not self.ready():
-            return True, None
-        if len(audio) < float(self.setting("speaker_min_audio_s")) * SR:
-            return True, None
-        try:
-            score = cosine(self.embed(audio), np.asarray(self.profile["centroid"], dtype=np.float32))
-        except Exception as e:
-            log.warning("speaker scoring failed (%s); not filtering", type(e).__name__)
-            return True, None
-        return (score >= self.threshold()), round(score, 3)
-
-
-def _onnx_session(path: Path):
-    import onnxruntime as ort
-    opts = ort.SessionOptions()
-    opts.intra_op_num_threads = 1
-    opts.inter_op_num_threads = 1
-    return ort.InferenceSession(str(path), sess_options=opts, providers=["CPUExecutionProvider"])
-
-
-__all__ = ["DEFAULTS", "SpeakerVerifier", "fbank", "trim_silence", "cosine", "centroid", "suggest_threshold", "make_profile",
-           "file_sha256", "MODEL_URL", "MODEL_SHA256", "MODEL_NAME"]

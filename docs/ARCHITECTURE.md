@@ -267,7 +267,7 @@ stateDiagram-v2
 | `jarvis/adapters/transport.py` | 81 | Webhook с повтором и списком разрешённых полей |
 | `jarvis/adapters/outbox.py` | 120 | Файлы ответов сервера |
 | `jarvis/adapters/status_cache.py` | 54 | `status.json`: статус, задачи, ссылка GitHub |
-| `jarvis/adapters/speaker.py` | 49 | Необязательная проверка голоса владельца |
+| `jarvis/adapters/speaker.py` | 130 | Необязательная проверка голоса владельца |
 | `jarvis/adapters/accent.py` | 73 | Необязательные ударения RUAccent |
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
 | `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
@@ -296,7 +296,7 @@ stateDiagram-v2
 | `jarvis/core/gate.py` | 66 | Отбор фраз, обращённых к помощнику: уверенность слов, подтверждение имени |
 | `jarvis/core/sleep.py` | 64 | Фразы и разбор спящего режима слушателя |
 | `jarvis/adapters/sleep_store.py` | 67 | Время окончания сна на диске |
-| `jarvis_speaker.py` | 197 | Необязательная проверка голоса владельца (ONNX), профиль голоса |
+| `jarvis/core/voiceprint.py` | 111 | Голосовой отпечаток: признаки fbank, косинус, профиль и порог |
 | `jarvis/core/migrations.py` | 36 | Версии `config.json`: миграции при каждой загрузке |
 | `jarvis/core/dialog.py` | 91 | Какие команды получают мгновенный отклик, отклик параллельно с выполнением |
 | `jarvis/core/food.py` | 235 | Еда, чистая часть: разбор фразы, сопоставление продукта, итоги и ответы |
