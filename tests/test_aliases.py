@@ -2,6 +2,7 @@ import pytest
 
 from jarvis.app.settings import DEFAULT_ALIASES
 from jarvis.core.config import merge_aliases
+from jarvis.core import routing as ROUTING
 
 
 def test_user_aliases_keep_new_default_phrases():
@@ -19,4 +20,4 @@ def test_user_aliases_keep_new_default_phrases():
                                        ("отключи экран", "monitor_off"), ("когда тренировка", "workout"), ("во сколько тренировка", "workout"),
                                        ("когда следующая тренировка", "workout")])
 def test_screen_and_workout_phrases(listener, cfg, text, name):
-    assert listener.match_alias(text, cfg)["name"] == name
+    assert ROUTING.match_alias(text, cfg)["name"] == name

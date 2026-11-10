@@ -10,6 +10,7 @@ from jarvis.app import settings as SETTINGS
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import gen_commands_doc as G  # noqa: E402
+from jarvis.core import routing as ROUTING
 
 EXAMPLES = [(c.id, e) for c in R.COMMANDS for e in c.examples]
 
@@ -17,7 +18,7 @@ EXAMPLES = [(c.id, e) for c in R.COMMANDS for e in c.examples]
 @pytest.mark.parametrize("cid,example", EXAMPLES)
 def test_every_example_routes_to_its_command(listener, cfg, cid, example):
     cfg["food_local_enabled"] = True
-    assert R.route_id(listener.match_alias(example, cfg)) == cid
+    assert R.route_id(ROUTING.match_alias(example, cfg)) == cid
 
 
 def test_every_default_alias_is_registered():
@@ -55,4 +56,4 @@ def test_capabilities_phrase_short_and_mentions_notion():
     ("утренний брифинг", "tasks_briefing"), ("чё ещё осталось", "tasks_left"), ("перескажу все раздачи", "tasks_all"),
 ])
 def test_live_feedback_phrases(listener, cfg, text, cid):
-    assert R.route_id(listener.match_alias(text, cfg)) == cid
+    assert R.route_id(ROUTING.match_alias(text, cfg)) == cid

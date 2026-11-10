@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import enroll_speaker as E  # noqa: E402
 import jarvis_commands as Q  # noqa: E402
 import jarvis_sleep as SLEEP  # noqa: E402
+from jarvis.core import routing as ROUTING
 
 
 def _bare(phrase):
@@ -44,4 +45,4 @@ def test_listener_paused_noop_when_not_running(tmp_path):
 
 @pytest.mark.parametrize("phrase", E.PHRASES)
 def test_enrollment_phrases_match_no_alias(listener, cfg, phrase):
-    assert listener.match_alias(_bare(phrase), cfg) is None
+    assert ROUTING.match_alias(_bare(phrase), cfg) is None

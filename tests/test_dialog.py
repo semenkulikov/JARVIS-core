@@ -8,6 +8,7 @@ import jarvis_dialog as D
 from jarvis.core import phrases as P
 from jarvis.core import wake as W
 from test_commands import FakeBackend
+from jarvis.core import routing as ROUTING
 
 
 @pytest.mark.parametrize("alias,key", [
@@ -70,7 +71,7 @@ def test_quick_timer_gets_ack_then_result(listener, cfg, monkeypatch, tmp_path):
     monkeypatch.setattr(listener, "say", lambda t, c, **k: out.append(t) or True)
     ctl = Q.Controller(tmp_path, FakeBackend())
     monkeypatch.setattr(listener, "command_controller", lambda: ctl)
-    al = listener.match_alias("поставь таймер на пять минут", cfg)
+    al = ROUTING.match_alias("поставь таймер на пять минут", cfg)
     listener.run_alias(al, "поставь таймер на пять минут", cfg, "wake_word", False)
     assert out[0] in D.DEFAULTS["ack_action"] and out[1] == "Таймер сохранён на пять минут, сэр."
 

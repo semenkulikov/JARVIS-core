@@ -1,6 +1,7 @@
 import json
 
 import jarvis_tasks as T
+from jarvis.core import routing as ROUTING
 
 
 def _cache(listener, tmp_path, monkeypatch, data):
@@ -44,11 +45,11 @@ def test_awake_and_capabilities_reply_locally(listener, cfg, monkeypatch):
     said = []
     monkeypatch.setattr(listener, "say", lambda t, c, **k: said.append(t) or True)
     monkeypatch.setattr(listener, "say_reply", lambda t, c, **k: said.append(t))
-    listener.run_alias(listener.match_alias("проснись", cfg), "проснись", cfg, "wake_word", False)
-    listener.run_alias(listener.match_alias("что ты умеешь", cfg), "что ты умеешь", cfg, "wake_word", False)
+    listener.run_alias(ROUTING.match_alias("проснись", cfg), "проснись", cfg, "wake_word", False)
+    listener.run_alias(ROUTING.match_alias("что ты умеешь", cfg), "что ты умеешь", cfg, "wake_word", False)
     assert said[0] == T.AWAKE_REPLY and said[1].startswith("Умею вот что, сэр:")
 
 
 def test_grammar_has_new_phrases(listener, cfg):
-    g = listener.grammar_phrases(cfg)
+    g = ROUTING.grammar_phrases(cfg)
     assert "утренний брифинг" in g and "что ещё осталось" in g and "выруби экран" in g and "что ты умеешь" in g

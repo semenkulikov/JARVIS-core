@@ -7,6 +7,7 @@ import pytest
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 from jarvis.core.followup import FollowupSettings, followup_seconds
+from jarvis.core import routing as ROUTING
 
 
 def words(text, conf):
@@ -138,19 +139,19 @@ def said(listener, monkeypatch):
 
 
 def test_sleep_command_is_local(listener, cfg):
-    al = listener.match_alias("засни на час", cfg)
+    al = ROUTING.match_alias("засни на час", cfg)
     assert al["action"] == "jarvis_sleep" and al["seconds"] == 3600
 
 
 def test_legacy_sleep_mode_unchanged(listener, cfg):
-    al = listener.match_alias("режим сна", cfg)
+    al = ROUTING.match_alias("режим сна", cfg)
     assert al["action"] == "quick2" and al["mode"] == "sleep"
 
 
 def test_run_sleep_alias_starts_sleep(listener, cfg, said, monkeypatch, tmp_path):
     st = SLEEP.SleepState(tmp_path / "sleep.json")
     monkeypatch.setattr(listener, "SLEEP_STATE", st)
-    al = listener.match_alias("спящий режим на тридцать минут", cfg)
+    al = ROUTING.match_alias("спящий режим на тридцать минут", cfg)
     listener.run_alias(al, "спящий режим на тридцать минут", cfg, "wake_word", False)
     assert st.active() and 1790 < st.remaining() <= 1800
     assert said and "спящий режим" in said[0] and listener.STATE.followup_eligible is False

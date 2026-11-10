@@ -1,4 +1,5 @@
 import jarvis_vocab as V
+from jarvis.core import routing as ROUTING
 
 
 def test_grammar_uses_model_spelling():
@@ -13,5 +14,5 @@ def test_norm_folds_yo():
 
 
 def test_listener_grammar_has_no_folded_only_words(listener, cfg):
-    words = {w for p in listener.grammar_phrases(cfg) for w in p.split()}
+    words = {w for p in ROUTING.grammar_phrases(cfg) for w in p.split()}
     assert not words & set(V.VOSK_WORDS)

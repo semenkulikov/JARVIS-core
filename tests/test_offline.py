@@ -1,5 +1,6 @@
 from jarvis.core import matching as M
 import time,pytest
+from jarvis.core import routing as ROUTING
 class Sig:
  def clear(self):pass
  def wait(self,cfg):time.sleep(0.01)
@@ -33,10 +34,10 @@ def test_filler_not_sent(listener,cfg,text):
 def test_not_filler(text):assert not M.filler_only(text)
 @pytest.mark.parametrize('text',['все','всё','это всё','на этом всё'])
 def test_vse_is_local(listener,cfg,text):
- al=listener.match_alias(text,cfg);assert al and al['action']=='smalltalk' and al['name']=='chat_done'
+ al=ROUTING.match_alias(text,cfg);assert al and al['action']=='smalltalk' and al['name']=='chat_done'
 @pytest.mark.parametrize('text',['все хорошо','всё нормально'])
 def test_vse_khorosho_still_okay(listener,cfg,text):
- al=listener.match_alias(text,cfg);assert al and al['name']=='chat_okay'
+ al=ROUTING.match_alias(text,cfg);assert al and al['name']=='chat_okay'
 @pytest.mark.parametrize('text,action',[('который час','time'),('громче','key'),('тише','key'),('без звука','key'),('поставь таймер на пять минут','timer'),('повтори','quick2'),('ты здесь','smalltalk'),('открой браузер','open'),('заряд','battery')])
 def test_quick_commands_local(listener,cfg,text,action):
- al=listener.match_alias(text,cfg);assert al and al['action']!='webhook' and al['action'] in (action,'quick2')
+ al=ROUTING.match_alias(text,cfg);assert al and al['action']!='webhook' and al['action'] in (action,'quick2')
