@@ -1,3 +1,4 @@
+from jarvis.core import matching as M
 import time,pytest
 class Sig:
  def clear(self):pass
@@ -27,9 +28,9 @@ def test_down_flag_expires(listener,cfg):
  assert not listener.server_recently_down(cfg)
 @pytest.mark.parametrize('text',['сэр','да сэр','сэр да','ну сэр'])
 def test_filler_not_sent(listener,cfg,text):
- assert listener.filler_only(text);assert listener.choose(text,1.0,'курсор',cfg)==('',False)
+ assert M.filler_only(text);assert listener.choose(text,1.0,'курсор',cfg)==('',False)
 @pytest.mark.parametrize('text',['да','статус','сэр который час','да выключи'])
-def test_not_filler(listener,text):assert not listener.filler_only(text)
+def test_not_filler(text):assert not M.filler_only(text)
 @pytest.mark.parametrize('text',['все','всё','это всё','на этом всё'])
 def test_vse_is_local(listener,cfg,text):
  al=listener.match_alias(text,cfg);assert al and al['action']=='smalltalk' and al['name']=='chat_done'

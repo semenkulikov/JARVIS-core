@@ -43,6 +43,8 @@ import jarvis_dialog as DIALOG
 import jarvis_vocab as VOCAB
 import jarvis_tasks as TASKS
 import jarvis_registry as REGISTRY
+from jarvis.core.matching import (norm_phrase as _norm_phrase, tok_match as _tok_match, natural_status_alias, filler_only,
+                                  incomplete_fragment, pure_wait_filler, followup_echo, corroborated_stop, stop_candidate)
 CMDS = None
 def command_controller():
     global CMDS
@@ -573,10 +575,6 @@ def log_outbox(p, rid, label, txt, t0):
     except OSError: lag = -1
     log.info("outbox %s (%d chars) rid=%s wait_s=%.3f file_age_s=%.3f", label, len(txt), rid, time.time() - t0, lag)
 
-def pure_wait_filler(text):
-    t = " ".join(_norm_phrase(text))
-    t = re.sub(r"\bсэр\b", "", t); t = " ".join(t.split())
-    return bool(re.fullmatch(r"(?:(?:одну )?(?:минуту|секунду)(?: (?:уточняю|проверяю|посмотрю))?|(?:сейчас |уже )?(?:посмотрю|уточню|проверю|проверяю|смотрю|уточняю|запрашиваю)(?: (?:данные|календарь|задачи|статус))?|почти готово)", t))
 
 SERVER_DOWN_PHRASE = "Сервер не отвечает, сэр. Локальные команды работают."
 SERVER_SLOW_PHRASE = "Сервер пока молчит, сэр. Подожду ещё немного."
@@ -653,43 +651,10 @@ def read_cache():
         log.info("no usable cache: %s", e); return None, None
 
 # ================= aliases =================
-def _norm_phrase(t):
-    t = (t or "").lower().replace("ё", "е")
-    return re.sub(r"[^\w\s]", " ", t).split()
 
-def _tok_match(a, b):
-    if a == b: return True
-    if len(a) >= 4 and len(b) >= 4 and (a.startswith(b[:-1]) or b.startswith(a[:-1])): return True
-    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.8
 
-def natural_status_alias(text):
-    t = " ".join(_norm_phrase(text))
-    t = re.sub(r"^(ну |а )?че\b",r"\1что",t)
-    # Keep mutation/instruction requests on their real route.
-    if re.search(r"отмет|выполн|заверш|закро[йю]|сделан|галочк|как бы полная|как полная", t): return None
-    if re.search(r"\b(добав\w*|созда\w*|удал\w*|постав\w*|отмен\w*|измени\w*|перенес\w*|напомни\w*|открой|объясни|почему|как работает)\b", t): return None
-    report = bool(re.search(r"\b(статус\w*|отчет\w*|доклад\w*|сводк\w*|задач\w*)\b|что (?:там |у нас |у меня )?по делам|какие (?:у меня )?дела", t))
-    if report and re.search(r"питан|калори|белк|\bед[аеуы]\b",t):
-        return {"name":"food", "action":"cache_field", "field":"food"}
-    if report and re.search(r"проект|депло|коммит|сайт|гитхаб",t):
-        return {"name":"deploy", "action":"cache_field", "field":"deploy"}
-    if report and re.search(r"задач|делам|дела\b|на сегодня|сегодняшн",t):
-        return {"name":"task_status", "action":"cache_field", "field":"today"}
-    if report: return {"name":"status", "action":"status"}
-    if re.search(r"^(?:ну |а )?(?:что (?:там )?(?:у меня )?(?:на сегодня|по планам)|какие (?:у меня )?задачи)",t):
-        return {"name":"task_status", "action":"cache_field", "field":"today"}
-    return None
 
-FILLER_TOKENS = {"сэр", "ну", "э", "эм", "а", "ага", "угу", "так"}
-def filler_only(text):
-    toks = _norm_phrase(text)
-    if not toks: return False
-    if all(t in FILLER_TOKENS for t in toks): return True
-    return toks in (["да", "сэр"], ["да", "да", "сэр"], ["сэр", "да"])
 
-def incomplete_fragment(text):
-    t = " ".join(_norm_phrase(text))
-    return bool(re.fullmatch(r"(?:в|на|по|с|из|о|об|для|к|у) (?:вашем|твоем|моем|этом|том|вас|меня)|(?:как|что|ну|это|там|ты|и отметил|и отметь)",t))
 
 def match_alias(text, cfg):
     secs = SLEEP.parse(text)
@@ -1197,11 +1162,6 @@ def _handle_turn(trig, cap, text, test, skip_s):
     finally:
         STATE["capture"] = None; STATE["stop_ack_active"] = False
 
-def followup_echo(text, spoken):
-    tt = _norm_phrase(text)
-    if len(tt) < 2: return False
-    sentences = re.split(r"[.!?…]+", spoken or "")
-    return any(tt == _norm_phrase(sent) for sent in sentences) or tt == _norm_phrase(spoken)
 
 def followup_seconds(cfg, spoken):
     key = "followup_question_window_s" if (spoken or "").rstrip().endswith("?") else "followup_window_s"
@@ -1334,15 +1294,7 @@ def pick_device(cfg):
             log.info("mic %d %s (%s) rejected: %s", i, name, api, e)
     log.warning("no matching mic, using default"); return None
 
-def corroborated_stop(ph, free_text):
-    pt = _norm_phrase(ph); ft = _norm_phrase(free_text)
-    if not pt or "[unk]" in free_text or re.search(r"\b(?:не|нет)\b", free_text): return False
-    return any(ft[i:i+len(pt)] == pt for i in range(len(ft)-len(pt)+1))
 
-def stop_candidate(ph, conf, echo, cfg):
-    normalized = " ".join(_norm_phrase(ph))
-    allowed = {" ".join(_norm_phrase(p)) for p in cfg.get("stop_phrases", [])}
-    return normalized in allowed and conf >= float(cfg.get("bargein_min_conf", 0.60)) and not echo
 
 PRO_MANAGER = None
 def proactive_manager():
