@@ -41,6 +41,7 @@ import jarvis_projects as PROJECTS
 import jarvis_food as FOOD
 import jarvis_dialog as DIALOG
 import jarvis_vocab as VOCAB
+import jarvis_tasks as TASKS
 CMDS = None
 def command_controller():
     global CMDS
@@ -521,7 +522,7 @@ def post_retry(cfg, payload, total=30, independent=False):
 
 def call_webhook(rid, text, trigger, cfg, test, listener_ack="", kind="free", trace=None, extra_payload=None):
     payload = {"request_id": rid, "text": text, "trigger": trigger, "listener_ack": listener_ack, "kind": kind}
-    allowed = {"task_text","clipboard_text","clipboard_truncated","context_source","target_language","food_text","confirmation_policy","local_date","timezone","reply_mode","outbox_file","presence_at","idle_seconds","expires_iso"} | CODE.PAYLOAD_FIELDS
+    allowed = {"task_text","clipboard_text","clipboard_truncated","context_source","target_language","food_text","confirmation_policy","local_date","timezone","reply_mode","outbox_file","presence_at","idle_seconds","expires_iso","intent"} | CODE.PAYLOAD_FIELDS
     payload.update({k:v for k,v in (extra_payload or {}).items() if k in allowed})
     if placeholder(cfg):
         log.warning("webhook not configured; request_id=%s kind=%s",rid,kind)
@@ -694,6 +695,8 @@ def match_alias(text, cfg):
     if secs: return {"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": secs}
     proactive = PROACTIVE.intent(text)
     if proactive: return proactive
+    task = TASKS.intent(text)
+    if task: return task
     toks = _norm_phrase(text)
     if not toks: return None
     quick = QUICK.match(text,cfg)
@@ -769,6 +772,21 @@ def cached_status(field, cfg):
     except Exception as e:
         log.info("status snapshot unusable: %s", type(e).__name__); return "missing", "", None
 
+def run_tasks(mode, text, cfg, trig, test):
+    """Briefing / what is left / all tasks / Notion: from a fresh snapshot, otherwise from the server."""
+    cache, fresh, stamp = None, False, ""
+    try:
+        with open(CACHE, encoding="utf-8-sig") as f: cache = json.load(f)
+        decision, _ = cache_age_policy(cache["updated"], cfg); fresh = decision == "fresh"
+        dt = datetime.datetime.fromisoformat(cache["updated"]).astimezone()
+        stamp = "Данные на " + JT.time_words(dt.hour, dt.minute) + "."
+    except Exception as e:
+        log.info("tasks: snapshot unusable (%s)", type(e).__name__)
+    reply, server_text = TASKS.answer(mode, cache if isinstance(cache, dict) else None, fresh, stamp=stamp)
+    log.info("tasks %s -> %s", mode, "cache" if reply else "server")
+    if reply: say_reply(reply, cfg); return
+    free_phrase(server_text, cfg, trig, test, ack=pick(cfg, "ack_lookup"), kind="free", extra_payload={"intent": "tasks_" + mode})
+
 def cache_stamp():
     try:
         with open(CACHE, encoding="utf-8-sig") as f: updated = json.load(f)["updated"]
@@ -799,6 +817,10 @@ def run_alias(al, text, cfg, trig, test):
         else: sleep_state().start(secs)
         say(SLEEP.enter_phrase(secs), cfg)
         return
+    if act == "awake":
+        say(TASKS.AWAKE_REPLY, cfg); return
+    if act == "tasks":
+        run_tasks(al["mode"], text, cfg, trig, test); return
     if act == "proactive_dnd":
         if test: log.info("TEST DND=%s: no persistent change",al["enabled"])
         else: proactive_manager().set_dnd(al["enabled"])
@@ -953,6 +975,7 @@ def grammar_phrases(cfg):
             if p and al.get("action") not in ("timer", "open_project"): ph.append(p)
     ph += ["расскажи статус по задачам", "что там по задачам", "что там статус по задачам", "статус моих задач", "какие у меня задачи", "что по делам", "что у меня на сегодня", "дай отчет по задачам", "статус питания", "статус по проектам"]
     ph += QUICK.PHRASES + PROACTIVE.PHRASES
+    ph += TASKS.PHRASES
     return sorted({VOCAB.vosk_spelling(p) for p in ph if p}) + ["[unk]"]
 
 def only_wake_heard(words, partial):

@@ -22,7 +22,7 @@ HTTP POST, JSON в UTF-8, заголовок `Content-Type: application/json`. �
 
 | `kind` | Дополнительные поля | Смысл |
 |---|---|---|
-| `free` | — | Свободный вопрос или действие |
+| `free` | `intent` (необязательно): `tasks_all`, `tasks_left`, `tasks_briefing`, `tasks_notion` | Свободный вопрос или действие. С `intent` — вопрос о задачах, на который кэш не ответил: `all` — все задачи на сегодня и просроченные, у каждой время; `left` — что ещё осталось сегодня и по Notion; `briefing` — утренний брифинг по запросу; `notion` — что осталось по каждому проекту |
 | `status` | — | Статус. В `listener_ack` уже может быть прочитанный снимок с датой |
 | `todoist_add` | `task_text` | В `text` и `task_text` одна и та же задача |
 | `clipboard_translate` | `clipboard_text`, `clipboard_truncated`, `context_source` = `clipboard`, `target_language` = `ru` или `en` | Перевод |
