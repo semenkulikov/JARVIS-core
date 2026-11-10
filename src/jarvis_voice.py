@@ -68,7 +68,7 @@ DEFAULT_ALIASES = [
     {"name": "play", "phrases": ["пауза", "продолжи", "продолжай", "играй"], "action": "key", "key": "play", "times": 1, "silent": True, "extra_words": 0},
     {"name": "next", "phrases": ["дальше", "следующий", "следующая"], "action": "key", "key": "next", "times": 1, "silent": True, "extra_words": 0},
     {"name": "prev", "phrases": ["назад", "предыдущий", "предыдущая"], "action": "key", "key": "prev", "times": 1, "silent": True, "extra_words": 0},
-    {"name": "monitor_off", "phrases": ["выключи экран", "погаси экран", "выключи монитор"], "action": "monitor_off"},
+    {"name": "monitor_off", "phrases": ["выключи экран", "погаси экран", "выключи монитор", "выруби экран", "выруби монитор", "отключи экран", "погаси монитор", "потуши экран"], "action": "monitor_off"},
     {"name": "timer_cancel", "phrases": ["отмени таймер", "отключи таймер", "убери таймер"], "action": "timer_cancel"},
     {"name": "timer", "phrases": ["таймер", "поставь таймер"], "action": "timer", "extra_words": 5},
     {"name": "battery", "phrases": ["заряд", "сколько заряда", "батарея"], "action": "battery", "extra_words": 1},
@@ -80,7 +80,7 @@ DEFAULT_ALIASES = [
     {"name": "cursor", "phrases": ["открой курсор"], "action": "open", "target": "%LOCALAPPDATA%\\Programs\\cursor\\Cursor.exe"},
     {"name": "telegram", "phrases": ["открой телеграм", "открой телеграмм"], "action": "open", "target": "%APPDATA%\\Telegram Desktop\\Telegram.exe"},
     {"name": "lock", "phrases": ["заблокируй экран", "заблокируй компьютер", "блокировка"], "action": "lock", "reply": "Блокирую, сэр."},
-    {"name": "workout", "phrases": ["когда тренировка", "тренировка"], "action": "workout"},
+    {"name": "workout", "phrases": ["когда тренировка", "тренировка", "во сколько тренировка", "когда следующая тренировка", "следующая тренировка"], "action": "workout"},
 ]
 
 # Local conversation: whole short utterances only, never a substring in a request.
@@ -168,10 +168,23 @@ def load_cfg():
     if cfg.get("projects_dir"):
         LP.PROJ_DIR = os.path.expanduser(os.path.expandvars(cfg["projects_dir"]))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg,BASE)
-    cfg["aliases"] = [a for a in (cfg.get("aliases") or DEFAULT_ALIASES) if not a.get("name", "").startswith("chat_")] + SMALLTALK_ALIASES
+    cfg["aliases"] = merge_aliases(cfg.get("aliases"), DEFAULT_ALIASES) + SMALLTALK_ALIASES
     cfg["stress_dict"] = dict(dict(PROACTIVE.STRESS, **QUICK.STRESS, **DIALOG.STRESS), **(cfg.get("stress_dict") or {}))
     _CFG.update(m=m, c=cfg)
     return cfg
+
+def merge_aliases(user, defaults):
+    """User aliases override by name but keep the default phrases (unless "replace": true); new defaults are added."""
+    if not user: return [dict(a) for a in defaults]
+    out = []; by_name = {a.get("name"): a for a in defaults}
+    for a in user:
+        if not isinstance(a, dict) or str(a.get("name", "")).startswith("chat_"): continue
+        d = by_name.get(a.get("name"))
+        if d is not None and not a.get("replace"):
+            a = dict(a, phrases=list(dict.fromkeys(list(a.get("phrases") or []) + list(d.get("phrases") or []))))
+        out.append(a)
+    names = {a.get("name") for a in out}
+    return out + [dict(a) for a in defaults if a.get("name") not in names]
 
 _LAST_PICK = {}
 def pick(cfg, key):
