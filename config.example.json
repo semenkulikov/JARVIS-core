@@ -427,5 +427,7 @@
   "fx": {
     "enabled": true
   },
-  "mic_name_contains": ""
+  "mic_name_contains": "",
+  "servers": [],
+  "projects": {}
 }

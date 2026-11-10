@@ -5,6 +5,7 @@ import base64,ctypes,datetime,json,logging,math,os,re,shutil,subprocess,threadin
 from pathlib import Path
 import jarvis_paths as PATHS
 import jarvis_codemode as CODE
+import jarvis_projects as PROJECTS
 log=logging.getLogger('jarvis')
 
 NUM={'ноль':0,'один':1,'одна':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'одиннадцать':11,'двенадцать':12,'тринадцать':13,'четырнадцать':14,'пятнадцать':15,'шестнадцать':16,'семнадцать':17,'восемнадцать':18,'девятнадцать':19,'двадцать':20,'тридцать':30,'сорок':40,'пятьдесят':50,'шестьдесят':60,'семьдесят':70,'восемьдесят':80,'девяносто':90,'сто':100,'двести':200,'триста':300,'четыреста':400,'пятьсот':500,'шестьсот':600,'семьсот':700,'восемьсот':800,'девятьсот':900,'полтора':1.5,'полторы':1.5}
@@ -35,7 +36,7 @@ def duration(t):
   return int(n*60) if n is not None and n>0 else None
  return int(total) if total>0 else None
 
-PHRASES=CODE.PHRASES+['повтори','повтори ответ','еще раз','помедленнее','еще раз помедленнее','повтори помедленнее','что ты сказал','включи звук','верни звук','выключи звук','без звука','сделай скриншот','снимок экрана','скриншот','сделай снимок экрана','сколько свободно на диске','свободное место на диске','закрой окно','закрой активное окно','прочитай буфер','прочитай буфер обмена','переведи буфер','кратко перескажи буфер','отмени выключение','отмена выключения','отключи выключение','отмени таймер','отключи таймер','убери таймер','отмени напоминания','отключи напоминания','отмени все таймеры и напоминания','режим фокуса','режим сна','режим тренировки']
+PHRASES=CODE.PHRASES+PROJECTS.PHRASES+['повтори','повтори ответ','еще раз','помедленнее','еще раз помедленнее','повтори помедленнее','что ты сказал','включи звук','верни звук','выключи звук','без звука','сделай скриншот','снимок экрана','скриншот','сделай снимок экрана','сколько свободно на диске','свободное место на диске','закрой окно','закрой активное окно','прочитай буфер','прочитай буфер обмена','переведи буфер','кратко перескажи буфер','отмени выключение','отмена выключения','отключи выключение','отмени таймер','отключи таймер','убери таймер','отмени напоминания','отключи напоминания','отмени все таймеры и напоминания','режим фокуса','режим сна','режим тренировки']
 
 CACHED_REPLIES = ["Звук включён, сэр.","Скриншот сохранён, сэр.","Буфер обмена пуст, сэр.","Идея записана, сэр.","Отправил запрос на закрытие окна, сэр.","Выключение отменено, сэр.","Запланированного выключения нет, сэр.","Выключение не подтверждено, сэр.","Не удалось выполнить команду, сэр.","Пока нечего повторить, сэр.","Назовите проект полной командой, сэр.","Назовите громкость от нуля до ста процентов, сэр.","Назовите полный интервал таймера, сэр.","Активных таймеров или напоминаний нет, сэр.","Режим сна, сэр. Гашу экран и блокирую ноутбук.","Режим тренировки, сэр. Музыка, таймер подхода и напоминание о воде.","Сэр, пора выпить воды.","Сэр, время сделать перерыв."]
 STRESS = {w.replace("+",""):w for w in ["гр+омкость","скринш+от","б+уфер","обм+ена","п+олный","п+олной","интерв+ал","напомин+ание","напомин+ания","напомин+аний","сохранен+о","своб+одно","гигаб+айта","д+иске","отпр+авил","закр+ытие","окн+а","подтвержд+аете","подтвержд+аю","подтвержден+о","выключ+ение","в+ыключить","д+анные","м+огут","пот+еряны","скаж+ите","зад+ержку","с+уток","отменен+о","ф+окуса","м+узыка","п+аузе","гаш+у","ноутб+ук","тренир+овки","подх+ода","перер+ыв","в+ыпить","вод+ы","ид+ея","зап+исана","повтор+ить","н+ечего","уд+алось","ком+анду","ком+андой","реж+им","нул+я","т+аймера","+или","заплан+ированного","пол+учено","вод+е","выключ+ения","в+ыполнить","назов+ите","пор+а","сд+елать"]}
@@ -51,7 +52,7 @@ def duration_label(secs):
 def match(text,cfg=None):
  t=norm(text).strip(' .');cfg=cfg or {}
  def a(cmd,**kw):return {'name':'quick_'+cmd,'action':'quick2','cmd':cmd,**kw}
- sub=CODE.match(t)
+ sub=CODE.match(t) or PROJECTS.match(t)
  if sub:return sub
  if t in ('повтори','повтори ответ','еще раз','что ты сказал'):return a('repeat',slow=False)
  if t in ('помедленнее','еще раз помедленнее','повтори помедленнее','говори медленнее'):return a('repeat',slow=True)
@@ -96,7 +97,7 @@ class PersistentTimers:
     data=json.loads(self.path.read_text(encoding='utf-8-sig'))
     assert data.get('version')==1 and isinstance(data['items'],list)
     for r in data['items']:
-     assert isinstance(r,dict) and isinstance(r['due'],(int,float)) and isinstance(r['interval'],(int,float)) and math.isfinite(r['due']) and math.isfinite(r['interval']) and r['interval']>=0 and r['kind'] in ('timer','reminder') and isinstance(r['label'],str)
+     assert isinstance(r,dict) and isinstance(r['due'],(int,float)) and isinstance(r['interval'],(int,float)) and math.isfinite(r['due']) and math.isfinite(r['interval']) and r['interval']>=0 and r['kind'] in ('timer','reminder','notice') and isinstance(r['label'],str)
     self.items=data['items']
   except Exception as e:self.error=type(e).__name__;log.warning('timer store invalid (%s); preserving file read-only',self.error)
  def _save(self):
@@ -242,9 +243,25 @@ class SystemBackend:
   lines=r.stdout.splitlines();branch=lines[0][3:] if lines and lines[0].startswith('## ') else 'неизвестна';changed=sum(not x.startswith('## ') for x in lines)
   return 'Проект '+Path(path).name+'. Ветка '+branch+'. '+('Незакоммиченных изменений нет.' if not changed else 'Изменённых или новых файлов: '+str(changed)+'.')
 
+def with_ack(fn,say,cfg,ack):
+ """Run fn while a short acknowledgement plays; re-raise its exception afterwards."""
+ box={}
+ def run():
+  try:box['value']=fn()
+  except Exception as e:box['error']=e
+ th=threading.Thread(target=run,name='quick-work',daemon=True);th.start();th.join(0.25)
+ if th.is_alive():say(ack,cfg,role='ack');th.join()
+ if 'error' in box:raise box['error']
+ return box.get('value')
+
 class Controller:
- def __init__(self,base,backend=None,clock=time.monotonic):
+ def __init__(self,base,backend=None,clock=time.monotonic,tools=None):
   self.base=Path(base);self.backend=backend or SystemBackend();self.clock=clock;self.pending_shutdown=None;self.notes_lock=threading.Lock();self.timers=PersistentTimers(self.base/'cache'/'timers.json')
+  self.tools=tools or PROJECTS.ProjectTools(self.base)
+ def announce(self,text):
+  """Spoken later by the listener loop, like a fired timer (respects quiet hours and sleep)."""
+  try:self.timers.add(1,text,kind='notice')
+  except Exception as e:log.warning('announcement not queued (%s)',type(e).__name__)
  def explain_error(self,cfg,say,forward):
   limit=int(cfg.get('explain_error_max_chars',6000));text,truncated=self.backend.clipboard(limit);source='clipboard'
   if not text.strip() and cfg.get('explain_error_ocr',True):
@@ -313,6 +330,8 @@ class Controller:
    if cmd=='todoist_add':forward(a['task_text'],kind='todoist_add',extra_payload={'task_text':a['task_text']});return True
    if cmd==CODE.EXPLAIN_KIND:return self.explain_error(cfg,say,forward)
    if cmd==CODE.CONFIRM_KIND:forward(CODE.confirm_text(text),kind=CODE.CONFIRM_KIND,extra_payload=CODE.confirm_payload(a));return True
+   if cmd=='server_health':say(with_ack(lambda:self.tools.health_reply(a.get('target',''),cfg),say,cfg,'Проверяю, сэр.'),cfg);return True
+   if cmd=='project_tests':say(self.tools.start_tests(a.get('project',''),cfg,lambda run:self.announce(PROJECTS.tests_phrase(run))),cfg);return True
    if cmd=='food_log':forward(a['food_text'],kind='food_log',extra_payload={'food_text':a['food_text'],'confirmation_policy':'chat_if_ambiguous'});return True
    if cmd=='shutdown_prepare':
     secs=a.get('seconds')

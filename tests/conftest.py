@@ -28,6 +28,8 @@ def guards(monkeypatch):
  for name in ('_run','mute','volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk','window_ocr'):
   monkeypatch.setattr(Q.SystemBackend,name,forbidden)
  monkeypatch.setattr(laptop,'press',forbidden)
+ import socket
+ monkeypatch.setattr(socket,'create_connection',forbidden)
  monkeypatch.setattr(laptop,'monitor_off',forbidden)
  monkeypatch.setattr(laptop,'battery',forbidden)
  monkeypatch.setattr(laptop,'temperature_c',forbidden)

@@ -37,6 +37,7 @@ import jarvis_speaker as SPEAKER
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 import jarvis_codemode as CODE
+import jarvis_projects as PROJECTS
 CMDS = None
 def command_controller():
     global CMDS
@@ -145,7 +146,7 @@ _CFG = {"m": None, "c": None}
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
-for _mod in (CODE,): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE, PROJECTS): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 def load_cfg():
     p = os.path.join(BASE, "config.json")
@@ -1066,7 +1067,7 @@ def _handle_turn(trig, cap, text, test, skip_s):
             notice = text if isinstance(text,dict) else {}
             try:
                 beep()
-                if notice.get("kind") != "reminder": beep()
+                if notice.get("kind") == "timer": beep()
             except Exception: pass
             say(notice.get("label") or "Сэр, время вышло.", cfg); return
         ok = True
