@@ -89,11 +89,13 @@ def test_confirm_payload_rejects_unknown_action():
 @pytest.mark.parametrize('kind,extra', [
     ('explain_error', CODE.explain_payload('Synthetic trace', False, 'clipboard')),
     ('confirm_in_chat', CODE.confirm_payload({'chat_action': 'open_pr', 'action_text': 'synthetic', 'project': 'example'}))])
-def test_new_kinds_pass_transport_allowlist(listener, cfg, monkeypatch, kind, extra):
+def test_new_kinds_pass_transport_allowlist(cfg, monkeypatch, kind, extra):
+    from jarvis.adapters.transport import WebhookTransport
+    from jarvis.core.state import RequestLedger, Signals
     posted = []; safe = dict(cfg, webhook_url='https://example.invalid/endpoint', webhook_auth_header='dummy_fixture')
-    listener.interrupt.clear()
-    monkeypatch.setattr(listener, 'post_retry', lambda config, payload, **kw: posted.append(payload) or 200)
-    assert listener.call_webhook('synthetic', 'Synthetic request', 'test', safe, True, kind=kind, extra_payload={**extra, 'shell': 'never'})
+    transport = WebhookTransport(Signals(), RequestLedger())
+    monkeypatch.setattr(transport, 'post_retry', lambda config, payload, **kw: posted.append(payload) or 200)
+    assert transport.call('synthetic', 'Synthetic request', 'test', safe, True, kind=kind, extra_payload={**extra, 'shell': 'never'})
     assert all(posted[-1][k] == v for k, v in extra.items()) and 'shell' not in posted[-1]
 
 

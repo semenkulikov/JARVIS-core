@@ -1,7 +1,7 @@
 # Jarvis voice assistant 3.18.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
-import json, time, uuid, queue, threading, logging, subprocess, datetime, re, collections, shlex, urllib.parse
+import json, time, uuid, queue, threading, logging, subprocess, datetime, re, collections, shlex
 from logging.handlers import RotatingFileHandler
 import numpy as np
 import sounddevice as sd
@@ -40,6 +40,7 @@ from jarvis.core.wake import (PRIORITY_WAKE_WORDS, VOSK_WAKE_TAIL_S, VOSK_WAKE_S
 from jarvis.core import status as STATUS
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, MicInput, frames_after, pick_device, ring_audio
 from jarvis.adapters.tts import Voice, split_text
+from jarvis.adapters.transport import WebhookTransport
 from jarvis.adapters.process import mem_info, trim_memory
 from jarvis.core.schedule import workout_summary
 from jarvis.core.routing import Router, grammar_phrases, match_alias
@@ -76,6 +77,8 @@ STATE = ListenerState()
 ROUTER = Router(STATE, lambda: CMDS is not None and bool(getattr(CMDS, "pending_shutdown", None)))
 choose, followup_rescue = ROUTER.choose, ROUTER.followup_rescue
 LEDGER = RequestLedger()
+TRANSPORT = WebhookTransport(SIGNALS, LEDGER)
+call_webhook = TRANSPORT.call
 PLAYER = AUDIO.Player(sd)
 VOICE = Voice(BASE, STATE, SIGNALS, FSM, PLAYER)
 say, get_audio, beep = VOICE.say, VOICE.get_audio, VOICE.beep
@@ -139,54 +142,10 @@ def precache(cfg):
 
 
 
-def placeholder(cfg):
-    u = str(cfg.get("webhook_url", "")).strip(); a = str(cfg.get("webhook_auth_header", ""))
-    return urllib.parse.urlparse(u).scheme not in ("http", "https") or "PASTE" in u or "PASTE" in a
 
-def clean_auth(h):
-    h = str(h or "").replace("\ufeff", "").strip().strip('"').strip("'").strip()
-    h = re.sub(r"^authorization\s*:\s*", "", h, flags=re.I).strip()
-    return re.sub(r"[\r\n]", "", h)
 
-def post(cfg, payload):
-    import urllib.request
-    url = str(cfg["webhook_url"]).replace("\ufeff", "").strip().strip('"').strip("'").strip()
-    if urllib.parse.urlparse(url).scheme not in ("http", "https"):
-        raise ValueError("webhook_url_scheme")
-    req = urllib.request.Request(url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                                 headers={"Content-Type": "application/json", "Authorization": clean_auth(cfg["webhook_auth_header"])})
-    with urllib.request.urlopen(req, timeout=25) as r:
-        return r.status
 
-def post_retry(cfg, payload, total=30, independent=False):
-    t0 = time.time(); err = None
-    while time.time() - t0 < total:
-        if not independent and (interrupt.is_set() or LEDGER.is_cancelled(payload.get("request_id"))): return None
-        try: return post(cfg, payload)
-        except Exception as e:
-            err = e; log.warning("webhook attempt failed: %s code=%s", type(e).__name__, getattr(e, "code", None))
-            if isinstance(e, ValueError): break
-            code = getattr(e, "code", None)
-            if code and 400 <= int(code) < 500 and int(code) != 429: break
-            time.sleep(3)
-    raise err
 
-def call_webhook(rid, text, trigger, cfg, test, listener_ack="", kind="free", trace=None, extra_payload=None):
-    payload = {"request_id": rid, "text": text, "trigger": trigger, "listener_ack": listener_ack, "kind": kind}
-    allowed = {"task_text","clipboard_text","clipboard_truncated","context_source","target_language","food_text","confirmation_policy","local_date","timezone","reply_mode","outbox_file","presence_at","idle_seconds","expires_iso","intent"} | CODE.PAYLOAD_FIELDS
-    payload.update({k:v for k,v in (extra_payload or {}).items() if k in allowed})
-    if placeholder(cfg):
-        log.warning("webhook not configured; request_id=%s kind=%s",rid,kind)
-        return False
-    if trace is not None: trace.mark("post_start")
-    try:
-        t0 = time.monotonic(); log.info("webhook POST start rid=%s", rid)
-        status = post_retry(cfg, payload,independent=True) if kind=="morning_briefing" else post_retry(cfg, payload)
-        if trace is not None: trace.mark("post_done")
-        log.info("webhook status %s (rid=%s) post_s=%.3f", status, rid, time.monotonic() - t0)
-        return status is not None and 200 <= status < 300
-    except Exception as e:
-        log.error("webhook failed: %s code=%s", type(e).__name__, getattr(e, "code", None)); return False
 
 def read_part(p):
     for _ in range(10):
