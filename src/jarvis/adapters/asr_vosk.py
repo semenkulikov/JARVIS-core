@@ -11,7 +11,7 @@ import numpy as np
 
 from jarvis.core import gate as GATE
 from jarvis.core import sleep as SLEEP
-from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ring_audio
+from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, clip_level, normalize_clip, ring_audio
 from jarvis.core.matching import norm_phrase
 from jarvis.core.routing import grammar_phrases
 from jarvis.core.state import ListenerState
@@ -122,11 +122,12 @@ class VoskASR:
         self.state.perf("recognized", confidence=round(conf,3))
         return text, conf, (gtext if gconf >= 0.75 else "")
 
-    def free_words(self, audio: np.ndarray, cfg: Config) -> list[Word]:
+    def free_words(self, audio: np.ndarray, cfg: Config, agc: bool = True) -> list[Word]:
         """Free-vocabulary transcript of a short clip (grammar recognizers force every sound into the wake word)."""
-        r = self.recognizer(); agc = AGC(cfg)
+        r = self.recognizer(); gain = AGC(cfg) if agc else None
         for i in range(0, len(audio), CHUNK):
-            r.AcceptWaveform((agc(audio[i:i + CHUNK]) * 32767).astype(np.int16).tobytes())
+            part = audio[i:i + CHUNK]
+            r.AcceptWaveform((np.clip(gain(part) if gain else part, -1, 1) * 32767).astype(np.int16).tobytes())
         result: list[Word] = json.loads(r.FinalResult()).get("result", [])
         return result
 
@@ -134,9 +135,20 @@ class VoskASR:
                     min_conf: float | None = None) -> bool:
         """True when a free transcript of [a, b) contains the wake name (and every word in ``need``) confidently."""
         if not GATE.setting(cfg, "wake_verify_enabled"): return True
-        t0 = time.monotonic(); ws = self.free_words(ring_audio(ring, a, b), cfg)
+        t0 = time.monotonic(); clip = ring_audio(ring, a, b); peak, rms = clip_level(clip)
+        clip, gain, agc = self.verify_clip(clip, cfg)
+        ws = self.free_words(clip, cfg, agc=agc)
         mc = float(min_conf if min_conf is not None else GATE.setting(cfg, "wake_verify_min_conf"))
         ok = bool(GATE.wake_word_confirmed(ws, mc)) and all(any(w.get("word") == n and w.get("conf", 0) >= mc for w in ws) for n in need)
-        log.info("wake verify %s: free=%r (%.2fs)", "OK" if ok else "REJECTED",
-                 " ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws), time.monotonic() - t0)
+        log.info("wake verify %s: free=%r level peak=%.3f rms=%.4f gain=%.1f (%.2fs)", "OK" if ok else "REJECTED",
+                 " ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws), peak, rms, gain, time.monotonic() - t0)
         return ok
+
+    @staticmethod
+    def verify_clip(clip: np.ndarray, cfg: Config) -> tuple[np.ndarray, float, bool]:
+        """(clip for the free pass, gain, whether chunk AGC still applies): quiet speech is lifted as a whole
+        and framed by a little silence, so far-field «Джарвис» is not chopped by gain pumping."""
+        if not GATE.setting(cfg, "wake_verify_normalize") or not len(clip): return clip, 1.0, True
+        out, gain = normalize_clip(clip, float(GATE.setting(cfg, "wake_verify_target_peak")), float(GATE.setting(cfg, "wake_verify_max_gain")))
+        pad = np.zeros(int(float(GATE.setting(cfg, "wake_verify_pad_s")) * SR), dtype=np.float32)
+        return np.concatenate([pad, out, pad]), gain, False

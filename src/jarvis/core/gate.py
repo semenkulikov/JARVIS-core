@@ -17,8 +17,12 @@ DEFAULTS: dict[str, Any] = {
     "wake_verify_enabled": True,     # second, free-vocabulary check of every grammar/oww wake
     "wake_verify_min_conf": 0.7,     # confidence of the wake name in the free transcript
     "sleep_wake_min_conf": 0.85,     # «Джарвис, проснись» while asleep: stricter
-    "wake_verify_pre_s": 0.45,       # audio taken before the grammar word start
-    "wake_verify_post_s": 0.35,      # audio taken after the grammar word end
+    "wake_verify_pre_s": 0.6,        # audio taken before the grammar word start
+    "wake_verify_post_s": 0.45,      # audio taken after the grammar word end
+    "wake_verify_normalize": True,   # lift the whole verify clip towards a target peak (quiet, far-field speech)
+    "wake_verify_target_peak": 0.7,
+    "wake_verify_max_gain": 30.0,
+    "wake_verify_pad_s": 0.2,        # silence around the verify clip for the free recognizer
     "oww_strong_threshold": 0.9,     # openWakeWord score accepted without free-transcript proof
     "command_min_conf": 0.7,         # average confidence for a phrase sent to the server
     "command_max_words": 20,

@@ -69,6 +69,20 @@ class AGC:
         return np.clip(x * g, -1, 1)
 
 
+def clip_level(x: np.ndarray) -> tuple[float, float]:
+    """(peak, RMS) of a float clip; (0, 0) for an empty one."""
+    if not len(x): return 0.0, 0.0
+    return float(np.abs(x).max()), float(np.sqrt(np.mean(np.square(x, dtype=np.float64))))
+
+
+def normalize_clip(x: np.ndarray, target_peak: float, max_gain: float) -> tuple[np.ndarray, float]:
+    """One gain for the whole clip towards ``target_peak`` (at most ``max_gain``, never below 1, never clipping)."""
+    peak = clip_level(x)[0]
+    if peak <= 1e-6: return x, 1.0
+    gain = max(1.0, min(float(max_gain), min(float(target_peak), 0.99) / peak))
+    return (x * gain).astype(np.float32), gain
+
+
 def ring_audio(ring: Iterable[tuple[int, np.ndarray]], a: int, b: int) -> np.ndarray:
     """Samples [a, b) from the ring buffer of (start_pos, chunk)."""
     parts = []

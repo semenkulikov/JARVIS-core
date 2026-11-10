@@ -281,18 +281,18 @@ def asr():
 ])
 def test_verify_wake(asr, cfg, monkeypatch, free, need, ok):
     cfg["wake_verify_min_conf"] = 0.8
-    monkeypatch.setattr(asr, "free_words", lambda audio, c: free)
+    monkeypatch.setattr(asr, "free_words", lambda audio, c, agc=True: free)
     assert asr.verify_wake([], 0, 10, cfg, need=need) is ok
 
 
 def test_verify_wake_disabled(asr, cfg, monkeypatch):
     cfg["wake_verify_enabled"] = False
-    monkeypatch.setattr(asr, "free_words", lambda *a: pytest.fail("must not decode"))
+    monkeypatch.setattr(asr, "free_words", lambda *a, **k: pytest.fail("must not decode"))
     assert asr.verify_wake([], 0, 10, cfg) is True
 
 
 def test_sleep_wake_needs_higher_conf(asr, cfg, monkeypatch):
-    monkeypatch.setattr(asr, "free_words", lambda *a: [{"word": "джарвис", "conf": 0.75}, {"word": "проснись", "conf": 0.99}])
+    monkeypatch.setattr(asr, "free_words", lambda *a, **k: [{"word": "джарвис", "conf": 0.75}, {"word": "проснись", "conf": 0.99}])
     assert asr.verify_wake([], 0, 10, cfg) is True
     assert asr.verify_wake([], 0, 10, cfg, need=("проснись",), min_conf=0.85) is False
 
@@ -335,3 +335,26 @@ def test_sleep_hint_rate_limited(app, cfg, monkeypatch):
     app.c.state.sleep_hint_at = time.time()
     assert not app.conversation.sleep_hint_due(cfg)
     assert not app.conversation.sleep_hint_due(dict(cfg, sleep_hint_enabled=False, sleep_hint_interval_s=0))
+
+
+def test_normalize_clip_lifts_quiet_speech_without_clipping():
+    from jarvis.adapters.audio import normalize_clip
+    x = (0.03 * np.sin(np.linspace(0, 60, 8000))).astype(np.float32)
+    y, g = normalize_clip(x, 0.7, 30.0)
+    assert 20 < g < 25 and float(np.abs(y).max()) <= 0.71
+    assert normalize_clip(x, 0.7, 5.0)[1] == 5.0
+    loud = (0.9 * np.sin(np.linspace(0, 60, 8000))).astype(np.float32)
+    assert normalize_clip(loud, 0.7, 30.0)[1] == 1.0  # never attenuates or clips
+    assert normalize_clip(np.zeros(100, dtype=np.float32), 0.7, 30.0)[1] == 1.0
+
+
+def test_verify_wake_feeds_normalized_padded_clip(asr, cfg, monkeypatch):
+    seen = {}
+    def free(audio, c, agc=True):
+        seen.update(peak=float(np.abs(audio).max()), n=len(audio), agc=agc); return [{"word": "джарвис", "conf": 0.9}]
+    monkeypatch.setattr(asr, "free_words", free)
+    ring = [(0, (0.03 * np.sin(np.linspace(0, 60, 8000))).astype(np.float32))]
+    assert asr.verify_wake(ring, 0, 8000, cfg) is True
+    assert seen["agc"] is False and 0.6 < seen["peak"] <= 0.71 and seen["n"] == 8000 + 2 * int(0.2 * 16000)
+    cfg["wake_verify_normalize"] = False
+    asr.verify_wake(ring, 0, 8000, cfg); assert seen["agc"] is True and seen["n"] == 8000
