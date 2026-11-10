@@ -1,4 +1,4 @@
-# Jarvis voice assistant 3.14.0
+# Jarvis voice assistant 3.15.0
 import os
 for _k, _v in {"OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "1"}.items(): os.environ.setdefault(_k, _v)
 import sys, json, time, uuid, queue, threading, logging, subprocess, datetime, re, tempfile, collections, difflib, shlex, urllib.parse
@@ -33,6 +33,7 @@ import jarvis_credentials as CREDS
 import jarvis_runtime as RUNTIME
 import jarvis_migrations as MIGRATIONS
 import jarvis_audio as AUDIO
+import jarvis_speaker as SPEAKER
 import jarvis_gate as GATE
 import jarvis_sleep as SLEEP
 CMDS = None
@@ -142,6 +143,7 @@ DEFAULTS = {
 _CFG = {"m": None, "c": None}
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
+DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
 
 def load_cfg():
     p = os.path.join(BASE, "config.json")
@@ -1287,6 +1289,18 @@ def verify_wake(model, ring, a, b, cfg, need=(), min_conf=None):
              " ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws), time.monotonic() - t0)
     return ok
 
+VERIFIER = None
+def speaker_ok(ring, end, cfg):
+    """Optional owner-voice check on the audio that ends at the wake word (off by default)."""
+    global VERIFIER
+    if not cfg.get("speaker_verify_enabled"): return True
+    if VERIFIER is None: VERIFIER = SPEAKER.SpeakerVerifier(BASE, cfg)
+    VERIFIER.cfg = cfg
+    win = int(float(VERIFIER.setting("speaker_window_s")) * SR)
+    ok, score = VERIFIER.check(ring_audio(ring, end - win, end))
+    if score is not None: log.info("speaker %s score=%.3f threshold=%.3f", "OK" if ok else "REJECTED", score, VERIFIER.threshold())
+    return ok
+
 def main():
     cfg = load_cfg()
     LP.TIMERS = command_controller().timers
@@ -1336,7 +1350,7 @@ def main():
     dev = pick_device(cfg)
     stream = sd.InputStream(device=dev, samplerate=SR, channels=1, dtype="float32", blocksize=CHUNK, callback=cb)
     stream.start()
-    log.info("listening (v3.14.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
+    log.info("listening (v3.15.0) on device %s: %s", dev, sd.query_devices(dev)["name"] if dev is not None else sd.query_devices(kind="input")["name"])
     pos = 0; ring = collections.deque(maxlen=int(8 * SR / CHUNK)); wrec = wake_rec(); wbase = 0
     last_end = 0.0; lastlvl = time.time(); lastmem = time.monotonic(); was_busy = False; barge_armed = False; pending = None
     TEST_BARGE = os.path.join(BASE, "test_bargein"); brec = None; brfree = None; free_last = (0, ""); bagc = None; last_clean = 0; bframes = 0
@@ -1471,7 +1485,8 @@ def main():
                 if sc >= cfg["oww_threshold"] and wake_check is None:
                     log.info("oww score %.2f", sc)
                     frm = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
-                    if sc >= float(GATE.setting(cfg, "oww_strong_threshold")): trig = "wake_word"
+                    if sc >= float(GATE.setting(cfg, "oww_strong_threshold")):
+                        if speaker_ok(ring, pos, cfg): trig = "wake_word"
                     else: wake_check = {"a": frm, "b": pos + int(0.3 * SR), "frm": frm, "src": "oww"}
                 if wrec.AcceptWaveform(i16.tobytes()):
                     res = json.loads(wrec.Result())
@@ -1485,7 +1500,7 @@ def main():
                     elif ws: log.info("vosk wake rejected conf %.2f", ws[0].get("conf", 0))
                 if not trig and wake_check is not None and pos >= wake_check["b"]:
                     wc, wake_check = wake_check, None
-                    if verify_wake(model, ring, wc["a"], wc["b"], cfg):
+                    if verify_wake(model, ring, wc["a"], wc["b"], cfg) and speaker_ok(ring, wc["b"], cfg):
                         trig = "wake_word"; frm = wc["frm"]; skip = 0.0
             if trig and time.time() - last_end > cfg["cooldown_s"]:
                 barge_armed = False
