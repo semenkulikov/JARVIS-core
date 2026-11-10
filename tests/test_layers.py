@@ -34,3 +34,10 @@ def test_no_module_level_mutable_singletons_in_app():
                 fn = node.value.func
                 name = fn.id if isinstance(fn, ast.Name) else fn.attr if isinstance(fn, ast.Attribute) else ""
                 assert name in {"getLogger", "frozenset", "dict"}, f"{p.name}: module-level {name}()"
+
+
+def test_architecture_lists_every_module():
+    doc = (PKG.parent.parent / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    flat = {f"`{p.name}`" for p in PKG.parent.glob("*.py")}
+    pkg = {f"`jarvis/{p.parent.name}/{p.name}`" for p in PKG.glob("*/*.py") if p.name != "__init__.py"}
+    assert {m for m in flat | pkg if m not in doc} == set()

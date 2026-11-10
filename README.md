@@ -63,6 +63,13 @@ A conservative fuzzy router matches the phrase against known commands first. Any
 else goes to the webhook; the server answers by writing plain-text files into the local
 `outbox/` folder, and the listener speaks them as they appear.
 
+The listener is the `src/jarvis/` package in four layers: `core` (pure rules, typed
+ports, the listener state machine), `adapters` (microphone, Vosk, TTS, webhook, files),
+`commands` (one module per area, handlers registered with `@handles("action")`) and `app`
+(the conversation, the microphone loop and the composition root `build_app()`).
+`src/jarvis_voice.py` is the entry point the supervisor starts. Details and diagrams:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Requirements
 
 - Windows 10 or 11, Python 3.12 (x64), a microphone and speakers. No admin rights needed.

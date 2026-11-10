@@ -24,4 +24,15 @@ python -m pip install ruff
 python -m ruff check src tests scripts
 ```
 
+Пакет `src/jarvis/` проверяется mypy (настройки в `pyproject.toml`, как в CI):
+
+```powershell
+python -m pip install mypy==1.13.0
+python -m mypy
+```
+
 Настройки ruff и номер версии — в `pyproject.toml`. Перед запросом на слияние тесты должны проходить.
+
+Новая голосовая команда — модуль в `src/jarvis/commands/` с обработчиком `@handles("действие")`,
+запись в `src/jarvis_registry.py` и тест с `tests/command_fakes.FakeServices`; цикл слушателя и
+разговор менять не нужно. Слои и направление импортов описаны в `docs/ARCHITECTURE.md`.
