@@ -32,7 +32,8 @@ DEFAULTS: dict[str, Any] = {
 # ------------------------------------------------------------------ frontend
 def _mel_banks(n_fft: int, n_mels: int, sr: int, low: float = 20.0, high: Optional[float] = None) -> np.ndarray:
     high = high or sr / 2.0
-    mel = lambda f: 1127.0 * np.log(1.0 + np.asarray(f) / 700.0)  # noqa: E731
+
+    def mel(f: Any) -> np.ndarray: return np.asarray(1127.0 * np.log(1.0 + np.asarray(f) / 700.0))
     lo, hi = mel(low), mel(high)
     centers = np.linspace(lo, hi, n_mels + 2)
     bins = mel(np.arange(n_fft // 2) * sr / n_fft)
@@ -66,7 +67,7 @@ def fbank(wave: np.ndarray, sr: int = SR, n_mels: int = 80) -> np.ndarray:
         _BANKS[key] = _mel_banks(n_fft, n_mels, sr)
     feats = np.log(np.maximum(spec @ _BANKS[key].T, np.finfo(np.float32).eps))
     feats = feats - feats.mean(axis=0, keepdims=True)
-    return feats.astype(np.float32)
+    return np.asarray(feats, dtype=np.float32)
 
 
 def trim_silence(audio: np.ndarray, rel: float = 0.1, frame: int = 320) -> np.ndarray:

@@ -66,7 +66,7 @@ def exists(base: Base, role: str) -> bool:
 
 
 def crash_delay(failures: int, minimum: float = 2, maximum: float = 300) -> float:
-    return min(maximum, minimum * 2 ** max(0, min(16, failures - 1)))
+    return float(min(maximum, minimum * 2 ** max(0, min(16, failures - 1))))
 
 
 def memory_over_limit(priv_mb: float, limit_mb: Any) -> bool:

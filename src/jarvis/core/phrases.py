@@ -44,7 +44,7 @@ class Picker:
         if isinstance(v, str): return v
         v = [x for x in v if x] or [""]
         c = [x for x in v if x != self._last.get(key)] or v
-        r = random.choice(c); self._last[key] = r; return r
+        r = str(random.choice(c)); self._last[key] = r; return r
 
 
 def smalltalk_reply(al: Mapping[str, Any], picker: Picker, now: datetime.datetime | None = None) -> str:

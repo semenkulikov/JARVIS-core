@@ -25,7 +25,7 @@ def _shelf(x: Audio, sr: int, f: float, db: float) -> Audio:
     if abs(db) < 0.1: return x
     b, a = signal.butter(2, f / (sr / 2), "high")
     g = 10 ** (db / 20) - 1
-    return x + g * signal.lfilter(b, a, x)
+    return np.asarray(x + g * signal.lfilter(b, a, x))
 
 
 def apply(x: Audio, sr: int, p: Mapping[str, Any] | None = None) -> tuple[Audio, int]:

@@ -22,7 +22,7 @@ import urllib.request
 import wave
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List
+from typing import Callable, Iterator, List
 
 import numpy as np
 
@@ -82,7 +82,8 @@ def record(seconds: float, count: int) -> List[np.ndarray]:
 
 
 @contextmanager
-def listener_paused(home: Path, stop=None, start=None, running=None):
+def listener_paused(home: Path, stop: Callable[[], object] | None = None, start: Callable[[], object] | None = None,
+                    running: Callable[[], bool] | None = None) -> Iterator[bool]:
     """Stop a running listener while the owner reads the phrases, then start it again."""
     stop = stop or (lambda: (home / "stop").write_text("", encoding="ascii"))
     start = start or (lambda: D.start(home))
@@ -101,7 +102,7 @@ def listener_paused(home: Path, stop=None, start=None, running=None):
             print("Jarvis is listening again.")
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--home", required=True, type=Path)
     ap.add_argument("--wav", action="append", type=Path, default=[])

@@ -17,7 +17,7 @@ import sys
 import time
 import wave
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
@@ -75,7 +75,7 @@ def synth(home: Path, out: Path) -> None:
     print("clips", len(rows))
 
 
-def _decode(rec, audio: np.ndarray) -> Dict[str, object]:
+def _decode(rec: Any, audio: np.ndarray) -> Dict[str, Any]:
     b = (audio * 32767).astype(np.int16).tobytes(); words = []; t0 = time.perf_counter()
     for i in range(0, len(b), 3200):  # 100 ms chunks, like the listener
         if rec.AcceptWaveform(b[i:i + 3200]):
@@ -129,13 +129,14 @@ def rss_mb() -> Optional[int]:
                 "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
                 "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage")]
         c = PMC(); c.cb = ctypes.sizeof(c)
-        ctypes.windll.psapi.GetProcessMemoryInfo(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+        win: Any = ctypes  # windll exists only on Windows
+        win.windll.psapi.GetProcessMemoryInfo(win.windll.kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb)
         return int(c.PagefileUsage / 2 ** 20)
     except Exception:
         return None
 
 
-def report(res: List[Dict[str, object]], engines) -> None:
+def report(res: List[Dict[str, Any]], engines: Iterable[str]) -> None:
     for e in engines:
         cmd = [r for r in res if r["group"] == "command"]; free = [r for r in res if r["group"] == "free"]
         routed = sum(route(r[e]["text"]) == route(r["text"]) for r in cmd)
@@ -152,14 +153,16 @@ def report(res: List[Dict[str, object]], engines) -> None:
                 print("   miss %-45s %-7s -> %r (%.2f)" % (r["text"], r["voice"], r[e]["text"], r[e]["conf"]))
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--home", required=True, type=Path); ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("stage", choices=("synth", "vosk", "whisper")); ap.add_argument("--model", default="base")
     a = ap.parse_args(argv); a.out.mkdir(parents=True, exist_ok=True)
-    {"synth": lambda: synth(a.home, a.out), "vosk": lambda: eval_vosk(a.home, a.out), "whisper": lambda: eval_whisper(a.out, a.model)}[a.stage]()
+    if a.stage == "synth": synth(a.home, a.out)
+    elif a.stage == "vosk": eval_vosk(a.home, a.out)
+    else: eval_whisper(a.out, a.model)
     return 0
 
 

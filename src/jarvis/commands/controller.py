@@ -73,7 +73,7 @@ class Controller:
             if cmd=='volume':
                 n=a.get('value')
                 if n is None or n<0 or n>100:say('Назовите громкость от нуля до ста процентов, сэр.',cfg);return True
-                b.volume(n);say('Громкость '+str(int(n))+' процентов, сэр.',cfg);return n>0
+                b.volume(n);say('Громкость '+str(int(n))+' процентов, сэр.',cfg);return bool(n>0)
             if cmd=='screenshot':
                 b.screenshot(self.screenshots);say('Скриншот сохранён, сэр.',cfg);return True
             if cmd=='disk':

@@ -37,7 +37,7 @@ def last_input_epoch(now: float | None = None) -> float:
     k.GetTickCount64.restype = ctypes.c_ulonglong
     if not u.GetLastInputInfo(ctypes.byref(info)): raise OSError("last_input_unavailable")
     elapsed = ((int(k.GetTickCount64()) & 0xFFFFFFFF) - info.dwTime) & 0xFFFFFFFF
-    return (time.time() if now is None else now) - elapsed / 1000
+    return float((time.time() if now is None else now) - elapsed / 1000)
 
 
 class Manager:

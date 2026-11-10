@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from jarvis.adapters.food_diary import AliasCache  # noqa: E402
+from jarvis.adapters.food_diary import AliasCache, FatSecretCall  # noqa: E402
 from jarvis.core import food as FOOD  # noqa: E402
 
 
@@ -23,11 +23,11 @@ def metric_serving(food: Dict[str, Any], unit: str) -> Dict[str, Any]:
     s = (food.get("servings") or {}).get("serving", [])
     for x in s if isinstance(s, list) else [s]:
         if x.get("measurement_description") == unit and float(x.get("number_of_units") or 0) > 0:
-            return x
+            return dict(x)
     raise SystemExit("no per-%s serving for this food; pick another food_id" % unit)
 
 
-def add(home: Path, args: argparse.Namespace, call) -> FOOD.FoodAlias:
+def add(home: Path, args: argparse.Namespace, call: FatSecretCall) -> FOOD.FoodAlias:
     food = call("food.get", {"food_id": args.food_id}).get("food") or {}
     serving = metric_serving(food, "ml" if args.unit == "ml" else "g")
     n = float(serving["number_of_units"])
@@ -43,7 +43,7 @@ def add(home: Path, args: argparse.Namespace, call) -> FOOD.FoodAlias:
     return alias
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--home", required=True, type=Path)
     sub = ap.add_subparsers(dest="cmd", required=True)

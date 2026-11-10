@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path, PureWindowsPath
-from typing import Callable, Dict, Iterable, Optional
+from typing import Any, Callable, Dict, Iterable, Optional
 
 REPO = Path(__file__).resolve().parent.parent
 ALLOWED_ENV = ("JARVIS_LOG_DIR", "JARVIS_SCREENSHOTS", "JARVIS_CREDENTIAL_PREFIX", "JARVIS_PROJECTS")
@@ -96,7 +96,8 @@ def listener_running(home: Path) -> bool:
     from jarvis.adapters import runtime as R  # Windows mutex probe; both legacy and repo names
     legacy = "Local\\SemJarvis_" + R.mutex_name(home, "listener").split("_", 1)[1]
     import ctypes
-    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    win: Any = ctypes  # WinDLL exists only on Windows
+    k = win.WinDLL("kernel32", use_last_error=True)
     k.OpenMutexW.restype = ctypes.c_void_p
     for name in (R.mutex_name(home, "listener"), legacy, R.mutex_name(home, "supervisor"),
                  legacy.replace("_listener", "_supervisor")):
@@ -133,7 +134,7 @@ def restart(home: Path, log: Path, previous: Optional[Path]) -> bool:
     return False
 
 
-def main(argv: Optional[list] = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--home", required=True, type=Path)
     ap.add_argument("--python", required=True, type=Path, help="pythonw.exe of the venv with Jarvis requirements")

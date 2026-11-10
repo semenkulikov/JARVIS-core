@@ -22,14 +22,10 @@ src = ["src", "tests", "scripts"]
 select = ["F", "B"]
 
 [tool.mypy]
-# The layered package is checked strictly. The flat modules still outside it are followed
-# silently; calls into them and Any leaking out of them are allowed until they move in.
+# Everything is checked strictly: the package, the three src entry points and the scripts.
 python_version = "3.12"
 mypy_path = "src"
-files = ["src/jarvis"]
+files = ["src", "scripts"]
 explicit_package_bases = true
-follow_imports = "silent"
 ignore_missing_imports = true
 strict = true
-disallow_untyped_calls = false
-warn_return_any = false
