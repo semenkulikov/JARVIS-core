@@ -22,15 +22,14 @@ src = ["src", "tests", "scripts"]
 select = ["F", "B"]
 
 [tool.mypy]
-# Typed from the start: the layered package. The flat legacy modules are followed silently.
+# The layered package is checked strictly. The flat modules still outside it are followed
+# silently; calls into them and Any leaking out of them are allowed until they move in.
 python_version = "3.12"
 mypy_path = "src"
 files = ["src/jarvis"]
 explicit_package_bases = true
 follow_imports = "silent"
 ignore_missing_imports = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-check_untyped_defs = true
-disallow_untyped_defs = true
-no_implicit_optional = true
+strict = true
+disallow_untyped_calls = false
+warn_return_any = false
