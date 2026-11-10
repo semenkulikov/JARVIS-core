@@ -34,5 +34,5 @@ python -m mypy
 Настройки ruff и номер версии — в `pyproject.toml`. Перед запросом на слияние тесты должны проходить.
 
 Новая голосовая команда — модуль в `src/jarvis/commands/` с обработчиком `@handles("действие")`,
-запись в `src/jarvis_registry.py` и тест с `tests/command_fakes.FakeServices`; цикл слушателя и
+запись в `src/jarvis/commands/catalog.py` и тест с `tests/command_fakes.FakeServices`; цикл слушателя и
 разговор менять не нужно. Слои и направление импортов описаны в `docs/ARCHITECTURE.md`.

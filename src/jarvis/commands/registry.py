@@ -1,7 +1,7 @@
 """Action -> handler table. A new command is a new module in jarvis.commands with @handles(...).
 
 Modules are discovered by load_builtin(); nothing in the listener loop changes for a new command.
-The spoken catalogue (examples, «что ты умеешь») stays in jarvis_registry.
+The spoken catalogue (examples, «что ты умеешь») stays in jarvis.commands.catalog.
 """
 from __future__ import annotations
 

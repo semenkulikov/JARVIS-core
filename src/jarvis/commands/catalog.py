@@ -8,7 +8,7 @@ return must be listed here. docs/COMMANDS.md carries a generated copy (scripts/g
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ COMMANDS: Tuple[Command, ...] = (
 BY_ID: Dict[str, Command] = {c.id: c for c in COMMANDS}
 
 
-def route_id(alias: Optional[dict]) -> Optional[str]:
+def route_id(alias: Optional[Dict[str, Any]]) -> Optional[str]:
     """Registry id of a matcher result."""
     if not alias:
         return None

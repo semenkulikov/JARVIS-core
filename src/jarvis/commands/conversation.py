@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-import jarvis_registry as REGISTRY
+from jarvis.commands import catalog as REGISTRY
 from jarvis.core import tasks as TASKS
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles

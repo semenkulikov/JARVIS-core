@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import jarvis_registry as R
+from jarvis.commands import catalog as R
 from jarvis.app import settings as SETTINGS
 
 ROOT = Path(__file__).resolve().parent.parent

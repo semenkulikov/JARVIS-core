@@ -1,11 +1,11 @@
-"""Regenerate the command table in docs/COMMANDS.md from src/jarvis_registry.py."""
+"""Regenerate the command table in docs/COMMANDS.md from src/jarvis/commands/catalog.py."""
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-import jarvis_registry as R  # noqa: E402
+from jarvis.commands import catalog as R  # noqa: E402
 
 DOC = ROOT / "docs" / "COMMANDS.md"
 BLOCK = re.compile(r"<!-- registry:start.*?<!-- registry:end -->", re.S)
