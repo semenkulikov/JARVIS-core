@@ -11,6 +11,9 @@ from typing import Any, Mapping, Optional, Sequence
 Word = Mapping[str, Any]
 
 WAKE_NAME = re.compile(r"(?:джарвис|жарвис|джервис|дарвис|гарвис|джарви|джави|харвис|jarvis)\w*")
+# What the free recognizer makes of the owner's «Джарвис» on a bad take (live log and calibration run):
+# never enough alone, only together with the speaker check.
+WAKE_SOUNDALIKE = re.compile(r"(?:джордж|жорж|гаррис|харрис|гарис|джарис|джонс)\w*")
 WAKE_PREFIX = {"хей", "эй", "хэй"}
 
 DEFAULTS: dict[str, Any] = {
@@ -42,6 +45,11 @@ def setting(cfg: Mapping[str, Any], key: str) -> Any:
 def wake_word_confirmed(words: Sequence[Word], min_conf: float) -> bool:
     """True when a free-vocabulary transcript contains the wake name with high confidence."""
     return any(WAKE_NAME.fullmatch(str(w.get("word", ""))) and float(w.get("conf", 0)) >= min_conf for w in words)
+
+
+def wake_soundalike_heard(words: Sequence[Word], min_conf: float) -> bool:
+    """True when the free transcript holds a known mishearing of the wake name (owner-voice path only)."""
+    return any(WAKE_SOUNDALIKE.fullmatch(str(w.get("word", ""))) and float(w.get("conf", 0)) >= min_conf for w in words)
 
 
 def avg_conf(words: Sequence[Word]) -> float:

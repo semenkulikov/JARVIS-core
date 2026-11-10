@@ -141,8 +141,14 @@ class VoskASR:
         t0 = time.monotonic(); raw = ring_audio(ring, a, b); peak, rms = clip_level(raw)
         mc = float(min_conf if min_conf is not None else GATE.setting(cfg, "wake_verify_min_conf"))
 
+        def has_need(ws: list[Word], conf: float) -> bool:
+            return all(any(w.get("word") == n and w.get("conf", 0) >= conf for w in ws) for n in need)
+
         def confirmed(ws: list[Word], conf: float) -> bool:
-            return bool(GATE.wake_word_confirmed(ws, conf)) and all(any(w.get("word") == n and w.get("conf", 0) >= conf for w in ws) for n in need)
+            return bool(GATE.wake_word_confirmed(ws, conf)) and has_need(ws, conf)
+
+        def owner_candidate(ws: list[Word], conf: float) -> bool:
+            return (confirmed(ws, conf) or GATE.wake_soundalike_heard(ws, conf)) and has_need(ws, conf)
 
         clip, gain, agc = self.verify_clip(raw, cfg)
         passes = [self.free_words(clip, cfg, agc=agc)]
@@ -150,7 +156,7 @@ class VoskASR:
         if not ok and not agc:
             passes.append(self.free_words(raw, cfg)); ok = confirmed(passes[1], mc); how = "agc"
         owner_conf = float(GATE.setting(cfg, "wake_verify_owner_min_conf"))
-        if not ok and owner is not None and any(confirmed(ws, owner_conf) for ws in passes):
+        if not ok and owner is not None and any(owner_candidate(ws, owner_conf) for ws in passes):
             ok = owner(); how = "owner voice"
         log.info("wake verify %s (%s): free=%r level peak=%.3f rms=%.4f gain=%.1f (%.2fs)", "OK" if ok else "REJECTED", how,
                  " | ".join(" ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws) for ws in passes),

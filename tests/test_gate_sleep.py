@@ -403,4 +403,8 @@ def test_verify_wake_second_pass_and_owner_voice(asr, cfg, monkeypatch):
     assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: True) is True   # weak name, owner's voice
     assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: False) is False
     takes[True] = [{"word": "джордж", "conf": 1.0}]
+    assert asr.verify_wake(ring, 0, 8000, cfg) is False                      # a known mishearing alone is not enough
+    assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: True) is True   # ... but counts in the owner's voice
+    assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: False) is False
+    takes[True] = takes[False] = [{"word": "ярость", "conf": 1.0}]
     assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: pytest.fail("no name at all")) is False
