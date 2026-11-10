@@ -16,6 +16,7 @@ WAKE_PREFIX = {"хей", "эй", "хэй"}
 DEFAULTS: dict[str, Any] = {
     "wake_verify_enabled": True,     # second, free-vocabulary check of every grammar/oww wake
     "wake_verify_min_conf": 0.7,     # confidence of the wake name in the free transcript
+    "wake_verify_owner_min_conf": 0.3,  # enough when the owner's voice is confirmed by the speaker check
     "sleep_wake_min_conf": 0.85,     # «Джарвис, проснись» while asleep: stricter
     "wake_verify_pre_s": 0.6,        # audio taken before the grammar word start
     "wake_verify_post_s": 0.45,      # audio taken after the grammar word end

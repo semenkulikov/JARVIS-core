@@ -5,7 +5,7 @@ import json
 import logging
 import queue
 import time
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
@@ -132,16 +132,29 @@ class VoskASR:
         return result
 
     def verify_wake(self, ring: Iterable[tuple[int, np.ndarray]], a: int, b: int, cfg: Config, need: Sequence[str] = (),
-                    min_conf: float | None = None) -> bool:
-        """True when a free transcript of [a, b) contains the wake name (and every word in ``need``) confidently."""
+                    min_conf: float | None = None, owner: Callable[[], bool] | None = None) -> bool:
+        """True when a free transcript of [a, b) contains the wake name (and every word in ``need``) confidently.
+
+        The clip is read twice at most: lifted as a whole, then (if that fails) with the chunk AGC of live
+        capture. A name heard only weakly still counts when ``owner`` confirms the owner's voice."""
         if not GATE.setting(cfg, "wake_verify_enabled"): return True
-        t0 = time.monotonic(); clip = ring_audio(ring, a, b); peak, rms = clip_level(clip)
-        clip, gain, agc = self.verify_clip(clip, cfg)
-        ws = self.free_words(clip, cfg, agc=agc)
+        t0 = time.monotonic(); raw = ring_audio(ring, a, b); peak, rms = clip_level(raw)
         mc = float(min_conf if min_conf is not None else GATE.setting(cfg, "wake_verify_min_conf"))
-        ok = bool(GATE.wake_word_confirmed(ws, mc)) and all(any(w.get("word") == n and w.get("conf", 0) >= mc for w in ws) for n in need)
-        log.info("wake verify %s: free=%r level peak=%.3f rms=%.4f gain=%.1f (%.2fs)", "OK" if ok else "REJECTED",
-                 " ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws), peak, rms, gain, time.monotonic() - t0)
+
+        def confirmed(ws: list[Word], conf: float) -> bool:
+            return bool(GATE.wake_word_confirmed(ws, conf)) and all(any(w.get("word") == n and w.get("conf", 0) >= conf for w in ws) for n in need)
+
+        clip, gain, agc = self.verify_clip(raw, cfg)
+        passes = [self.free_words(clip, cfg, agc=agc)]
+        ok = confirmed(passes[0], mc); how = "lifted" if not agc else "agc"
+        if not ok and not agc:
+            passes.append(self.free_words(raw, cfg)); ok = confirmed(passes[1], mc); how = "agc"
+        owner_conf = float(GATE.setting(cfg, "wake_verify_owner_min_conf"))
+        if not ok and owner is not None and any(confirmed(ws, owner_conf) for ws in passes):
+            ok = owner(); how = "owner voice"
+        log.info("wake verify %s (%s): free=%r level peak=%.3f rms=%.4f gain=%.1f (%.2fs)", "OK" if ok else "REJECTED", how,
+                 " | ".join(" ".join("%s:%.2f" % (w.get("word"), w.get("conf", 0)) for w in ws) for ws in passes),
+                 peak, rms, gain, time.monotonic() - t0)
         return ok
 
     @staticmethod

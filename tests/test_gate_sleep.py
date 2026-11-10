@@ -391,3 +391,16 @@ def test_owner_phrasings_from_calibration():
     from jarvis.core import quick as Q
     al = Q.match("напоминая каждые двадцать минут пить воду", {})
     assert al and al["cmd"] == "reminder" and al["seconds"] == 1200
+
+
+def test_verify_wake_second_pass_and_owner_voice(asr, cfg, monkeypatch):
+    ring = [(0, (0.05 * np.sin(np.linspace(0, 60, 8000))).astype(np.float32))]
+    takes = {False: [{"word": "джордж", "conf": 1.0}], True: [{"word": "джарвис", "conf": 0.9}]}
+    monkeypatch.setattr(asr, "free_words", lambda audio, c, agc=True: takes[agc])
+    assert asr.verify_wake(ring, 0, 8000, cfg) is True                       # the chunk-AGC pass hears it
+    takes[True] = [{"word": "джарвис", "conf": 0.4}]
+    assert asr.verify_wake(ring, 0, 8000, cfg) is False                      # weak name, nobody vouches
+    assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: True) is True   # weak name, owner's voice
+    assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: False) is False
+    takes[True] = [{"word": "джордж", "conf": 1.0}]
+    assert asr.verify_wake(ring, 0, 8000, cfg, owner=lambda: pytest.fail("no name at all")) is False

@@ -326,7 +326,8 @@ class Listener:
                 elif ws: log.info("vosk wake rejected conf %.2f", ws[0].get("conf", 0))
             if not trig and lp.wake_check is not None and lp.pos >= lp.wake_check["b"]:
                 wc, lp.wake_check = lp.wake_check, None
-                if c.asr.verify_wake(lp.ring, wc["a"], wc["b"], cfg) and c.speaker.ok(lp.ring, wc["b"], cfg):
+                owner = lambda: c.speaker.owner_confirmed(lp.ring, wc["b"], cfg)  # noqa: E731
+                if c.asr.verify_wake(lp.ring, wc["a"], wc["b"], cfg, owner=owner) and c.speaker.ok(lp.ring, wc["b"], cfg):
                     trig = "wake_word"; frm = wc["frm"]; skip = VOSK_WAKE_SKIP_S if wc["src"] == "vosk" else 0.0
         if trig and time.time() - lp.last_end > cfg["cooldown_s"]:
             lp.barge_armed = False
