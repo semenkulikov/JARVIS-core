@@ -5,4 +5,4 @@ external callers: ``jarvis_supervisor.py`` (the launcher), ``jarvis_voice.py`` (
 process) and ``fatsecret_call.py`` (the FatSecret CLI).
 """
 
-__version__ = "3.20.0"
+__version__ = "3.21.0"
