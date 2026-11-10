@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Any, Callable
 
-import jarvis_commands as QUICK
+from jarvis.core import quick as QUICK
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
 from jarvis.core import sleep as SLEEP

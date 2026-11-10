@@ -4,15 +4,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 from jarvis.adapters import paths as P
-import laptop
+from jarvis.adapters import laptop
 ROOT=Path(__file__).resolve().parent.parent
 
 def test_runtime_outside_source():assert P.HOME!=P.SOURCE_DIR and P.SOURCE_DIR==ROOT/'src'
 
 def test_missing_projects_directory(monkeypatch,tmp_path):
- monkeypatch.setattr(laptop,'PROJ_DIR',str(tmp_path/'missing'))
- assert laptop.find_project('пример',lambda x:x)==(None,0)
- assert laptop.recent_repo() is None
+ missing=str(tmp_path/'missing')
+ assert laptop.find_project('пример',lambda x:x,missing)==(None,0)
+ assert laptop.recent_repo(missing) is None
 
 def test_example_config_is_neutral():
  cfg=json.loads((ROOT/'config.example.json').read_text(encoding='utf-8'))

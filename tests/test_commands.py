@@ -1,6 +1,8 @@
 """Synthetic commands; every desktop operation is a fake backend call."""
 import pytest
-import jarvis_commands as Q
+from jarvis.app.context import build_controller
+from jarvis.adapters.timers import PersistentTimers
+from jarvis.core import quick as Q
 
 class FakeBackend:
  is_fake=True
@@ -16,7 +18,7 @@ class FakeBackend:
 
 @pytest.fixture
 def harness(tmp_path,cfg):
- backend=FakeBackend();clock=[100.];c=Q.Controller(tmp_path,backend,lambda:clock[0]);said=[];posted=[]
+ backend=FakeBackend();clock=[100.];c=build_controller(tmp_path,backend,lambda:clock[0]);said=[];posted=[]
  def say(text,settings,**kwargs):said.append((text,settings,kwargs));return True
  def forward(text,**kwargs):posted.append((text,kwargs))
  def execute(text,**kwargs):
@@ -82,7 +84,7 @@ def test_payload_contracts(harness,text,kind,field,value):
 def test_persistent_timers_and_notes(harness,tmp_path):
  c,_,_,_,_,execute=harness
  execute('таймер на пять минут');execute('каждые сорок пять минут напоминай встать')
- records=Q.PersistentTimers(tmp_path/'cache'/'timers.json').items
+ records=PersistentTimers(tmp_path/'cache'/'timers.json').items
  assert len(records)==2 and any(r['interval']==2700 for r in records)
  execute('запиши идею синтетическая проверка')
  assert 'синтетическая проверка' in (tmp_path/'notes.md').read_text(encoding='utf-8')

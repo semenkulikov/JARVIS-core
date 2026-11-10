@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from jarvis.core import codemode as CODE
-import jarvis_commands as QUICK
+from jarvis.core import quick as QUICK
 from jarvis.adapters import credentials as CREDS
 from jarvis.core import dialog as DIALOG
 from jarvis.core import food as FOOD
@@ -19,7 +19,6 @@ from jarvis.core import projects as PROJECTS
 from jarvis.core import sleep as SLEEP
 import jarvis_speaker as SPEAKER
 from jarvis.core import text as JT
-import laptop as LP
 from jarvis.core.config import ConfigStore, merge_aliases
 from jarvis.core.phrases import SMALLTALK_ALIASES
 
@@ -97,8 +96,6 @@ for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP): DEFAULTS.update({k: v for k, 
 def finalize(cfg: dict[str, Any], home: str) -> None:
     """Values derived after loading: secrets, merged aliases, stress marks, process-wide text settings."""
     cfg["latin_words"] = JT.latin_words(cfg.get("latin_words"))
-    if cfg.get("projects_dir"):
-        LP.PROJ_DIR = os.path.expanduser(os.path.expandvars(cfg["projects_dir"]))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg, home)
     cfg["aliases"] = merge_aliases(cfg.get("aliases"), DEFAULT_ALIASES) + SMALLTALK_ALIASES
     cfg["stress_dict"] = dict(dict(PROACTIVE.STRESS, **QUICK.STRESS, **DIALOG.STRESS), **(cfg.get("stress_dict") or {}))

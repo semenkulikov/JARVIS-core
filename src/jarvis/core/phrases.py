@@ -5,7 +5,7 @@ import datetime
 import random
 from typing import Any, Mapping
 
-import jarvis_commands as QUICK
+from jarvis.core import quick as QUICK
 from jarvis.core import dialog as DIALOG
 from jarvis.core import text as JT
 from jarvis.core import proactive as PROACTIVE

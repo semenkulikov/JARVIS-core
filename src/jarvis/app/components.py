@@ -14,9 +14,11 @@ from jarvis.adapters.speaker import SpeakerGate
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.adapters.transport import WebhookTransport
 from jarvis.adapters.tts import Voice
+from jarvis.commands.controller import Controller
 from jarvis.core.config import ConfigStore
 from jarvis.core.lazy import Lazy
 from jarvis.core.phrases import Picker
+from jarvis.core.ports import Laptop
 from jarvis.core.routing import Router
 from jarvis.core.state import ListenerFSM, ListenerState, RequestLedger, Signals
 
@@ -65,6 +67,7 @@ class Components:
     voice: Voice
     outbox: Outbox
     status: StatusCache
-    controller: Lazy[Any]       # jarvis_commands.Controller
+    controller: Lazy[Controller]
+    laptop: Laptop
     sleep: Lazy[Any]            # jarvis.adapters.sleep_store.SleepState
     proactive: Lazy[Any]        # jarvis.adapters.proactive.Manager

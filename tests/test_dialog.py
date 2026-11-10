@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-import jarvis_commands as Q
+from jarvis.app.context import build_controller
 from jarvis.core import dialog as D
 from jarvis.core import phrases as P
 from jarvis.core import wake as W
@@ -69,7 +69,7 @@ def test_phrase_lists_cover_every_ack():
 def test_quick_timer_gets_ack_then_result(app, cfg, monkeypatch, tmp_path):
     out = []
     monkeypatch.setattr(app.conversation, "say", lambda t, c, **k: out.append(t) or True)
-    ctl = Q.Controller(tmp_path, FakeBackend())
+    ctl = build_controller(tmp_path, FakeBackend())
     monkeypatch.setattr(app.conversation, "controller", lambda: ctl)
     al = ROUTING.match_alias("поставь таймер на пять минут", cfg)
     app.conversation.run_alias(al, "поставь таймер на пять минут", cfg, "wake_word", False)
@@ -79,7 +79,7 @@ def test_quick_timer_gets_ack_then_result(app, cfg, monkeypatch, tmp_path):
 def test_instant_answer_has_no_ack(app, cfg, monkeypatch, tmp_path):
     out = []
     monkeypatch.setattr(app.conversation, "say", lambda t, c, **k: out.append(t) or True)
-    monkeypatch.setattr(app.conversation, "controller", lambda: Q.Controller(tmp_path, FakeBackend()))
+    monkeypatch.setattr(app.conversation, "controller", lambda: build_controller(tmp_path, FakeBackend()))
     app.conversation.run_alias({"name": "q", "action": "quick2", "cmd": "volume", "value": 40}, "громкость сорок", cfg, "wake_word", False)
     assert out == ["Громкость 40 процентов, сэр."]
 

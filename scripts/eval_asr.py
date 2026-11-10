@@ -22,7 +22,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import jarvis_commands as Q  # noqa: E402
+from jarvis.core import quick as Q  # noqa: E402
 
 SR = 16000
 COMMANDS = ["объясни эту ошибку", "статус сервера роутер", "запусти тесты проекта голосовой помощник",

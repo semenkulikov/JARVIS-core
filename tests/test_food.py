@@ -2,7 +2,8 @@
 import datetime
 import json
 import pytest
-import jarvis_commands as Q
+from jarvis.app.context import build_controller
+from jarvis.core import quick as Q
 from pathlib import Path
 
 from jarvis.adapters.food_diary import AliasCache, FoodLogger
@@ -125,7 +126,7 @@ def test_alias_cache_rejects_close_ties(tmp_path):
 
 
 def harness(home, cfg, diary):
-    c = Q.Controller(home, FakeBackend(), food_call=diary); said = []; posted = []
+    c = build_controller(home, FakeBackend(), food_call=diary); said = []; posted = []
     def run(text):
         c.execute(Q.match(text, cfg), text, cfg, lambda t, s, **k: said.append(t) or True, lambda t, **k: posted.append(k), test=True)
     return run, said, posted

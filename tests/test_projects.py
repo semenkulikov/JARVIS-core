@@ -2,7 +2,8 @@
 import subprocess
 import urllib.error
 import pytest
-import jarvis_commands as Q
+from jarvis.app.context import build_controller
+from jarvis.core import quick as Q
 from jarvis.core import projects as P
 from jarvis.adapters.project_tools import ProjectTools
 from test_commands import FakeBackend
@@ -92,7 +93,7 @@ def test_failed_and_timeout(tmp_path):
 def test_start_tests_announces_when_done(tmp_path, cfg):
     cfg.update(CFG, projects={'demo': dict(CFG['projects']['demo'], path=str(tmp_path))})
     t = tools(tmp_path, runner=lambda a, **k: subprocess.CompletedProcess(a, 0, '5 passed', ''))
-    c = Q.Controller(tmp_path, FakeBackend(), tools=t); said = []
+    c = build_controller(tmp_path, FakeBackend(), tools=t); said = []
     c.execute(Q.match('запусти тесты проекта демо', cfg), '', cfg, lambda x, s, **k: said.append(x) or True, None, test=True)
     assert said[-1].startswith('Запускаю тесты проекта demo')
     t._running['demo'].join(5)

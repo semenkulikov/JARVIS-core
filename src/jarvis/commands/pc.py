@@ -9,15 +9,15 @@ import subprocess
 import sys
 import time
 
-import jarvis_commands as QUICK
+from jarvis.core import quick as QUICK
 from jarvis.core import text as JT
-import laptop as LP
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles
 from jarvis.core.matching import norm_phrase
 
 log = logging.getLogger("jarvis")
 CREATE_NO_WINDOW = 0x08000000
+VK = {"vol_up": 0xAF, "vol_down": 0xAE, "mute": 0xAD, "next": 0xB0, "prev": 0xB1, "play": 0xB3}  # Windows media keys
 
 
 def _startfile(target: str) -> None:
@@ -27,9 +27,9 @@ def _startfile(target: str) -> None:
 
 @handles("key")
 def key(ctx: CommandContext, al: Alias) -> None:
-    vk = LP.VK[al["key"]]; n = int(al.get("times", 1))
+    vk = VK[al["key"]]; n = int(al.get("times", 1))
     if ctx.test: log.info("TEST: would send vk=0x%X x%d", vk, n)
-    else: LP.press(vk, n)
+    else: ctx.services.laptop().press(vk, n)
     if not al.get("silent") and al["key"] != "mute": ctx.ack(al)
 
 
@@ -37,27 +37,27 @@ def key(ctx: CommandContext, al: Alias) -> None:
 def monitor_off(ctx: CommandContext, al: Alias) -> None:
     ctx.ack(al)
     if ctx.test: log.info("TEST: would turn monitor off")
-    else: time.sleep(0.5); LP.monitor_off()
+    else: time.sleep(0.5); ctx.services.laptop().monitor_off()
 
 
 @handles("timer")
 def timer(ctx: CommandContext, al: Alias) -> None:
     say, cfg = ctx.services.say, ctx.cfg
-    secs = LP.parse_duration_s(ctx.text)
+    secs = QUICK.duration(re.sub(r"^.*?таймер\w*(?: на)?\s*", "", QUICK.norm(ctx.text)))
     if not secs: say("На сколько поставить таймер, сэр?", cfg); return
-    LP.TIMERS.add(secs, ctx.text)
+    ctx.services.controller().timers.add(secs, ctx.text)
     say(f"Таймер на {QUICK.duration_label(secs)}, сэр.", cfg)
 
 
 @handles("timer_cancel")
 def timer_cancel(ctx: CommandContext, al: Alias) -> None:
-    n = LP.TIMERS.cancel()
+    n = ctx.services.controller().timers.cancel()
     ctx.services.say("Таймер отменён, сэр." if n else "Активных таймеров нет, сэр.", ctx.cfg)
 
 
 @handles("battery")
 def battery(ctx: CommandContext, al: Alias) -> None:
-    pct, ac = LP.battery()
+    pct, ac = ctx.services.laptop().battery()
     if pct is None: ctx.services.say("Не вижу батарею, сэр.", ctx.cfg); return
     ctx.services.say(f"Заряд {JT.num_ru(pct)} {JT.plural(pct, 'процент', 'процента', 'процентов')}, "
                      + ("зарядка подключена, сэр." if ac else "работаем от батареи, сэр."), ctx.cfg)
@@ -65,7 +65,7 @@ def battery(ctx: CommandContext, al: Alias) -> None:
 
 @handles("temperature")
 def temperature(ctx: CommandContext, al: Alias) -> None:
-    t = LP.temperature_c()
+    t = ctx.services.laptop().temperature_c()
     if t is None: ctx.services.say("Датчик температуры сейчас недоступен, сэр.", ctx.cfg)
     else: ctx.services.say(f"Температура системы {JT.num_ru(t)} {JT.plural(t, 'градус', 'градуса', 'градусов')}, сэр.", ctx.cfg)
 
@@ -74,9 +74,10 @@ def temperature(ctx: CommandContext, al: Alias) -> None:
 def open_project(ctx: CommandContext, al: Alias) -> None:
     say, cfg = ctx.services.say, ctx.cfg
     rest = " ".join(norm_phrase(ctx.text)); rest = re.sub(r"^.*?проект\w*\s*", "", rest)
-    path, score = LP.find_project(rest, lambda w: JT.latin(w, ctx.cfg.get("latin_words")))
+    lp = ctx.services.laptop()
+    path, score = lp.find_project(rest, lambda w: JT.latin(w, ctx.cfg.get("latin_words")), ctx.cfg.get("projects_dir") or None)
     log.info("project match %r -> %s (%.2f)", rest, path, score)
-    exe = LP.cursor_exe()
+    exe = lp.cursor_exe()
     if not path or score < 0.5: say("Не нашёл такой проект, сэр.", cfg); return
     if not exe: say("Не нашёл Курсор, сэр.", cfg); return
     if ctx.test: log.info("TEST: would run %s %s", exe, path)
@@ -88,7 +89,8 @@ def open_project(ctx: CommandContext, al: Alias) -> None:
 def open_github(ctx: CommandContext, al: Alias) -> None:
     url = ctx.services.status.github_url()
     if not url:
-        r = LP.recent_repo(); url = LP.remote_url(r) if r else None; log.info("recent repo %s -> %s", r, url)
+        lp = ctx.services.laptop()
+        r = lp.recent_repo(ctx.cfg.get("projects_dir") or None); url = lp.remote_url(r) if r else None; log.info("recent repo %s -> %s", r, url)
     if not url: ctx.services.say("Не нашёл репозиторий, сэр.", ctx.cfg); return
     if ctx.test: log.info("TEST: would open %s", url)
     else: _startfile(url)

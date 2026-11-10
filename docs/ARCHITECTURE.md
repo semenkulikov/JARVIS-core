@@ -237,20 +237,20 @@ stateDiagram-v2
 |---|---:|---|
 | `jarvis_voice.py` | 10 | Точка входа для наблюдателя: потоки BLAS, затем `jarvis.app.main.run()` |
 | `jarvis/app/main.py` | 41 | Журнал, одна копия слушателя, `fatal`, код выхода |
-| `jarvis/app/context.py` | 74 | Корень сборки `build_app()`, проверка портов |
-| `jarvis/app/components.py` | 70 | `Paths` и `Components`: все объекты слушателя |
-| `jarvis/app/listener.py` | 337 | Цикл микрофона: имя, хлопки, прерывание, сон, объявления, таймеры, память |
-| `jarvis/app/conversation.py` | 315 | Ход разговора, служебные триггеры, запрос и ответы сервера, продолжение |
+| `jarvis/app/context.py` | 99 | Корень сборки `build_app()`, проверка портов |
+| `jarvis/app/components.py` | 73 | `Paths` и `Components`: все объекты слушателя |
+| `jarvis/app/listener.py` | 334 | Цикл микрофона: имя, хлопки, прерывание, сон, объявления, таймеры, память |
+| `jarvis/app/conversation.py` | 317 | Ход разговора, служебные триггеры, запрос и ответы сервера, продолжение |
 | `jarvis/app/warmup.py` | 64 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
-| `jarvis/app/settings.py` | 109 | Значения по умолчанию и псевдонимы, сборка конфигурации |
+| `jarvis/app/settings.py` | 106 | Значения по умолчанию и псевдонимы, сборка конфигурации |
 | `jarvis/commands/registry.py` | 46 | `@handles`, поиск модулей, `dispatch` |
-| `jarvis/commands/base.py` | 56 | `CommandContext`, порт `Services` |
+| `jarvis/commands/base.py` | 60 | `CommandContext`, порт `Services` |
 | `jarvis/commands/conversation.py` | 40 | Ответ псевдонима, болтовня, «стоп», «проснись», «что ты умеешь» |
 | `jarvis/commands/day.py` | 50 | Статус, задачи, время, тренировка |
 | `jarvis/commands/modes.py` | 28 | Спящий режим, «не беспокоить» |
-| `jarvis/commands/pc.py` | 123 | Клавиши, экран, таймеры, батарея, температура, проекты, программы |
+| `jarvis/commands/pc.py` | 125 | Клавиши, экран, таймеры, батарея, температура, проекты, программы |
 | `jarvis/commands/server.py` | 32 | Быстрые команды контроллера, псевдонимы на сервер |
-| `jarvis/core/ports.py` | 44 | Порты `Protocol` |
+| `jarvis/core/ports.py` | 107 | Порты `Protocol` |
 | `jarvis/core/state.py` | 127 | Режимы и переходы, данные разговора, сигналы, отменённые запросы |
 | `jarvis/core/routing.py` | 143 | Псевдонимы, грамматика, выбор между свободным текстом и грамматикой |
 | `jarvis/core/config.py` | 94 | `ConfigStore`, проверка типов, слияние псевдонимов |
@@ -276,8 +276,11 @@ stateDiagram-v2
 | `jarvis/core/fuzzy.py` | 59 | Осторожный нечёткий матч коротких вопросов только для чтения |
 | `jarvis/adapters/playback.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis/adapters/fx.py` | 62 | Тембр через NumPy и SciPy |
-| `jarvis_commands.py` | 384 | Быстрые команды, действия Windows, таймеры на диске, подтверждение выключения |
-| `laptop.py` | 129 | Клавиши, экран, батарея, температура, поиск проектов |
+| `jarvis/core/quick.py` | 81 | Быстрые команды, чистая часть: разбор фраз, длительности, спасение грамматикой |
+| `jarvis/commands/controller.py` | 149 | Выполнение быстрых команд через внедрённые порты |
+| `jarvis/adapters/system.py` | 128 | Действия на рабочем столе Windows за одним бэкендом |
+| `jarvis/adapters/timers.py` | 67 | Постоянные таймеры, напоминания и объявления |
+| `jarvis/adapters/laptop.py` | 119 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
 | `jarvis/core/proactive.py` | 65 | Правила проактивности: тихие часы, DND, разбор времени, приоритетный вейк |
 | `jarvis/adapters/proactive.py` | 184 | Постоянная очередь проактивных сообщений и утренний брифинг |
 | `jarvis/adapters/runtime.py` | 81 | Одна копия, намеренная остановка, нарастающая пауза после сбоев |

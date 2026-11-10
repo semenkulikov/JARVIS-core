@@ -1,6 +1,7 @@
 """Fake Services for command handler tests: records speech and server requests, no audio or HTTP."""
 from __future__ import annotations
 
+from jarvis.adapters import laptop as LAPTOP
 from jarvis.commands.base import CommandContext
 from jarvis.commands import registry
 from jarvis.core.phrases import Picker
@@ -8,10 +9,11 @@ from jarvis.core.state import ListenerState
 
 
 class FakeServices:
-    def __init__(self, status=None, controller=None, sleep=None, proactive=None):
+    def __init__(self, status=None, controller=None, sleep=None, proactive=None, laptop=None):
         self.state = ListenerState(); self.status = status; self.picker = Picker({})
         self.said, self.replies, self.asked = [], [], []
         self._controller, self._sleep, self._proactive = controller, sleep, proactive
+        self._laptop = laptop if laptop is not None else LAPTOP  # guarded by conftest
 
     def say(self, text, cfg, role="reply", private=False):
         self.said.append(text); return True
@@ -28,6 +30,7 @@ class FakeServices:
     def controller(self): return self._controller
     def sleep(self): return self._sleep
     def proactive(self): return self._proactive
+    def laptop(self): return self._laptop
 
 
 def run(al, text, cfg, services, test=False, trig="wake_word"):

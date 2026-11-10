@@ -141,8 +141,6 @@ def test_listener_runs_until_the_stop_file(app, cfg, monkeypatch, caplog):
     monkeypatch.setattr(c.player, "idle", lambda t: True)
     monkeypatch.setattr(app.warmup, "run", lambda cfg: None)
     monkeypatch.setattr(RUNTIME, "mark_stop", lambda home: None)
-    import laptop as LP
-    monkeypatch.setattr(LP, "TIMERS", LP.TIMERS)  # run() points it at the controller's timers
     sd = app.listener.sd
     monkeypatch.setattr(sd, "query_devices", lambda *a, **k: [] if not a and not k else {"name": "Fake mic"}, raising=False)
     monkeypatch.setattr(sd, "query_hostapis", lambda: [], raising=False)

@@ -21,7 +21,6 @@ from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
 from jarvis.adapters import runtime as RUNTIME
 from jarvis.core import sleep as SLEEP
-import laptop as LP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, frames_after, pick_device
 from jarvis.adapters.outbox import read_text
 from jarvis.adapters.process import mem_info, trim_memory
@@ -133,7 +132,6 @@ class Listener:
     def run(self) -> None:
         c, sd = self.c, self.sd
         cfg = c.config.load()
-        LP.TIMERS = c.controller.get().timers
         pm = c.proactive.get()
         if not self._load_model(cfg): return
         if c.sleep.get().active(): log.info("sleep mode active for %.0fs more", c.sleep.get().remaining())
@@ -187,8 +185,7 @@ class Listener:
                 item = lp.pm.take(cfg)
                 if item: self.start("proactive", text=item)
         if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending and lp.pm.can_speak(cfg):
-            timers: Any = LP.TIMERS  # jarvis_commands timers since run()
-            for notice in timers.pop_fired(limit=1): self.start("timer_fire", text=notice, test=False); break
+            for notice in c.controller.get().timers.pop_fired(limit=1): self.start("timer_fire", text=notice, test=False); break
         if time.time() - lp.lastlvl > cfg["level_log_interval_s"]:
             c.mic.levels.report(); lp.lastlvl = time.time()
         if time.monotonic() - lp.lastmem > float(cfg.get("memory_log_interval_s", 1800)):

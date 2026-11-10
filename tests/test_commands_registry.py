@@ -1,6 +1,5 @@
 import pytest
 
-import laptop as LP
 from jarvis.app.settings import DEFAULT_ALIASES
 from jarvis.commands import registry
 from jarvis.core.phrases import SMALLTALK_ALIASES
@@ -53,9 +52,10 @@ def test_timer_without_duration_asks(cfg):
     assert s.said == ["На сколько поставить таймер, сэр?"]
 
 
-def test_timer_cancel_counts(cfg, monkeypatch):
-    monkeypatch.setattr(LP.TIMERS, "cancel", lambda: 0)
-    s = FakeServices()
+def test_timer_cancel_counts(cfg):
+    class Ctl:
+        timers = type("T", (), {"cancel": lambda self: 0})()
+    s = FakeServices(controller=Ctl())
     run({"name": "t", "action": "timer_cancel"}, "отмени таймер", cfg, s)
     assert s.said == ["Активных таймеров нет, сэр."]
 
@@ -64,3 +64,15 @@ def test_webhook_alias_forwards_target_and_reply(cfg):
     s = FakeServices()
     run({"name": "w", "action": "webhook", "target": "погода", "reply": "Смотрю, сэр."}, "какая погода", cfg, s)
     assert s.asked == [("погода", {"ack": "Смотрю, сэр."})]
+
+
+@pytest.mark.parametrize("text,secs", [("поставь таймер на пять минут", 300), ("таймер 10", 600), ("таймер на полторы минуты", 90),
+                                       ("таймер на час", 3600)])
+def test_timer_alias_uses_the_quick_duration_parser(cfg, text, secs):
+    added = []
+
+    class Ctl:
+        timers = type("T", (), {"add": lambda self, s, label: added.append(s)})()
+    s = FakeServices(controller=Ctl())
+    run({"name": "t", "action": "timer"}, text, cfg, s)
+    assert added == [secs] and s.said[0].startswith("Таймер на ")

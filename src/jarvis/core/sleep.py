@@ -9,7 +9,7 @@ import re
 from typing import Optional
 
 from jarvis.core import numbers as NUMBERS
-import jarvis_commands as Q
+from jarvis.core import quick as Q
 
 DEFAULT_S = 3600
 MIN_S = 60
@@ -19,7 +19,7 @@ _ENTER = (r"(?:(?:включи|перейди в|уйди в|войди в|пе�
           r"(?:спящий режим|режим сна|режим сон)")
 _VERB = r"(?:засни|усни|спи|поспи|иди спать|уйди спать|ложись спать)"
 SLEEP_RE = re.compile(rf"^(?:{_ENTER}|{_VERB})(?: (?:на|в течение) (?P<dur>.+?))?(?: пожалуйста)?$")
-# Bare «режим сна» stays the old desktop sleep command (screen off + lock) from jarvis_commands.
+# Bare «режим сна» stays the old desktop sleep command (screen off + lock) from jarvis.core.quick.
 LEGACY_BARE = {"режим сна", "режим сон", "включи режим сна", "включи режим сон"}
 WAKE_PHRASES = ("джарвис проснись", "проснись джарвис", "хей джарвис проснись")
 WAKE_FILE = "wake_up"

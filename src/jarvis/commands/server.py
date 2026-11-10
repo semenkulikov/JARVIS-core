@@ -1,4 +1,4 @@
-"""Commands of jarvis_commands.Controller (quick2) and aliases forwarded to the server (webhook)."""
+"""Commands of jarvis.commands.controller.Controller (quick2) and aliases forwarded to the server (webhook)."""
 from __future__ import annotations
 
 from typing import Any, Callable

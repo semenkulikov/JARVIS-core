@@ -15,12 +15,13 @@ def app(tmp_path):
  return build_app(tmp_path/'home',sd=SD)
 @pytest.fixture(autouse=True)
 def guards(monkeypatch):
- import jarvis_commands as Q, laptop
+ from jarvis.adapters import laptop
+ from jarvis.adapters.system import SystemBackend
  from jarvis.adapters import credentials as C
  monkeypatch.setattr(urllib.request,'urlopen',forbidden)
  monkeypatch.setattr(C,'backend',lambda:None)
  for name in ('_run','mute','volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk','window_ocr'):
-  monkeypatch.setattr(Q.SystemBackend,name,forbidden)
+  monkeypatch.setattr(SystemBackend,name,forbidden)
  monkeypatch.setattr(laptop,'press',forbidden)
  import socket
  from jarvis.adapters import fatsecret
@@ -32,7 +33,7 @@ def guards(monkeypatch):
  if hasattr(os,'startfile'):monkeypatch.setattr(os,'startfile',forbidden)
 @pytest.fixture
 def cfg(app,monkeypatch):
- import jarvis_commands as Q
+ from jarvis.core import quick as Q
  from jarvis.core import proactive as P
  from jarvis.core import dialog as D
  from jarvis.app.settings import DEFAULTS

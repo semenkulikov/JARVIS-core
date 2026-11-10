@@ -28,7 +28,7 @@ def test_every_default_alias_is_registered():
 
 
 def test_every_quick_command_is_registered():
-    src = "".join((ROOT / "src" / f).read_text(encoding="utf-8") for f in ("jarvis_commands.py",))
+    src = "".join((ROOT / "src" / f).read_text(encoding="utf-8") for f in ("jarvis/core/quick.py",))
     for cmd in set(re.findall(r"a\('([a-z_]+)'", src)) | {"explain_error", "confirm_in_chat", "server_health", "project_tests", "nutrition_left"}:
         assert "q:" + cmd in R.BY_ID, cmd
 

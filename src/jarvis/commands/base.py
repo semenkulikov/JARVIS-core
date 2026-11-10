@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from jarvis.core.phrases import Picker
-from jarvis.core.ports import Config
+from jarvis.core.ports import Config, Laptop
 from jarvis.core.state import ListenerState
+
+if TYPE_CHECKING:
+    from jarvis.commands.controller import Controller
 
 Alias = dict[str, Any]
 
@@ -32,7 +35,8 @@ class Services(Protocol):
     def ask_server(self, text: str, cfg: Config, trig: str, test: bool, ack: str | None = None,
                    listener_ack: str | None = None, kind: str | None = None, extra_payload: dict[str, Any] | None = None) -> None: ...
     def pick(self, cfg: Config, key: str) -> str: ...
-    def controller(self) -> Any: ...      # jarvis_commands.Controller
+    def controller(self) -> Controller: ...
+    def laptop(self) -> Laptop: ...
     def sleep(self) -> Any: ...           # jarvis.adapters.sleep_store.SleepState
     def proactive(self) -> Any: ...       # jarvis.adapters.proactive.Manager
 

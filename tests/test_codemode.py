@@ -1,7 +1,8 @@
 """Code mode: explain_error and chat-confirmed actions never run anything locally."""
 import pytest
 from jarvis.core import codemode as CODE
-import jarvis_commands as Q
+from jarvis.app.context import build_controller
+from jarvis.core import quick as Q
 from test_commands import FakeBackend
 
 
@@ -29,7 +30,7 @@ def test_unrelated_phrases_untouched(text):
 
 
 def run(tmp_path, cfg, text, backend=None):
-    backend = backend or FakeBackend(); c = Q.Controller(tmp_path, backend); said = []; posted = []
+    backend = backend or FakeBackend(); c = build_controller(tmp_path, backend); said = []; posted = []
     c.execute(Q.match(text, cfg), text, cfg, lambda t, s, **k: said.append(t) or True, lambda t, **k: posted.append((t, k)), test=True)
     return backend, said, posted
 
