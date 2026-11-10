@@ -1,5 +1,5 @@
 import pytest
-import jarvis_text as T
+from jarvis.core import text as T
 @pytest.mark.parametrize('n,gender,expected',[(0,'m','ноль'),(1,'m','один'),(1,'f','одна'),(2,'f','две'),(11,'m','одиннадцать'),(21,'f','двадцать одна'),(40,'m','сорок'),(50,'m','пятьдесят'),(60,'m','шестьдесят'),(70,'m','семьдесят'),(80,'m','восемьдесят'),(90,'m','девяносто'),(100,'m','сто'),(101,'f','сто одна'),(1000,'m','одна тысяча'),(2000,'m','две тысячи'),(5000,'m','пять тысяч'),(1000000,'m','один миллион'),(-21,'m','минус двадцать один')])
 def test_numbers(n,gender,expected):assert T.num_ru(n,gender)==expected
 @pytest.mark.parametrize('n,expected',[(0,'нуля'),(1,'одного'),(2,'двух'),(3,'трёх'),(4,'четырёх'),(11,'одиннадцати'),(21,'двадцати одного'),(40,'сорока'),(50,'пятидесяти'),(60,'шестидесяти'),(70,'семидесяти'),(80,'восьмидесяти'),(90,'девяноста'),(100,'ста'),(200,'двухсот'),(150,'ста пятидесяти'),(1000,'одной тысячи'),(2000,'двух тысяч'),(1000000,'одного миллиона')])
@@ -14,7 +14,7 @@ def test_units(text,expected):assert T.normalize_full_units(text)==expected
 def test_stresses(text,expected):assert T.apply_dict(text,{})==expected
 @pytest.mark.parametrize('text',['Уточняю: в календаре осталось 2 задачи.','По данным на 10:07, сэр. Осталось до 50 граммов белка.','Я на связи, сэр.'])
 def test_pipeline_no_model(text):
- result=T.normalize(text,{},accent=False)
+ result=T.normalize(text,{},accent=None)
  assert isinstance(result,str) and result
 
 
@@ -25,5 +25,5 @@ def test_tests_pronounced_with_hard_t(src, out):
 
 
 def test_slushayu_stressed_on_first_syllable():
-    out = T.normalize('Слушаю, сэр. Тесты прошли.', {}, accent=False)
+    out = T.normalize('Слушаю, сэр. Тесты прошли.', {}, accent=None)
     assert 'Сл+ушаю' in out and 'Т+эсты' in out

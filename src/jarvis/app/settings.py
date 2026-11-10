@@ -18,7 +18,7 @@ import jarvis_proactive as PROACTIVE
 import jarvis_projects as PROJECTS
 import jarvis_sleep as SLEEP
 import jarvis_speaker as SPEAKER
-import jarvis_text as JT
+from jarvis.core import text as JT
 import laptop as LP
 from jarvis.core.config import ConfigStore, merge_aliases
 from jarvis.core.phrases import SMALLTALK_ALIASES
@@ -96,7 +96,7 @@ for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP): DEFAULTS.update({k: v for k, 
 
 def finalize(cfg: dict[str, Any], home: str) -> None:
     """Values derived after loading: secrets, merged aliases, stress marks, process-wide text settings."""
-    JT.extend_latin(cfg.get("latin_words"))
+    cfg["latin_words"] = JT.latin_words(cfg.get("latin_words"))
     if cfg.get("projects_dir"):
         LP.PROJ_DIR = os.path.expanduser(os.path.expandvars(cfg["projects_dir"]))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg, home)

@@ -10,7 +10,7 @@ import sys
 import time
 
 import jarvis_commands as QUICK
-import jarvis_text as JT
+from jarvis.core import text as JT
 import laptop as LP
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles
@@ -74,7 +74,7 @@ def temperature(ctx: CommandContext, al: Alias) -> None:
 def open_project(ctx: CommandContext, al: Alias) -> None:
     say, cfg = ctx.services.say, ctx.cfg
     rest = " ".join(norm_phrase(ctx.text)); rest = re.sub(r"^.*?проект\w*\s*", "", rest)
-    path, score = LP.find_project(rest, lambda w: JT._latin(re.match(r"(?s).+", w)))
+    path, score = LP.find_project(rest, lambda w: JT.latin(w, ctx.cfg.get("latin_words")))
     log.info("project match %r -> %s (%.2f)", rest, path, score)
     exe = LP.cursor_exe()
     if not path or score < 0.5: say("Не нашёл такой проект, сэр.", cfg); return

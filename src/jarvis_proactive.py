@@ -169,7 +169,7 @@ class Manager:
    if item is None:return None
    item=dict(item)
    if item.get('event_start'):
-    import jarvis_text as jt
+    from jarvis.core import text as jt
     minutes=max(1,math.ceil((item['event_start']-now)/60));label=jt.num_ru(minutes,'f')+' '+jt.plural(minutes,'минуту','минуты','минут')
     item['text']=('Через '+label+' тренировка, сэр.') if item['kind']=='training' else ('Сэр, через '+label+' начнётся: '+item.get('title','событие')+'.')
    self.active=dict(item);self.state['last_spoken']=now;self.save();log.info('proactive queued kind=%s key=%s',item['kind'],item['key']);return dict(item)

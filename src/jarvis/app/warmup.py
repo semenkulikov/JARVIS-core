@@ -7,7 +7,7 @@ import os
 import time
 
 import jarvis_speed as SPEED
-import jarvis_text as JT
+from jarvis.core import text as JT
 from jarvis.adapters.process import trim_memory
 from jarvis.adapters.tts import split_text
 from jarvis.app.components import Components
@@ -37,10 +37,10 @@ class Warmup:
             get_audio(cfg.get("fast_ack", "Сейчас, сэр."), cfg)
             log.info("fast ack cache ready (initial)")
         except Exception as e: log.warning("fast ack warmup: %s", type(e).__name__)
-        JT.init_accentizer(cfg, self.c.paths.home)
+        self.c.accent.load(cfg, self.c.paths.home)
         cfg = self.c.config.load(); pronunciation_audit = []
         for t in all_phrases(cfg) + list(FIXED_PHRASES):
-            pronunciation_audit.append({"text": t, "normalized": JT.normalize(t, cfg)})
+            pronunciation_audit.append({"text": t, "normalized": JT.normalize(t, cfg, accent=self.c.accent.apply)})
             for _attempt in range(10):
                 try:
                     for chunk in split_text(t, int(cfg.get("tts_chunk_chars", 170))): get_audio(chunk, cfg)
@@ -50,7 +50,7 @@ class Warmup:
             with open(os.path.join(self.c.paths.cache, PRONUNCIATION_AUDIT), "w", encoding="utf-8") as f:
                 json.dump(pronunciation_audit, f, ensure_ascii=False, indent=2)
         except Exception as e: log.warning("pronunciation audit save failed: %s", type(e).__name__)
-        log.info("precache done (%s, ruaccent=%s, audited_phrases=%d)", cfg.get("tts_engine"), JT.accent_state(), len(pronunciation_audit))
+        log.info("precache done (%s, ruaccent=%s, audited_phrases=%d)", cfg.get("tts_engine"), self.c.accent.state, len(pronunciation_audit))
         if cfg.get("template_precache", True):
             templates = SPEED.template_phrases(cfg, JT)
             busy = self.c.signals.busy

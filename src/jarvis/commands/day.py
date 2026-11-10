@@ -5,7 +5,7 @@ import datetime
 import logging
 
 from jarvis.core import tasks as TASKS
-import jarvis_text as JT
+from jarvis.core import text as JT
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.registry import handles
 from jarvis.core.schedule import workout_summary

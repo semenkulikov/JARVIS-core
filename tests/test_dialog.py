@@ -113,6 +113,6 @@ def test_smalltalk_reply_fills_the_daypart():
 
 
 def test_ack_and_sleep_words_are_stressed(cfg):
-    import jarvis_text as JT
+    from jarvis.core import text as JT
     out = JT.apply_dict("Выполняю, сэр. Я в спящем режиме. Разбудить: Джарвис, проснись.", cfg)
     assert "Выполн+яю" in out and "сп+ящем реж+име" in out and "просн+ись" in out

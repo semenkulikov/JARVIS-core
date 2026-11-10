@@ -1,9 +1,19 @@
-# Text normalisation + stress for Jarvis TTS (Silero: '+' before stressed vowel)
-import re, time, logging, os, threading
+"""Text normalisation and stress marks for Russian TTS (Silero: '+' before the stressed vowel).
+
+Pure: numbers, units, times and Latin words become words; the stress dictionary is applied last.
+An accentizer (jarvis.adapters.accent) can be passed to ``normalize`` for the neural stress pass.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any, Callable, Mapping
+
 log = logging.getLogger("jarvis")
+Config = Mapping[str, Any]
 
 # ---------------- numbers ----------------
-def plural(n, one, few, many):
+def plural(n: int | float | str, one: str, few: str, many: str) -> str:
     n = abs(int(n))
     if n % 10 == 1 and n % 100 != 11: return one
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14: return few
@@ -15,7 +25,7 @@ _TEEN = ["десять","одиннадцать","двенадцать","три�
 _TENS = ["","","двадцать","тридцать","сорок","пятьдесят","шестьдесят","семьдесят","восемьдесят","девяносто"]
 _HUND = ["","сто","двести","триста","четыреста","пятьсот","шестьсот","семьсот","восемьсот","девятьсот"]
 
-def num_ru(n, g="m"):
+def num_ru(n: int | float | str, g: str = "m") -> str:
     n = int(n)
     if n < 0: return "минус " + num_ru(-n, g)
     if n == 0: return "ноль"
@@ -32,7 +42,7 @@ def num_ru(n, g="m"):
     if n: w.append(_U[g][n])
     return " ".join(x for x in w if x)
 
-def time_words(h, m):
+def time_words(h: int | str, m: int | str) -> str:
     h, m = int(h), int(m)
     hours = f"{num_ru(h)} {plural(h, 'час', 'часа', 'часов')}"
     if m == 0: return hours + " ровно"
@@ -49,7 +59,7 @@ UNITS = {  # unit regex -> (gender, one, few, many)
     "%": ("m", "процент", "процента", "процентов"),
 }
 
-def _num_tok(s):
+def _num_tok(s: str) -> tuple[int | None, str]:
     s = s.replace(",", ".")
     if "." in s:
         a, b = s.split(".", 1)
@@ -57,7 +67,7 @@ def _num_tok(s):
         return None, fraction_words(s)
     return int(s), num_ru(int(s))
 
-def _units(m):
+def _units(m: re.Match[str]) -> str:
     n, w = _num_tok(m.group(1))
     g, one, few, many = UNITS[m.group(2).lower()]
     if n is None: return f"{w} {few}"
@@ -70,7 +80,7 @@ _GT = ["десяти", "одиннадцати", "двенадцати", "три
 _GD = ["", "", "двадцати", "тридцати", "сорока", "пятидесяти", "шестидесяти", "семидесяти", "восьмидесяти", "девяноста"]
 _GH = ["", "ста", "двухсот", "трёхсот", "четырёхсот", "пятисот", "шестисот", "семисот", "восьмисот", "девятисот"]
 
-def num_ru_gen(n, g="m"):
+def num_ru_gen(n: int | float | str, g: str = "m") -> str:
     n = int(n)
     if n < 0: return "минус " + num_ru_gen(-n,g)
     if n == 0: return _GU[0]
@@ -85,7 +95,7 @@ def num_ru_gen(n, g="m"):
     if n: out.append("одной" if n==1 and g=="f" else _GU[n])
     return " ".join(out)
 
-def fraction_words(s, gen=False):
+def fraction_words(s: str, gen: bool = False) -> str:
     a,b=s.replace(",", ".").split(".",1); b=b.rstrip("0") or "0"
     whole,part=int(a),int(b)
     denominators={1:("десятая","десятых"),2:("сотая","сотых"),3:("тысячная","тысячных"),4:("десятитысячная","десятитысячных"),5:("стотысячная","стотысячных"),6:("миллионная","миллионных")}
@@ -107,12 +117,12 @@ FULL_UNITS = [
     (r"процент(?:а|ов|ы|у|ами|ам|ах)?", "m", "процент", "процента", "процентов", "процента"),
 ]
 
-def normalize_full_units(text):
+def normalize_full_units(text: str) -> str:
     abbreviations={"ккал":"килокалорий","кг":"килограммов","гр":"граммов","г":"граммов","мин":"минут","ч":"часов","км":"километров","%":"процентов"}
     text=re.sub(r"(\d+(?:[.,]\d+)?)\s*(ккал|кг|гр|г|мин|ч|км|%)(?![А-Яа-яЁё])",lambda m:m.group(1)+" "+abbreviations[m.group(2).lower()],text,flags=re.I)
     for rx,g,one,few,many,gen_one in FULL_UNITS:
         pattern = r"(?<![\w:.,])(?:(около|до|более|менее|порядка|свыше)\s+)?(\d+(?:[.,]\d+)?)\s*(?:" + rx + r")(?![А-Яа-яЁё])"
-        def sub(m, g=g,one=one,few=few,many=many,gen_one=gen_one):
+        def sub(m: re.Match[str], g: str = g, one: str = one, few: str = few, many: str = many, gen_one: str = gen_one) -> str:
             prefix,raw=m.group(1),m.group(2)
             n,words=_num_tok(raw)
             if n is None:
@@ -129,24 +139,30 @@ def normalize_full_units(text):
 LATIN = {'github': 'гитхаб', 'cursor': 'курсор', 'telegram': 'телеграм', 'todoist': 'тодоист', 'fatsecret': 'фэт сикрет', 'vercel': 'версел', 'api': 'эй пи ай', 'ci': 'си ай', 'cd': 'си ди', 'mac': 'мак', 'macbook': 'макбук', 'windows': 'виндоус', 'intel': 'интел', 'wi-fi': 'вай-фай', 'wifi': 'вай-фай', 'python': 'питон', 'docker': 'докер', 'react': 'реакт', 'next': 'некст', 'node': 'нод', 'pr': 'пул реквест', 'ok': 'окей', 'google': 'гугл', 'youtube': 'ютуб', 'jarvis': 'джарвис', 'git': 'гит', 'ui': 'ю ай', 'url': 'ю ар эл', 'json': 'джейсон', 'deploy': 'деплой', 'frontend': 'фронтенд', 'my': 'май', 'site': 'сайт', 'bot': 'бот', 'parser': 'парсер', 'project': 'проект', 'async': 'асинк', 'rag': 'раг', 'llm': 'эл эл эм', 'tg': 'тэ гэ', 'vpn': 'вэ пэ эн', 'backend': 'бэкенд', 'status': 'статус', 'readme': 'ридми', 'main': 'мейн', 'dev': 'дев'}
 
 
-def extend_latin(words):
-    """Add pronunciations for Latin words from config (``latin_words``: {"word": "слово"})."""
+def latin_words(words: Any) -> dict[str, str]:
+    """Clean ``latin_words`` from config ({"word": "слово"}): lower-case keys, no empty or non-text values."""
+    out: dict[str, str] = {}
     for k, v in (words or {}).items():
         if isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip():
-            LATIN[k.strip().lower()] = v.strip()
+            out[k.strip().lower()] = v.strip()
+    return out
+
+
 _TR = {"a": "а", "b": "б", "c": "к", "d": "д", "e": "е", "f": "ф", "g": "г", "h": "х", "i": "и", "j": "дж", "k": "к", "l": "л",
        "m": "м", "n": "н", "o": "о", "p": "п", "q": "к", "r": "р", "s": "с", "t": "т", "u": "у", "v": "в", "w": "в", "x": "кс",
        "y": "й", "z": "з"}
 
-def _latin(m):
-    w = m.group(0); k = w.lower()
-    if k in LATIN: return LATIN[k]
+def latin(word: str, extra: Mapping[str, str] | None = None) -> str:
+    """Cyrillic reading of a Latin word: the dictionary (plus ``extra`` from config), else letter by letter."""
+    known = {**LATIN, **extra} if extra else LATIN
+    k = word.lower()
+    if k in known: return known[k]
     # CamelCase -> split
-    parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", w) or [w]
+    parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", word) or [word]
     out = []
     for p in parts:
         pl = p.lower()
-        if pl in LATIN: out.append(LATIN[pl]); continue
+        if pl in known: out.append(known[pl]); continue
         s = pl.replace("sh", "ш").replace("ch", "ч").replace("th", "т").replace("oo", "у").replace("ee", "и").replace("ck", "к")
         out.append("".join(_TR.get(c, c) for c in s))
     return " ".join(out)
@@ -157,7 +173,7 @@ _TEST_RE = re.compile(r"\b([Тт])ест(ы|ов|ами|ам|ах|ом|а|е|у)
 PRONOUNCE_STRESS = {"тэст": "т+эст", "тэсты": "т+эсты", "тэстов": "т+эстов", "тэстами": "т+эстами", "тэстам": "т+эстам",
                     "тэстах": "т+эстах", "тэстом": "т+эстом", "тэста": "т+эста", "тэсте": "т+эсте", "тэсту": "т+эсту"}
 
-def pronounce(text):
+def pronounce(text: str) -> str:
     return _TEST_RE.sub(lambda m: m.group(1) + "эст" + (m.group(2) or ""), text)
 
 REWRITES = [
@@ -202,23 +218,21 @@ STRESS_STEMS = [
     "б+аг", "бр+аузер", "м+онитор", "экр+ан", "дизайн", "диз+айн", "верст+к", "бр+анч", "ворк+ер", "ч+екаут", "з+апуск",
     "отч+ёт", "отч+ет", "св+одк", "тел+еграм", "бот", "б+от", "инсталл+ер", "конф+иг", "п+акет", "п+лагин", "ж+урнал",
 ]
-_STEMS = {}
-def _build_stems(extra=None):
-    d = {}
+def _build_stems(extra: list[str] | None = None) -> dict[str, int]:
+    d: dict[str, int] = {}
     for s in STRESS_STEMS + list(extra or []):
         k = s.replace("+", "").lower()
         if "+" in s: d[k] = s.index("+")
     return d
 _STEMS = _build_stems()
 _STEMS_SORTED = sorted(_STEMS, key=len, reverse=True)
-_RX_STRESSED = {}
 
-def _place(word, idx):
+def _place(word: str, idx: int) -> str:
     return word[:idx] + "+" + word[idx:]
 
-def _stress_word(w, words, stems, stems_sorted):
+def _stress_word(w: str, words: Mapping[str, str], stems: Mapping[str, int], stems_sorted: list[str]) -> str:
     plain = w.replace("+", "")
-    lo = plain.lower().replace("ё", "е") if False else plain.lower()
+    lo = plain.lower()
     if lo in words:
         v = words[lo]
         if "+" not in v: return plain
@@ -228,7 +242,7 @@ def _stress_word(w, words, stems, stems_sorted):
             return _place(plain, stems[st])
     return w
 
-def apply_dict(text, cfg):
+def apply_dict(text: str, cfg: Config | None) -> str:
     words = dict(STRESS_WORDS)
     stems, stems_sorted = _STEMS, _STEMS_SORTED
     user = (cfg or {}).get("stress_dict", {}) or {}
@@ -239,72 +253,16 @@ def apply_dict(text, cfg):
         stems = dict(_STEMS); stems.update(_build_stems(ustems)); stems_sorted = sorted(stems, key=len, reverse=True)
     return re.sub(r"[А-Яа-яЁё+]+", lambda m: _stress_word(m.group(0), words, stems, stems_sorted), text)
 
-# ---------------- RUAccent (optional) ----------------
-_ACC = {"obj": None, "state": "off", "ms": None}
-_ACC_LOCK = threading.Lock()
-
-
-def _patch_sessions(obj, depth=0, seen=None):
-    """transformers>=5 tokenizers drop token_type_ids; add zeros if the onnx model needs them."""
-    import numpy as _np
-    seen = seen if seen is not None else set()
-    if depth > 3 or id(obj) in seen: return
-    seen.add(id(obj))
-    for _name, v in list(getattr(obj, "__dict__", {}).items()):
-        if type(v).__name__ == "InferenceSession":
-            need = [i.name for i in v.get_inputs()]
-            if "token_type_ids" in need and not getattr(v, "_jv_patched", False):
-                orig = v.run
-                def run(out_names, feed, *a, _orig=orig, **k):
-                    if "token_type_ids" not in feed and "input_ids" in feed:
-                        feed = dict(feed); feed["token_type_ids"] = _np.zeros_like(feed["input_ids"])
-                    return _orig(out_names, feed, *a, **k)
-                v.run = run; v._jv_patched = True
-        elif hasattr(v, "__dict__") and not isinstance(v, (str, bytes, int, float)):
-            _patch_sessions(v, depth + 1, seen)
-
-def init_accentizer(cfg, base):
-    if not cfg.get("stress_ruaccent", True):
-        _ACC["state"] = "disabled"; return
-    with _ACC_LOCK:
-        if _ACC["obj"] is not None: return
-        try:
-            t0 = time.time()
-            from ruaccent import RUAccent
-            a = RUAccent()
-            wd = os.path.join(base, "models", "ruaccent"); os.makedirs(wd, exist_ok=True)
-            a.load(omograph_model_size=cfg.get("ruaccent_model", "turbo3.1"), use_dictionary=bool(cfg.get("ruaccent_dictionary", True)),
-                   device="CPU", workdir=wd, tiny_mode=bool(cfg.get("ruaccent_tiny_mode", False)))
-            _patch_sessions(a)
-            a.process_all("прогрев модели ударений, замок на двери.")
-            _ACC["obj"] = a; _ACC["state"] = "ready"
-            log.info("ruaccent loaded in %.1fs (%s)", time.time() - t0, cfg.get("ruaccent_model", "turbo3.1"))
-        except Exception as e:
-            _ACC["state"] = "failed"; log.warning("ruaccent unavailable: %s", e)
-
-def accent_state():
-    return _ACC["state"]
-
-def _ruaccent(text):
-    a = _ACC["obj"]
-    if a is None: return text
-    try:
-        t0 = time.time()
-        out = " ".join(a.process_all(p) for p in re.split(r"(?<=[.!?…])\s+", text) if p.strip())
-        _ACC["ms"] = (time.time() - t0) * 1000
-        log.info("ruaccent %.0f ms (%d chars)", _ACC["ms"], len(text))
-        return out
-    except Exception as e:
-        log.warning("ruaccent failed: %s", e); return text
-
 # ---------------- pipeline ----------------
-def normalize(text, cfg=None, accent=True):
+def normalize(text: str, cfg: Config | None = None, accent: Callable[[str], str] | None = None) -> str:
+    """Spoken form of ``text``; ``accent`` is the optional neural stress pass (before the dictionary)."""
     cfg = cfg or {}
+    extra = cfg.get("latin_words") or None
     t = text.replace("\u00a0", " ")
     for a, b in REWRITES + [tuple(x) for x in (cfg.get("phrase_rewrites") or [])]:
         try: t = re.sub(a, b, t)
         except re.error as e: log.warning("bad rewrite %r: %s", a, e)
-    t = re.sub(r"[A-Za-z][A-Za-z\-]*[A-Za-z]|[A-Za-z]", _latin, t)
+    t = re.sub(r"[A-Za-z][A-Za-z\-]*[A-Za-z]|[A-Za-z]", lambda m: latin(m.group(0), extra), t)
     # times: 22:06 / 22.06 after "на|в|к|до|с" / 22 06 after those prepositions
     t = re.sub(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", lambda m: time_words(m.group(1), m.group(2)), t)
     t = re.sub(r"(?i)\b(на|в|к|до|с|после|около)\s+([01]?\d|2[0-3])[ .]([0-5]\d)\b",
@@ -316,6 +274,6 @@ def normalize(text, cfg=None, accent=True):
     t = re.sub(r"\d+", lambda m: num_ru(m.group(0)), t)
     t = t.replace("—", ",").replace("–", ",").replace("«", "").replace("»", "").replace("\"", "")
     t = re.sub(r"\s+", " ", t).strip()
-    if accent and _ACC["obj"] is not None: t = _ruaccent(t)
+    if accent is not None: t = accent(t)
     t = apply_dict(t, cfg)
     return t

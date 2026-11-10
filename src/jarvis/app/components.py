@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.audio import MicInput
 from jarvis.adapters.outbox import Outbox
@@ -60,6 +61,7 @@ class Components:
     speaker: SpeakerGate
     transport: WebhookTransport
     player: Any                 # jarvis_audio.Player
+    accent: Accentizer
     voice: Voice
     outbox: Outbox
     status: StatusCache

@@ -237,8 +237,8 @@ stateDiagram-v2
 |---|---:|---|
 | `jarvis_voice.py` | 10 | Точка входа для наблюдателя: потоки BLAS, затем `jarvis.app.main.run()` |
 | `jarvis/app/main.py` | 41 | Журнал, одна копия слушателя, `fatal`, код выхода |
-| `jarvis/app/context.py` | 72 | Корень сборки `build_app()`, проверка портов |
-| `jarvis/app/components.py` | 68 | `Paths` и `Components`: все объекты слушателя |
+| `jarvis/app/context.py` | 74 | Корень сборки `build_app()`, проверка портов |
+| `jarvis/app/components.py` | 70 | `Paths` и `Components`: все объекты слушателя |
 | `jarvis/app/listener.py` | 337 | Цикл микрофона: имя, хлопки, прерывание, сон, объявления, таймеры, память |
 | `jarvis/app/conversation.py` | 315 | Ход разговора, служебные триггеры, запрос и ответы сервера, продолжение |
 | `jarvis/app/warmup.py` | 65 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
@@ -261,19 +261,20 @@ stateDiagram-v2
 | `jarvis/core/followup.py` | 37 | `FollowupSettings` |
 | `jarvis/core/schedule.py` | 32 | Ответ о тренировке |
 | `jarvis/core/lazy.py` | 27 | `Lazy`: объект при первом обращении |
-| `jarvis/adapters/tts.py` | 209 | Синтез, кэш WAV, нарезка текста, воспроизведение с прерыванием |
+| `jarvis/adapters/tts.py` | 212 | Синтез, кэш WAV, нарезка текста, воспроизведение с прерыванием |
 | `jarvis/adapters/audio.py` | 154 | Микрофон, уровни, усиление, кольцевой буфер, выбор устройства, хлопки |
 | `jarvis/adapters/asr_vosk.py` | 142 | Модель и грамматики Vosk, запись фразы, проверка имени |
 | `jarvis/adapters/transport.py` | 81 | Webhook с повтором и списком разрешённых полей |
 | `jarvis/adapters/outbox.py` | 74 | Файлы ответов сервера |
 | `jarvis/adapters/status_cache.py` | 54 | `status.json`: статус, задачи, ссылка GitHub |
 | `jarvis/adapters/speaker.py` | 49 | Необязательная проверка голоса владельца |
+| `jarvis/adapters/accent.py` | 73 | Необязательные ударения RUAccent |
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
-| `jarvis_text.py` | 321 | Русские числа, падежи, время, латиница, RUAccent и словарь ударений |
+| `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
 | `jarvis_speed.py` | 120 | Замеры задержек, события `outbox`, нечёткий разбор команды, заготовки фраз |
 | `jarvis_audio.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis_fx.py` | 53 | Тембр через NumPy и SciPy |
-| `jarvis_commands.py` | 381 | Быстрые команды, действия Windows, таймеры на диске, подтверждение выключения |
+| `jarvis_commands.py` | 382 | Быстрые команды, действия Windows, таймеры на диске, подтверждение выключения |
 | `laptop.py` | 129 | Клавиши, экран, батарея, температура, поиск проектов |
 | `jarvis_proactive.py` | 189 | Очередь, расписания, присутствие, календарь, «не беспокоить», без повторов |
 | `jarvis_runtime.py` | 42 | Одна копия, намеренная остановка, нарастающая пауза после сбоев |

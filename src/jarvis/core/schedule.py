@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Mapping
 
-import jarvis_text as JT
+from jarvis.core import text as JT
 
 DAYS_ACC = ["понедельник", "вторник", "среду", "четверг", "пятницу", "субботу", "воскресенье"]
 

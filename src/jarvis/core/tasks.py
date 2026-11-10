@@ -11,7 +11,7 @@ import datetime as _dt
 import re
 from typing import Any, List, Optional, Tuple
 
-import jarvis_text as JT
+from jarvis.core import text as JT
 from jarvis.core import vocab as VOCAB
 
 _LEAD = r"^(?:(?:а|ну|и|так|слушай|скажи|джарвис|то есть|есть)\s+)*"

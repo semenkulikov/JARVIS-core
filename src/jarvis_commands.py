@@ -45,7 +45,7 @@ STRESS = {w.replace("+",""):w for w in ["гр+омкость","скринш+от
 SPECIAL_SPANS={60:'минуту',90:'полторы минуты',1800:'полчаса',3600:'час',5400:'полтора часа',1:'секунду'}
 def duration_label(secs):
  """Span after «на» / «через», as people say it: «час», «полтора часа», «два часа», «сорок пять минут»."""
- import jarvis_text as jt
+ from jarvis.core import text as jt
  secs=int(secs)
  if secs in SPECIAL_SPANS:return SPECIAL_SPANS[secs]
  h,rest=divmod(secs,3600);m,s=divmod(rest,60);parts=[]
@@ -242,9 +242,10 @@ class SystemBackend:
   if not re.match(r'^https?://',url):raise ValueError('invalid_playlist_url')
   os.startfile(url)
  def git(self,project,which):
-  import laptop,jarvis_text
+  import laptop
+  from jarvis.core import text as jarvis_text
   if not project:raise ValueError('name_project')
-  path,score=laptop.find_project(project,lambda w:jarvis_text._latin(re.match(r'(?s).+',w)))
+  path,score=laptop.find_project(project,lambda w:jarvis_text.latin(w))
   if not path or score<.5:raise ValueError('project_not_found')
   args=['git','--no-optional-locks','-C',path]
   if which=='last':

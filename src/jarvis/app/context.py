@@ -11,6 +11,7 @@ import jarvis_audio as AUDIO
 import jarvis_commands as QUICK
 import jarvis_proactive as PROACTIVE
 import jarvis_sleep as SLEEP
+from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.audio import MicInput
 from jarvis.adapters.outbox import Outbox
@@ -51,12 +52,13 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         ctl = controller.peek()
         return ctl is not None and bool(getattr(ctl, "pending_shutdown", None))
 
-    player = AUDIO.Player(sd)
+    player = AUDIO.Player(sd); accent = Accentizer()
     c = Components(
         paths=paths, config=settings.config_store(paths.home), picker=Picker(settings.DEFAULTS),
         signals=signals, fsm=fsm, state=state, ledger=ledger, router=Router(state, shutdown_pending),
         mic=MicInput(), asr=VoskASR(state), speaker=SpeakerGate(paths.home),
-        transport=WebhookTransport(signals, ledger), player=player, voice=Voice(paths.home, state, signals, fsm, player),
+        transport=WebhookTransport(signals, ledger), player=player, accent=accent,
+        voice=Voice(paths.home, state, signals, fsm, player, accent),
         outbox=outbox, status=StatusCache(os.path.join(paths.cache, "status.json")),
         controller=controller,
         sleep=Lazy(lambda: SLEEP.SleepState(os.path.join(paths.cache, "sleep.json"))),

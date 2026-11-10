@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from jarvis.core import migrations as M
-import jarvis_text as JT
+from jarvis.core import text as JT
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULTS = {"ack_stop": ["Как скажете, сэр."]}
@@ -38,6 +38,8 @@ def test_listener_applies_migrations(monkeypatch, tmp_path):
     assert cfg["phrase_silence_s"] == 0.95 and cfg["config_version"] == M.CURRENT
 
 
-def test_extend_latin():
-    JT.extend_latin({"Mercusys": "меркусис", "": "x", "bad": 3})
-    assert JT.LATIN["mercusys"] == "меркусис" and "" not in JT.LATIN and "bad" not in JT.LATIN
+def test_latin_words_from_config():
+    words = JT.latin_words({"Mercusys": "меркусис", "": "x", "bad": 3})
+    assert words == {"mercusys": "меркусис"}
+    assert JT.normalize("Mercusys", {"latin_words": words}) == JT.normalize("меркусис", {})
+    assert JT.latin("Mercusys") != "меркусис"  # no process-wide state

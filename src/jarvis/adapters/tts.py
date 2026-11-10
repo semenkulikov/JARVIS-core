@@ -19,7 +19,8 @@ from typing import Any
 
 import numpy as np
 
-import jarvis_text as JT
+from jarvis.core import text as JT
+from jarvis.adapters.accent import Accentizer
 from jarvis.adapters.audio import SR
 from jarvis.core.state import ListenerFSM, ListenerState, Mode, Signals
 
@@ -76,13 +77,15 @@ def split_text(text: str, limit: int = 170) -> list[str]:
 class Voice:
     """Implements :class:`jarvis.core.ports.SpeechOutput` and :class:`~jarvis.core.ports.Synthesizer`."""
 
-    def __init__(self, home: str, state: ListenerState, signals: Signals, fsm: ListenerFSM, player: Any) -> None:
+    def __init__(self, home: str, state: ListenerState, signals: Signals, fsm: ListenerFSM, player: Any,
+                 accent: Accentizer | None = None) -> None:
         self.home, self.state, self.signals, self.fsm, self.player = home, state, signals, fsm, player
+        self.accent = accent
         self._engines: dict[str, Any] = {}
         self._syn_lock = threading.Lock()
 
     def _cache_path(self, text: str, cfg: Config, ext: str) -> str:
-        sig = json.dumps(["v3.8-stress2", JT.accent_state(), cfg.get("tts_engine"), cfg.get("silero_model"), cfg.get("stress_dict"), cfg.get("phrase_rewrites"),
+        sig = json.dumps(["v3.8-stress2", (self.accent.state if self.accent else "off"), cfg.get("tts_engine"), cfg.get("silero_model"), cfg.get("stress_dict"), cfg.get("phrase_rewrites"),
                           cfg.get("fx"), cfg.get("silero_speaker"), cfg.get("silero_rate"), cfg.get("piper_voice"), text], ensure_ascii=False)
         cdir = os.path.join(self.home, "cache", "tts"); os.makedirs(cdir, exist_ok=True)
         return os.path.join(cdir, hashlib.md5(sig.encode("utf-8")).hexdigest() + ext)
@@ -137,7 +140,7 @@ class Voice:
     def get_audio(self, text: str, cfg: Config) -> tuple[np.ndarray, int]:
         cp = self._cache_path(text, cfg, ".wav")
         if os.path.exists(cp): return _wav_read(cp)
-        norm = JT.normalize(text, cfg)
+        norm = JT.normalize(text, cfg, accent=self.accent.apply if self.accent else None)
         a, sr = self.synth_local(norm, cfg)
         fx = cfg.get("fx", {"enabled": True})
         if fx.get("enabled", True):
