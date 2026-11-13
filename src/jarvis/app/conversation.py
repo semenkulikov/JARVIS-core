@@ -177,19 +177,30 @@ class Conversation:
             self.say(notice.get("label") or TIMER_DONE_PHRASE, cfg); return True
         return False
 
+    def not_understood(self, trig: str, cfg: Config, reason: str, text: str) -> None:
+        """The name was heard but the phrase dropped: a short low tone instead of silence (never a spoken
+        «не расслышал»); follow-ups and speech without the name stay silent."""
+        st = self.c.state; now = time.monotonic()
+        if not DIALOG.reject_beep_due(cfg, trig, st.reject_beep_at, now):
+            log.info("not understood -> silent (%s): %r", reason, text); return
+        st.reject_beep_at = now
+        log.info("not understood -> beep (%s): %r", reason, text)
+        try: self.c.voice.beep_reject()
+        except Exception as e: log.info("reject beep failed: %s", type(e).__name__)
+
     def handle_turn(self, trig: str, cap: Capture | None, text: Any, test: bool, skip_s: float) -> None:
         c, st, interrupt, choose = self.c, self.c.state, self.c.signals.interrupt, self.c.router.choose
         cfg = c.config.load()
         try:
             log.info("TRIGGER %s%s", trig, " (test)" if test else "")
             if self._event_turn(trig, text, cfg, test): return
-            ok = True
+            ok = True; st.drop_reason = ""
             if text is None:
                 pause = float(cfg.get("wake_ack_after_s", DIALOG.DEFAULTS["wake_ack_after_s"])) if trig == "wake_word" else None
                 text, conf, g = ("", 0.0, "") if cap is None else self.capture(cap, cfg, float(cfg["phrase_wait_s"]), skip_s, wake_pause_s=pause)
                 c.fsm.to(Mode.PROCESSING, "captured")
                 text, ok = choose(text, conf, g, cfg)
-                if st.dropped: return
+                if st.dropped: self.not_understood(trig, cfg, st.drop_reason, text); return
             else:
                 text = strip_wake(norm_phrase(text))
                 if trig != "followup":
@@ -207,8 +218,7 @@ class Conversation:
                     log.info("no follow-up phrase"); return
             if interrupt.is_set(): return
             if not ok or not text:
-                # Never "sorry, I did not catch that": unclear input is dropped silently.
-                log.info("not understood -> silent: %r", text); return
+                self.not_understood(trig, cfg, st.drop_reason or ("empty" if not text else "rejected"), text); return
             self.perf("recognized")
             confirmation = self.controller().confirmation(text, trig, st.last_input_conf, heard_at=st.last_input_end)
             al = ({"name": "shutdown_confirmation", "action": "quick2", "cmd": "shutdown_confirm", **confirmation}

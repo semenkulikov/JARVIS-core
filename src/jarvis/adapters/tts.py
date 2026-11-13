@@ -211,3 +211,16 @@ class Voice:
     def beep(self) -> None:
         t = np.linspace(0, 0.12, int(SR * 0.12), False)
         self.player.play((0.25 * np.sin(2 * np.pi * 880 * t)).astype(np.float32), SR)
+
+    def beep_reject(self) -> None:
+        """«Heard you, did not take it»: a short low falling tone, unlike the high timer beep."""
+        self.player.play(reject_tone(), SR)
+
+
+def reject_tone(duration_s: float = 0.22) -> np.ndarray:
+    """Falling 330 -> 220 Hz with a soft fade in and out, so it never clicks."""
+    n = int(SR * duration_s); t = np.arange(n) / SR
+    freq = np.linspace(330.0, 220.0, n)
+    phase = 2 * np.pi * np.cumsum(freq) / SR
+    env = np.minimum(1.0, np.minimum(t, duration_s - t) / 0.03)
+    return (0.3 * env * np.sin(phase)).astype(np.float32)

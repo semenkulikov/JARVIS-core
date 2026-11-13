@@ -18,7 +18,18 @@ DEFAULTS: Dict[str, object] = {
     "ack_food": ["Записываю, сэр.", "Есть, сэр, записываю."],
     "ack_server": ["Сейчас, сэр.", "Секунду, сэр.", "Одну секунду, сэр.", "Минуту, сэр."],
     "wake_ack_after_s": 0.7,
+    "reject_beep_enabled": True,       # a short low tone when the name was heard but the phrase was dropped
+    "reject_beep_min_interval_s": 3.0,  # at most one such tone per interval
 }
+# Turns started by the name or a clap: there the owner did call Jarvis, so a dropped phrase gets a tone.
+REJECT_BEEP_TRIGGERS = frozenset({"wake_word", "clap"})
+
+
+def reject_beep_due(cfg: Dict[str, Any], trig: str, last_beep: float, now: float) -> bool:
+    """Whether a dropped phrase of a ``trig`` turn gets the reject tone (follow-ups stay silent: background speech)."""
+    if trig not in REJECT_BEEP_TRIGGERS or not cfg.get("reject_beep_enabled", DEFAULTS["reject_beep_enabled"]): return False
+    gap = float(cfg.get("reject_beep_min_interval_s", DEFAULTS["reject_beep_min_interval_s"]))
+    return now - last_beep >= gap
 # Stress marks (Silero '+') for words the acks and sleep phrases use.
 STRESS = {w.replace("+", ""): w for w in ["выполн+яю", "сл+ушаю", "сл+ушаюсь", "просн+ись", "разбуд+ить", "сп+ящий", "сп+ящем", "реж+име",
                                            "зап+исываю", "смотр+ю", "провер+яю", "прик+ажете", "усл+угам", "ух+ожу", "полтор+а"]}
