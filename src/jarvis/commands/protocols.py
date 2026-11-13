@@ -97,6 +97,36 @@ def _launch_tracked(run: Run, step: Step) -> None:
     log.info("protocol launch_tracked: %d of %d windows open", len(targets) - run.failed.count("launch_tracked"), len(targets))
 
 
+def _window_spec(item: Any) -> tuple[str, str | None, str | None] | None:
+    """A launch target, optional place (``left_half`` / ``right_half``) and optional window title."""
+    if isinstance(item, str) and item.strip(): return item.strip(), None, None
+    if not isinstance(item, dict): return None
+    target = str(item.get("target") or item.get("path") or "").strip()
+    if not target: return None
+    place = item.get("place"); title = item.get("title")
+    return (target,
+            place.strip() if isinstance(place, str) and place.strip() else None,
+            title.strip() if isinstance(title, str) and title.strip() else None)
+
+
+def _launch_placed(run: Run, step: Step) -> None:
+    """Open targets in the default terminal and snap each to a named half of the primary
+    work area. «отмена протокола» closes them. Targets are not logged: they may be private."""
+    ctl = run.ctx.services.controller(); windows = step.params.get("windows") or step.params.get("targets") or []
+    if not isinstance(windows, list): windows = []
+    opened = 0
+    for i, item in enumerate(windows):
+        spec = _window_spec(item)
+        if spec is None:
+            log.warning("protocol placed window #%d skipped: bad entry", i + 1); run.failed.append("launch_placed"); continue
+        target, place, title = spec
+        try:
+            ctl.protocol_pids.append(run.backend.open_window(target, place=place, title=title)); opened += 1
+        except Exception as e:
+            log.warning("protocol placed window #%d failed (%s)", i + 1, type(e).__name__); run.failed.append("launch_placed")
+    log.info("protocol launch_placed: %d of %d windows open", opened, len(windows))
+
+
 def _close_apps(run: Run, step: Step) -> None:
     names = [str(x) for x in (step.params.get("apps") or run.ctx.cfg.get("close_apps") or [])]
     closed = run.backend.close_apps(names, {os.getpid(), os.getppid()}) if names else 0
@@ -120,7 +150,7 @@ def _hacker_windows(run: Run, step: Step) -> None:
 STEPS: dict[str, StepFn] = {
     "sleep": _sleep, "sleep_until_alarm": _sleep_until_alarm, "cancel_bedtime_repeat": _cancel_repeats, "cancel_repeats": _cancel_repeats,
     "dnd": _dnd, "media_pause": _media_pause, "mute": _mute, "volume": _volume, "focus": _focus, "say": _say, "beep": _beep,
-    "launch": _launch, "launch_workspace": _launch, "launch_tracked": _launch_tracked, "close_apps": _close_apps, "close_all": _close_all, "minimize_all": _minimize_all, "lock": _lock,
+    "launch": _launch, "launch_workspace": _launch, "launch_tracked": _launch_tracked, "launch_placed": _launch_placed, "close_apps": _close_apps, "close_all": _close_all, "minimize_all": _minimize_all, "lock": _lock,
     "hacker_windows": _hacker_windows, "shutdown": _shutdown,
 }
 SLEEP_STEPS = frozenset({"sleep", "sleep_until_alarm"})

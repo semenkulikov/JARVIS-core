@@ -100,13 +100,20 @@ def test_shutdown_step_always_asks_and_bad_entries_are_skipped(caplog):
     ("протокол бобик сдох", "Бобик сдох", None),
     ("протокол взлом пентагона", "Взлом Пентагона", None),
     ("протокола взлом пентагона", "Взлом Пентагона", None),
+    ("взлом пентагона", "Взлом Пентагона", None),
+    ("таком взлом пентагона", "Взлом Пентагона", None),
+    ("негры пашут", "Негры пашут", None),
+    ("бобик сдох", "Бобик сдох", None),
+    ("спящая красавица", "Спящая красавица", None),
+    ("спящая красавица на шесть часов", "Спящая красавица", 6 * 3600),
+    ("таком взлом пентагона на шесть часов", "Взлом Пентагона", 6 * 3600),
 ])
 def test_protocol_phrases_route(cfg, text, name, secs):
     al = route(text, cfg)
     assert al["action"] == "protocol" and al["protocol"] == name and al["seconds"] == secs
 
 
-@pytest.mark.parametrize("text", ["протокол спящая красавица завтра", "спящая красавица", "протокол", "протокол бобик"])
+@pytest.mark.parametrize("text", ["протокол спящая красавица завтра", "протокол", "протокол бобик"])
 def test_not_a_protocol(cfg, text):
     al = route(text, cfg)
     assert al is None or al.get("action") != "protocol"
@@ -120,13 +127,23 @@ def test_list_and_cancel_route(cfg):
 
 def test_protocol_phrases_go_to_the_grammar_and_vocabulary(cfg):
     assert "протокол бобик сдох" in ROUTING.grammar_phrases(cfg)
-    assert {"протокол спящая царевна", "какие протоколы", "отмена протокола"} <= set(P.phrases(cfg))
+    assert {"протокол спящая царевна", "взлом пентагона", "какие протоколы", "отмена протокола"} <= set(P.phrases(cfg))
+    assert "взлом пентагона" in ROUTING.grammar_phrases(cfg)
 
 
 def test_grid_tiles_the_screen():
     assert P.grid(6, 1920, 1080) == [(0, 0, 640, 540), (640, 0, 640, 540), (1280, 0, 640, 540),
                                      (0, 540, 640, 540), (640, 540, 640, 540), (1280, 540, 640, 540)]
     assert P.grid(0, 1920, 1080) == [] and len(P.grid(4, 1920, 1080)) == 4
+
+
+def test_placed_rect_splits_the_work_area_without_a_gap():
+    assert P.placed_rect((0, 0, 1920, 1040), "left_half") == (0, 0, 960, 1040)
+    assert P.placed_rect((0, 0, 1920, 1040), "right_half") == (960, 0, 960, 1040)
+    assert P.placed_rect((10, 20, 1001, 800), "left_half") == (10, 20, 500, 800)
+    assert P.placed_rect((10, 20, 1001, 800), "right_half") == (510, 20, 501, 800)
+    assert P.placed_rect((0, 0, 1920, 1080), "top") is None
+    assert P.placed_rect((0, 0, 0, 1080), "left_half") is None
 
 
 # ------------------------------------------------------------ every default entry, in order, on fakes
@@ -320,6 +337,15 @@ def test_merge_local_extends_and_adds():
     assert P.merge_local(P.DEFAULTS["protocols"], {"extend": "junk", "protocols": "junk"}) == P.DEFAULTS["protocols"]
 
 
+def test_merge_local_can_replace_steps_and_summary():
+    local = {"extend": {"Взлом Пентагона": {"replace_steps": True, "summary": "лично",
+             "steps": [{"step": "launch_placed", "windows": [{"target": "C:/private/h.cmd", "place": "left_half"}]}]}}}
+    merged = P.merge_local(copy.deepcopy(P.DEFAULTS["protocols"]), local)
+    hack = next(p for p in merged if p["name"] == "Взлом Пентагона")
+    assert hack["steps"] == local["extend"]["Взлом Пентагона"]["steps"] and hack["summary"] == "лично"
+    assert P.DEFAULTS["protocols"][3]["steps"] == ["hacker_windows"]  # defaults untouched
+
+
 def test_settings_read_the_local_file(tmp_path, caplog):
     import json
     from jarvis.app import settings
@@ -335,7 +361,8 @@ def test_settings_read_the_local_file(tmp_path, caplog):
 
 
 class TrackedBackend(Backend):
-    def open_window(self, target): self._do("open_window", target); self.pid += 1; return self.pid
+    def open_window(self, target, place=None, title=None):
+        self._do("open_window", target, place, title); self.pid += 1; return self.pid
 
 
 def test_local_server_windows_open_and_cancel_closes_them(cfg, tmp_path, caplog):
@@ -355,3 +382,32 @@ def test_one_failing_server_window_does_not_stop_the_other(cfg, tmp_path):
     cfg["protocols"] = [{"name": "Тест", "phrases": ["протокол тест"], "steps": [{"step": "launch_tracked", "targets": ["a", "b"]}, "lock"]}]
     run({"name": "x", "action": "protocol", "protocol": "Тест"}, "", cfg, s)
     assert names(j) == ["open_window", "open_window", "lock"] and ctl.protocol_pids == []
+
+
+def test_launch_placed_snaps_windows_and_cancel_closes_them(cfg, tmp_path):
+    j = Journal(); b = TrackedBackend(j); ctl = build_controller(tmp_path / "h", backend=b)
+    s = FakeServices(controller=ctl, sleep=Sleep(j), proactive=Proactive(j))
+    cfg["protocols"] = [{"name": "Тест", "phrases": ["протокол тест"], "steps": [{"step": "launch_placed", "windows": [
+        {"target": "C:/private/left.cmd", "place": "left_half", "title": "LEFT"},
+        {"target": "C:/private/right.cmd", "place": "right_half", "title": "RIGHT"},
+    ]}]}]
+    run(alias(cfg, "тест"), "", cfg, s)
+    assert [c for c in j if c[0] == "open_window"] == [
+        ("open_window", "C:/private/left.cmd", "left_half", "LEFT"),
+        ("open_window", "C:/private/right.cmd", "right_half", "RIGHT"),
+    ]
+    assert ctl.protocol_pids == [101, 102]
+    j.clear(); run(alias(cfg, "отмена протокола"), "", cfg, s)
+    assert [c for c in j if c[0] == "end_process"] == [("end_process", 101), ("end_process", 102)]
+    assert ctl.protocol_pids == [] and s.said[-1] == CMD.CANCELLED
+
+
+def test_one_failing_placed_window_does_not_stop_the_other(cfg, tmp_path):
+    j = Journal(); b = TrackedBackend(j, fail={"open_window"}); ctl = build_controller(tmp_path / "h", backend=b)
+    s = FakeServices(controller=ctl, sleep=Sleep(j), proactive=Proactive(j))
+    cfg["protocols"] = [{"name": "Тест", "phrases": ["протокол тест"], "steps": [{"step": "launch_placed", "windows": [
+        {"target": "a", "place": "left_half"}, {"target": "b", "place": "right_half"},
+    ]}, "lock"]}]
+    run({"name": "x", "action": "protocol", "protocol": "Тест"}, "", cfg, s)
+    assert names(j) == ["open_window", "open_window", "lock"] and ctl.protocol_pids == []
+

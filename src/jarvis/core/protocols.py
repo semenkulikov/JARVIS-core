@@ -96,7 +96,7 @@ def _parse(key: str) -> tuple[Protocol, ...]:
             if not isinstance(phrases, list) or not all(isinstance(p, str) and norm_phrase(p) for p in phrases) or not phrases: raise ValueError("phrases")
             steps = _steps(r.get("steps"))
             if not steps: raise ValueError("steps")
-            out.append(Protocol(name.strip(), tuple(" ".join(norm_phrase(p)) for p in phrases), steps,
+            out.append(Protocol(name.strip(), _phrases(phrases), steps,
                                 str(r.get("reply") or DEFAULT_REPLY), bool(r.get("confirm", False)), str(r.get("summary") or "")))
         except (ValueError, TypeError) as e:
             log.warning("protocol %r skipped: bad %s", r.get("name") if isinstance(r, dict) else r, e)
@@ -105,7 +105,8 @@ def _parse(key: str) -> tuple[Protocol, ...]:
 
 def merge_local(protocols: Any, local: Any) -> list[Any]:
     """Protocols with the owner's local file applied: ``{"extend": {name: {"steps": [...], "reply": ...}},
-    "protocols": [...]}``. Extra steps go after the protocol's own; new protocols are appended.
+    "protocols": [...]}``. Extra steps go after the protocol's own, unless ``replace_steps`` is true;
+    ``reply``, ``summary`` and ``phrases`` are replaced when given; new protocols are appended.
     The local file is for personal hosts and paths that must never reach the repository."""
     out = [dict(p) if isinstance(p, dict) else p for p in (protocols if isinstance(protocols, list) else [])]
     if not isinstance(local, dict): return out
@@ -113,8 +114,11 @@ def merge_local(protocols: Any, local: Any) -> list[Any]:
     for p in out:
         add = extend.get(str(p.get("name"))) if isinstance(p, dict) else None
         if not isinstance(add, dict): continue
-        if isinstance(add.get("steps"), list): p["steps"] = list(p.get("steps") or []) + add["steps"]
+        if isinstance(add.get("steps"), list):
+            p["steps"] = add["steps"] if add.get("replace_steps") else list(p.get("steps") or []) + add["steps"]
         if isinstance(add.get("reply"), str): p["reply"] = add["reply"]
+        if isinstance(add.get("summary"), str): p["summary"] = add["summary"]
+        if isinstance(add.get("phrases"), list): p["phrases"] = add["phrases"]
     extra = local.get("protocols")
     return out + ([x for x in extra if isinstance(x, dict)] if isinstance(extra, list) else [])
 
@@ -123,15 +127,40 @@ def _same(said: list[str], phrase: list[str]) -> bool:
     return len(said) == len(phrase) and all(tok_match(a, b) for a, b in zip(said, phrase, strict=True))
 
 
+def _phrases(raw: Iterable[str]) -> tuple[str, ...]:
+    """Normalized phrases plus the same ones without a leading «протокол», so the grammar
+    and the matcher accept the bare name when the first word is dropped or misheard."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        ph = " ".join(norm_phrase(item))
+        if not ph or ph in seen: continue
+        out.append(ph); seen.add(ph)
+        toks = ph.split()
+        if toks and tok_match(toks[0], "протокол") and len(toks) > 1:
+            bare = " ".join(toks[1:])
+            if bare not in seen: out.append(bare); seen.add(bare)
+    return tuple(out)
+
+
 def match(text: str, protocols: Iterable[Protocol]) -> dict[str, Any] | None:
-    """The protocol alias for a phrase: an exact protocol phrase, optionally followed by «на <срок>»."""
+    """The protocol alias for a phrase, optionally followed by «на <срок>».
+
+    A leading «протокол» may be omitted, and a single misheard first word is ignored when
+    the rest still matches a protocol phrase (ASR often drops or mangles that word).
+    """
     toks = [t for t in norm_phrase(text) if t not in ("пожалуйста", "сэр")]
-    if not toks or not tok_match(toks[0], "протокол"): return None
+    if not toks: return None
+    starts = [toks]
+    if not tok_match(toks[0], "протокол") and len(toks) > 1:
+        starts.append(toks[1:])
     for p in protocols:
         for ph in p.phrases:
             pt = ph.split()
-            if _same(toks[:len(pt)], pt):
-                rest = toks[len(pt):]; secs = None
+            if not pt: continue
+            for said in starts:
+                if not _same(said[:len(pt)], pt): continue
+                rest = said[len(pt):]; secs = None
                 if rest:
                     if rest[0] not in ("на", "в") or len(rest) < 2: continue
                     secs = NUMBERS.duration(" ".join(rest[1:]))
@@ -168,3 +197,17 @@ def grid(n: int, width: int, height: int, top: int = 0) -> list[tuple[int, int, 
     if n <= 0 or width <= 0 or height <= 0: return []
     cols = min(3, n); rows = -(-n // cols); w = width // cols; h = (height - top) // rows
     return [((i % cols) * w, top + (i // cols) * h, w, h) for i in range(n)]
+
+
+def placed_rect(area: tuple[int, int, int, int], place: str) -> tuple[int, int, int, int] | None:
+    """Pixel rectangle (x, y, w, h) for a named place on a work area (x, y, w, h).
+
+    ``left_half`` and ``right_half`` split the area with no gap; the right half gets the
+    leftover column when the width is odd. Unknown names or an empty area yield None.
+    """
+    if not isinstance(place, str) or len(area) != 4: return None
+    x, y, w, h = (int(v) for v in area)
+    if w <= 0 or h <= 0: return None
+    if place == "left_half": return (x, y, w // 2, h)
+    if place == "right_half": return (x + w // 2, y, w - w // 2, h)
+    return None

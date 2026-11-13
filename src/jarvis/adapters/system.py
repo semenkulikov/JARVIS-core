@@ -28,6 +28,29 @@ SHELL_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "explorer", "dwm"
 PROTECTED_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "cmd", "powershell", "pwsh", "windowsterminal", "conhost",
                                  "openconsole", "wt", "explorer", "dwm", "winlogon", "csrss"})
 CREATE_NEW_CONSOLE = 0x00000010
+# Default-terminal console owner used by Windows 11 when Windows Terminal is selected.
+WT_DELEGATION_CONSOLE = "2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69"
+TERMINAL_WINDOW_CLASSES = frozenset({"CASCADIA_HOSTING_WINDOW_CLASS", "ConsoleWindowClass"})
+
+
+def _windows_terminal_is_default() -> bool:
+    """True when this Windows user picked Windows Terminal as the default terminal app."""
+    if os.name != "nt": return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Console\%%Startup") as key:
+            value, _ = winreg.QueryValueEx(key, "DelegationConsole")
+        return str(value).upper().replace("{", "").replace("}", "") == WT_DELEGATION_CONSOLE
+    except OSError:
+        return False
+
+
+def _wt_exe() -> str | None:
+    found = shutil.which("wt.exe") or shutil.which("wt")
+    if found: return found
+    alias = Path(os.environ.get("LOCALAPPDATA") or "") / "Microsoft" / "WindowsApps" / "wt.exe"
+    return str(alias) if alias.is_file() else None
+
 
 
 class SystemBackend:
@@ -139,13 +162,79 @@ class SystemBackend:
         uri=re.match(r'^[a-z][a-z0-9+.-]+:',target,re.I) is not None  # https:, spotify:, ... but not C:\
         if uri or os.path.exists(target):_WIN_OS.startfile(target);return
         subprocess.Popen(target,shell=False,creationflags=CREATE_NEW_CONSOLE if os.name=='nt' else 0)  # «cmd.exe» gets its window
-    def open_window(self, target: str) -> int:
-        """Start a program or .bat/.cmd in a new console window and return its process id, so
-        «отмена протокола» can close it (end_process takes the whole tree, e.g. cmd and its ssh)."""
-        target=os.path.expandvars(target.strip())
-        if not target:raise ValueError('empty_target')
-        args: Any=['cmd.exe','/c',target] if target.lower().endswith(('.bat','.cmd')) else target
-        return int(subprocess.Popen(args,shell=False,cwd=os.path.dirname(target) or None,creationflags=CREATE_NEW_CONSOLE if os.name=='nt' else 0).pid)
+    def work_area(self) -> tuple[int, int, int, int]:
+        """Primary monitor work area (x, y, w, h), excluding the taskbar (SPI_GETWORKAREA)."""
+        class RECT(ctypes.Structure):
+            _fields_ = [("l", ctypes.c_long), ("t", ctypes.c_long), ("r", ctypes.c_long), ("b", ctypes.c_long)]
+        r = RECT(); u = _WIN.windll.user32
+        u.SystemParametersInfoW.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint]
+        if u.SystemParametersInfoW(0x30, 0, ctypes.byref(r), 0):  # SPI_GETWORKAREA
+            return int(r.l), int(r.t), int(r.r - r.l), int(r.b - r.t)
+        w, h = self.screen_size(); return 0, 0, w, h
+    def open_window(self, target: str, place: str | None = None, title: str | None = None) -> int:
+        """Start a program or .bat/.cmd in a new window of the system's default terminal
+        (Windows Terminal when it is the default, otherwise the classic console) and return
+        its process id, so «отмена протокола» can close it. ``place`` is a named half of the
+        primary work area (``left_half`` / ``right_half``), applied with SetWindowPos."""
+        from jarvis.core.protocols import placed_rect
+        target = os.path.expandvars(target.strip())
+        if not target: raise ValueError("empty_target")
+        title = re.sub(r"[^\w -]", "", title or "")[:40] or ("jarvis-" + uuid.uuid4().hex[:8])
+        before = self._terminal_hwnds()
+        pid = self._start_terminal(target, title)
+        hwnd = self._wait_new_terminal(before, title)
+        if hwnd and place:
+            rect = placed_rect(self.work_area(), place)
+            if rect: self._set_window_rect(hwnd, rect)
+        if hwnd: self._protocol_hwnds()[int(pid)] = hwnd
+        return int(pid)
+    def _protocol_hwnds(self) -> dict[int, int]:
+        store = getattr(self, "_protocol_hwnd_map", None)
+        if store is None:
+            store = {}; self._protocol_hwnd_map = store
+        return store
+    def _start_terminal(self, target: str, title: str) -> int:
+        cwd = os.path.dirname(target) or None
+        wt = _wt_exe() if _windows_terminal_is_default() else None
+        if wt:
+            # Force a new window, never a tab on an already open Terminal session.
+            args = [wt, "--window", "new", "--title", title, "--suppressApplicationTitle", "--", "cmd.exe", "/c", target]
+            return int(subprocess.Popen(args, shell=False, cwd=cwd).pid)
+        flags = CREATE_NEW_CONSOLE if os.name == "nt" else 0
+        args = ["cmd.exe", "/c", "title " + title + " & " + target]
+        return int(subprocess.Popen(args, shell=False, cwd=cwd, creationflags=flags).pid)
+    def _terminal_hwnds(self) -> set[int]:
+        return {h for h, _cls, _title in self._enum_terminals()}
+    def _enum_terminals(self) -> list[tuple[int, str, str]]:
+        """Visible top-level terminal windows as (hwnd, class name, title)."""
+        u = _WIN.windll.user32; out: list[tuple[int, str, str]] = []
+        u.IsWindowVisible.argtypes = [ctypes.c_void_p]
+        u.GetClassNameW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        u.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
+        u.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        proto = _WIN.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        def visit(h: Any, _: Any) -> bool:
+            if not u.IsWindowVisible(h): return True
+            cls = ctypes.create_unicode_buffer(256); u.GetClassNameW(h, cls, 256)
+            if cls.value not in TERMINAL_WINDOW_CLASSES: return True
+            n = u.GetWindowTextLengthW(h)
+            buf = ctypes.create_unicode_buffer(n + 1); u.GetWindowTextW(h, buf, n + 1)
+            out.append((int(h), cls.value, buf.value)); return True
+        u.EnumWindows(proto(visit), None); return out
+    def _wait_new_terminal(self, before: set[int], title: str, timeout_s: float = 5.0) -> int | None:
+        needle = title.casefold(); deadline = time.time() + timeout_s; last: list[int] = []
+        while time.time() < deadline:
+            found = [(h, text) for h, _cls, text in self._enum_terminals() if h not in before]
+            last = [h for h, _t in found]
+            named = [h for h, text in found if needle and needle in text.casefold()]
+            if named: return named[0]
+            if len(found) == 1 and time.time() + 0.4 >= deadline: return found[0][0]
+            time.sleep(0.1)
+        return last[0] if len(last) == 1 else None
+    def _set_window_rect(self, hwnd: int, rect: tuple[int, int, int, int]) -> None:
+        u = _WIN.windll.user32
+        u.SetWindowPos.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+        u.SetWindowPos(hwnd, None, rect[0], rect[1], rect[2], rect[3], 0x0004 | 0x0040)  # SWP_NOZORDER | SWP_SHOWWINDOW
     def _windows(self) -> list[tuple[int, int, str]]:
         """Visible, titled, uncloaked top-level user windows as (hwnd, pid, process name without .exe, lower case)."""
         u=_WIN.windll.user32;k=_WIN.windll.kernel32;out: list[tuple[int, int, str]] = []
@@ -205,9 +294,21 @@ class SystemBackend:
             time.sleep(.1)
         return int(p.pid)
     def end_process(self, pid: int) -> None:
-        """Close a window this backend opened (the console and its command), by process id."""
-        r=self._run(['taskkill.exe','/PID',str(int(pid)),'/T','/F'])
-        if r.returncode not in (0,128):raise OSError('taskkill_failed')
+        """Close a window this backend opened. For a snapped Windows Terminal window, send
+        WM_CLOSE to that window only (never kill the shared WindowsTerminal process). Then
+        taskkill the process tree as a fallback (cmd and its ssh). 128 means already gone."""
+        hwnd = self._protocol_hwnds().pop(int(pid), None)
+        if hwnd:
+            u = _WIN.windll.user32
+            u.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t]
+            u.IsWindow.argtypes = [ctypes.c_void_p]; u.PostMessageW(hwnd, 0x10, 0, 0)  # WM_CLOSE
+            for _ in range(20):
+                if not u.IsWindow(hwnd): break
+                time.sleep(0.1)
+        r = self._run(["taskkill.exe", "/PID", str(int(pid)), "/T", "/F"])
+        if r.returncode not in (0, 128):
+            if hwnd and not _WIN.windll.user32.IsWindow(hwnd): return
+            raise OSError("taskkill_failed")
     def playlist(self, url: str) -> None:
         if not re.match(r'^https?://',url):raise ValueError('invalid_playlist_url')
         _WIN_OS.startfile(url)

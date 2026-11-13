@@ -34,7 +34,7 @@ STEP_LABELS = {
     "sleep": "сон", "sleep_until_alarm": "сон до будильника", "cancel_bedtime_repeat": "без повтора отбоя",
     "cancel_repeats": "без повторов", "dnd": "не беспокоить", "media_pause": "пауза", "mute": "без звука",
     "volume": "громкость", "focus": "фокус", "say": "фраза", "beep": "сигнал", "launch": "программы",
-    "launch_workspace": "программы", "launch_tracked": "окна", "close_apps": "закрыть программы", "close_all": "закрыть всё",
+    "launch_workspace": "программы", "launch_tracked": "окна", "launch_placed": "окна на половине", "close_apps": "закрыть программы", "close_all": "закрыть всё",
     "minimize_all": "свернуть", "lock": "блокировка", "hacker_windows": "окна «хакера»", "shutdown": "выключение",
 }
 TITLE = "Джарвис"
