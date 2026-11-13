@@ -9,10 +9,11 @@ from jarvis.core.state import ListenerState
 
 
 class FakeServices:
-    def __init__(self, status=None, controller=None, sleep=None, proactive=None, laptop=None):
+    def __init__(self, status=None, controller=None, sleep=None, proactive=None, laptop=None, overlay=None):
         self.state = ListenerState(); self.status = status; self.picker = Picker({})
         self.said, self.replies, self.asked = [], [], []
         self._controller, self._sleep, self._proactive = controller, sleep, proactive
+        self._overlay = overlay
         self._laptop = laptop if laptop is not None else LAPTOP  # guarded by conftest
 
     def say(self, text, cfg, role="reply", private=False):
@@ -36,6 +37,7 @@ class FakeServices:
     def controller(self): return self._controller
     def sleep(self): return self._sleep
     def proactive(self): return self._proactive
+    def overlay(self): return self._overlay
     def laptop(self): return self._laptop
 
 

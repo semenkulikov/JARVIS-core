@@ -18,6 +18,7 @@ from jarvis.core import dialog as DIALOG
 from jarvis.core import food as FOOD
 from jarvis.core import gate as GATE
 from jarvis.core import names as NAMES
+from jarvis.core import cheatsheet as CHEATSHEET
 from jarvis.core import protocols as PROTOCOLS
 from jarvis.core import timetable as TIMETABLE
 from jarvis.core import proactive as PROACTIVE
@@ -98,7 +99,7 @@ DEFAULTS: dict[str, Any] = {
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
-for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP, SERVER_JOBS, NAMES, TIMETABLE, PROTOCOLS): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP, SERVER_JOBS, NAMES, TIMETABLE, PROTOCOLS, CHEATSHEET): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 
 def read_local_protocols(cfg: dict[str, Any], home: str) -> Any:
@@ -118,7 +119,7 @@ def finalize(cfg: dict[str, Any], home: str) -> None:
     cfg["latin_words"] = JT.latin_words(cfg.get("latin_words"))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg, home)
     cfg["protocols"] = PROTOCOLS.merge_local(cfg.get("protocols"), read_local_protocols(cfg, home))
-    cfg["aliases"] = merge_aliases(cfg.get("aliases"), DEFAULT_ALIASES) + SMALLTALK_ALIASES + PROTOCOLS.aliases(cfg)
+    cfg["aliases"] = merge_aliases(cfg.get("aliases"), DEFAULT_ALIASES) + SMALLTALK_ALIASES + PROTOCOLS.aliases(cfg) + CHEATSHEET.aliases()
     cfg["stress_dict"] = dict(dict(PROACTIVE.STRESS, **QUICK.STRESS, **DIALOG.STRESS), **(cfg.get("stress_dict") or {}))
 
 

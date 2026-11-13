@@ -18,6 +18,7 @@ from jarvis.adapters.asr_vosk import VoskASR
 from jarvis.adapters.food_diary import FatSecretCall, FoodLogger
 from jarvis.adapters.audio import MicInput
 from jarvis.adapters.outbox import Outbox
+from jarvis.adapters.overlay import Overlay
 from jarvis.adapters.project_tools import ProjectTools
 from jarvis.adapters.sleep_store import SleepState
 from jarvis.adapters.speaker import SpeakerGate
@@ -32,7 +33,9 @@ from jarvis.app.conversation import Conversation
 from jarvis.app.listener import Listener
 from jarvis.app.server_jobs import ServerWorker
 from jarvis.app.warmup import Warmup
+from jarvis.commands import catalog as CATALOG
 from jarvis.commands.controller import Controller
+from jarvis.core import cheatsheet as CHEATSHEET
 from jarvis.core.lazy import Lazy
 from jarvis.core.phrases import Picker
 from jarvis.core.ports import Config, DesktopBackend, PhraseRecognizer, ProjectToolsPort, ServerTransport, SpeechOutput, StatusSource, Synthesizer
@@ -62,6 +65,16 @@ def build_controller(home: str | Path, backend: DesktopBackend | None = None, cl
                       tools or ProjectTools(base), food, PATHS.screenshots_dir(base), clock)
 
 
+def cheatsheet_content(config: Any) -> Callable[[], tuple[list[CHEATSHEET.Section], Config]]:
+    """The overlay text, rebuilt from the live config and the command catalogue on every show."""
+    catalog = {c.id: (c.summary, c.examples) for c in CATALOG.COMMANDS}
+
+    def content() -> tuple[list[CHEATSHEET.Section], Config]:
+        cfg = config.load()
+        return CHEATSHEET.build(cfg, catalog), cfg
+    return content
+
+
 def build_app(home: str | Path, sd: Any = None) -> App:
     """Wire everything for JARVIS_HOME ``home``; ``sd`` is the sounddevice module (imported when None)."""
     if sd is None: sd = importlib.import_module("sounddevice")
@@ -88,6 +101,7 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         sleep=Lazy(lambda: SleepState(os.path.join(paths.cache, "sleep.json"))),
         proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),
         input_volume=SystemBackend().input_volume if os.name == "nt" else (lambda: None),
+        overlay=Overlay(cheatsheet_content(config)),
     )
     conversation = Conversation(c)
     warmup = Warmup(c)

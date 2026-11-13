@@ -19,6 +19,7 @@ import numpy as np
 
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
+from jarvis.core import cheatsheet as CHEATSHEET
 from jarvis.core import protocols as PROTOCOLS
 from jarvis.adapters import runtime as RUNTIME
 from jarvis.core import sleep as SLEEP
@@ -118,7 +119,10 @@ class Listener:
                 self._consume_stop(); c.outbox.signal.stop(); return False
         if model_error: raise model_error[0]
         c.state.model = model_box[0]
-        c.asr.check_vocabulary(cfg, PROTOCOLS.phrases(cfg))
+        c.asr.check_vocabulary(cfg, PROTOCOLS.phrases(cfg) + CHEATSHEET.phrases())
+        if c.overlay is not None:
+            try: c.overlay.start_hotkey(cfg)  # the panel itself stays hidden until asked for
+            except Exception as e: log.warning("overlay hotkey failed (%s)", type(e).__name__)
         return True
 
     def _load_oww(self, cfg: Config) -> Any:

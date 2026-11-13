@@ -22,6 +22,8 @@ forwarded to your own AI server through a simple webhook.
   and a bedtime reminder (`schedule`).
 - **Protocols:** one phrase runs a chain of steps, e.g. «протокол спящая красавица» (sleep
   until the alarm) or «протокол бобик сдох» (end of the workday: close every window, pause music, lock).
+- **Cheat sheet overlay:** «покажи шпаргалку» / «скрой шпаргалку» or Ctrl+Alt+J toggles a small translucent,
+  click-through panel in a screen corner listing the protocols and main commands, generated from the catalogue.
 - **Strict wake word:** every wake is re-checked by free recognition; background speech,
   videos and garbled phrases are dropped silently. Optional owner-voice verification
   (WeSpeaker ONNX, off by default).

@@ -80,6 +80,7 @@ class Conversation:
     def laptop(self) -> Laptop: return self.c.laptop
     def sleep(self) -> Any: return self.c.sleep.get()
     def proactive(self) -> Any: return self.c.proactive.get()
+    def overlay(self) -> Any: return self.c.overlay
 
     def capture(self, cap: Capture, cfg: Config, nospeech_s: float, skip_s: float = 0.0, max_s: float | None = None,
                 wake_pause_s: float | None = None) -> tuple[str, float, str]:

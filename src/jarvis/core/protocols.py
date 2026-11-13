@@ -21,12 +21,15 @@ log = logging.getLogger("jarvis")
 DEFAULTS: dict[str, Any] = {
     "protocols": [
         {"name": "Спящая красавица", "phrases": ["протокол спящая красавица", "протокол спящая царевна"],
-         "steps": ["media_pause", "sleep_until_alarm", "cancel_bedtime_repeat"], "reply": "Спокойной ночи, сэр."},
+         "steps": ["media_pause", "sleep_until_alarm", "cancel_bedtime_repeat"], "reply": "Спокойной ночи, сэр.",
+         "summary": "ухожу спать или на созвон: пауза и тишина до будильника"},
         {"name": "Негры пашут", "phrases": ["протокол негры пашут"], "steps": ["launch_workspace", "focus"],
-         "reply": "Рабочий режим включён, сэр."},
+         "reply": "Рабочий режим включён, сэр.", "summary": "начало работы: программы из workspace и фокус"},
         {"name": "Бобик сдох", "phrases": ["протокол бобик сдох"],
-         "steps": ["close_all", "minimize_all", "media_pause", "lock"], "reply": "Бобик сдох, сэр."},
-        {"name": "Взлом Пентагона", "phrases": ["протокол взлом пентагона"], "steps": ["hacker_windows"], "reply": "Доступ получен, сэр."},
+         "steps": ["close_all", "minimize_all", "media_pause", "lock"], "reply": "Бобик сдох, сэр.",
+         "summary": "конец работы: закрыть все окна, пауза, блокировка"},
+        {"name": "Взлом Пентагона", "phrases": ["протокол взлом пентагона"], "steps": ["hacker_windows"], "reply": "Доступ получен, сэр.",
+         "summary": "зелёные окна «хакера», закрыть — «отмена протокола»"},
     ],
     "workspace": [],        # programs, folders and URLs «launch» opens: paths, URLs or command lines
     "close_apps": [],       # process names «close_apps» asks to close, e.g. "telegram", "chrome"
@@ -54,6 +57,7 @@ class Protocol:
     steps: tuple[Step, ...]
     reply: str
     confirm: bool
+    summary: str = ""  # one line for the cheat-sheet overlay
 
     @property
     def needs_confirm(self) -> bool:
@@ -93,7 +97,7 @@ def _parse(key: str) -> tuple[Protocol, ...]:
             steps = _steps(r.get("steps"))
             if not steps: raise ValueError("steps")
             out.append(Protocol(name.strip(), tuple(" ".join(norm_phrase(p)) for p in phrases), steps,
-                                str(r.get("reply") or DEFAULT_REPLY), bool(r.get("confirm", False))))
+                                str(r.get("reply") or DEFAULT_REPLY), bool(r.get("confirm", False)), str(r.get("summary") or "")))
         except (ValueError, TypeError) as e:
             log.warning("protocol %r skipped: bad %s", r.get("name") if isinstance(r, dict) else r, e)
     return tuple(out)

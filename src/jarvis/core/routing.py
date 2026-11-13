@@ -6,6 +6,7 @@ import logging
 import re
 from typing import Any, Callable
 
+from jarvis.core import cheatsheet as CHEATSHEET
 from jarvis.core import quick as QUICK
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
@@ -50,6 +51,8 @@ def match_alias(text: str, cfg: Config) -> Alias | None:
     if proactive: return proactive
     protocol = PROTOCOLS.intent(text, cfg)
     if protocol: return protocol
+    sheet = CHEATSHEET.intent(text)
+    if sheet: return sheet
     task = TASKS.intent(text)
     if task: return task
     toks = norm_phrase(text)

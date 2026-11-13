@@ -74,3 +74,4 @@ class Components:
     sleep: Lazy[Any]            # jarvis.adapters.sleep_store.SleepState
     proactive: Lazy[Any]        # jarvis.adapters.proactive.Manager
     input_volume: Callable[[], float | None] = lambda: None  # Windows microphone level, read only
+    overlay: Any = None         # jarvis.adapters.overlay.Overlay (None: no cheat-sheet panel)

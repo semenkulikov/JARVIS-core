@@ -31,6 +31,14 @@ def guards(monkeypatch):
  monkeypatch.setattr(laptop,'battery',forbidden)
  monkeypatch.setattr(laptop,'temperature_c',forbidden)
  if hasattr(os,'startfile'):monkeypatch.setattr(os,'startfile',forbidden)
+ from jarvis.adapters import overlay
+ monkeypatch.setattr(overlay,'TkPanel',forbidden)
+ monkeypatch.setattr(overlay,'HotkeyThread',InertHotkey)
+class InertHotkey:
+ """Stands in for the global hotkey: never registers anything system-wide."""
+ registered=False
+ def __init__(self,keys,callback):self.keys=keys;self.callback=callback
+ def stop(self):pass
 @pytest.fixture
 def cfg(app,monkeypatch):
  from jarvis.core import quick as Q
@@ -40,7 +48,8 @@ def cfg(app,monkeypatch):
  from jarvis.core.phrases import SMALLTALK_ALIASES
  c=copy.deepcopy(DEFAULTS)
  from jarvis.core import protocols as PR
- c['aliases']=c['aliases']+copy.deepcopy(SMALLTALK_ALIASES)+PR.aliases(c)
+ from jarvis.core import cheatsheet as CS
+ c['aliases']=c['aliases']+copy.deepcopy(SMALLTALK_ALIASES)+PR.aliases(c)+CS.aliases()
  c['stress_dict']=dict(dict(P.STRESS,**Q.STRESS,**D.STRESS),**(c.get('stress_dict') or {}))
  c['followup_enabled']=False
  monkeypatch.setattr(app.c.config,'load',lambda:c)

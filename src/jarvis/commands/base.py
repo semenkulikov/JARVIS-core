@@ -41,6 +41,7 @@ class Services(Protocol):
     def laptop(self) -> Laptop: ...
     def sleep(self) -> Any: ...           # jarvis.adapters.sleep_store.SleepState
     def proactive(self) -> Any: ...       # jarvis.adapters.proactive.Manager
+    def overlay(self) -> Any: ...         # jarvis.adapters.overlay.Overlay or None
 
 
 @dataclass(frozen=True)
