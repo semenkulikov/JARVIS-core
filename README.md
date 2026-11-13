@@ -17,16 +17,20 @@ forwarded to your own AI server through a simple webhook.
 ## Features
 
 - **Activation:** wake word "Джарвис" / "hey Jarvis" (openWakeWord + Vosk) or two claps;
-  extra names such as «нубас» or «кусок железа» are configurable (`wake_names`).
+  extra names such as «нубас», «железяка» or «кусок железа» work the same way and are configurable (`wake_names`).
 - **Schedule:** a daily alarm at full volume, a Grok-written plan for the day an hour later,
   and a bedtime reminder (`schedule`).
-- **Protocols:** one phrase runs a chain of steps, e.g. «протокол спящая красавица» (sleep
-  until the alarm) or «протокол бобик сдох» (end of the workday: close every window, pause music, lock).
+- **Protocols:** one phrase runs a chain of steps. «протокол спящая красавица» is for going to bed
+  or a call: pause music and keep Jarvis silent until the alarm (or «… на час»), windows stay open.
+  «протокол бобик сдох» ends the workday at once: close every window, pause music, lock the screen.
+  Personal steps (paths, hosts) can live in a local gitignored file merged over the config.
 - **Cheat sheet overlay:** «покажи шпаргалку» / «убери шпаргалку» or Ctrl+Alt+J toggles a small translucent,
   click-through panel in a screen corner listing the protocols and main commands, generated from the catalogue.
 - **Strict wake word:** every wake is re-checked by free recognition; background speech,
-  videos and garbled phrases are dropped silently. Optional owner-voice verification
-  (WeSpeaker ONNX, off by default).
+  videos and garbled phrases are dropped; when the name was heard but the phrase is dropped, a short
+  low tone says so (`reject_beep_enabled`). Optional owner-voice verification (WeSpeaker ONNX, off by default).
+- **Two end-of-phrase pauses:** a phrase ends after 0.95 s of silence, a fully recognised safe command
+  after 0.45 s (`phrase_silence_s`, `phrase_silence_fast_s`).
 - **Follow-ups without the wake word:** the microphone stays open for up to 6 seconds after
   a reply, with echo and low-confidence filtering.
 - **Instant acknowledgements:** «Да, сэр?» on the bare name, «Есть, сэр.» while an action runs.
@@ -45,10 +49,12 @@ forwarded to your own AI server through a simple webhook.
 - **Interruption:** "стоп", "замолчи" and similar phrases cut the speech; a new command
   with the wake word takes priority.
 - **Streaming answers:** replies from the server are spoken sentence by sentence while the
-  next one is being synthesized.
+  next one is being synthesized. Requests run in a background queue, so local commands keep
+  working while the server thinks; only «стоп» during its reply cancels a request.
 - **Proactive announcements:** queue, quiet hours, do-not-disturb, calendar reminders.
   Personal scenarios (training, nutrition, morning briefing) are off by default.
-- **Reliability:** a supervisor restarts the listener after a crash with backoff; secrets
+- **Reliability:** a supervisor restarts the listener after a crash with backoff; a planned
+  restart is a `stop` file plus the start script (easy to wrap in a scheduled task); secrets
   live in Windows Credential Manager; every request produces a latency trace.
 
 ## How it works
