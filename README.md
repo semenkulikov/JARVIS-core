@@ -7,7 +7,7 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-Current version: 3.25.0 — see the [changelog](CHANGELOG.md).
+Current version: 3.26.0 — see the [changelog](CHANGELOG.md).
 
 An offline Russian-language voice assistant for Windows. Say "Джарвис" (or clap twice),
 give a command, hear the answer. Speech recognition and speech synthesis run on your
