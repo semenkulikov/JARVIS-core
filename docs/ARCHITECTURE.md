@@ -321,7 +321,7 @@ stateDiagram-v2
 | `jarvis/adapters/system.py` | 202 | Действия на рабочем столе Windows за одним бэкендом |
 | `jarvis/adapters/timers.py` | 69 | Постоянные таймеры, напоминания и объявления |
 | `jarvis/adapters/laptop.py` | 120 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
-| `jarvis/adapters/proactive.py` | 287 | Постоянная очередь проактивных сообщений, утренний брифинг и расписание `schedule` |
+| `jarvis/adapters/proactive.py` | 295 | Постоянная очередь проактивных сообщений, утренний брифинг и расписание `schedule` |
 | `jarvis/adapters/runtime.py` | 81 | Одна копия, намеренная остановка, нарастающая пауза после сбоев |
 | `jarvis/adapters/credentials.py` | 91 | Только свои записи в диспетчере учётных данных Windows |
 | `jarvis/adapters/paths.py` | 39 | Пути рабочего каталога. При импорте файлы не создаёт |

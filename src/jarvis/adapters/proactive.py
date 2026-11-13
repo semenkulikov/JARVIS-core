@@ -50,7 +50,7 @@ class Manager:
     def __init__(self, base: str | os.PathLike[str], clock: Callable[[], float] = time.time,
                  input_reader: Callable[[float | None], float] = last_input_epoch) -> None:
         self.base=Path(base);self.path=self.base/'cache'/'proactive_state.json';self.outbox=self.base/'outbox';self.clock=clock;self.input_reader=input_reader;self.lock=threading.RLock();self.error: str | None = None;self.next_tick = 0.0;self.active: dict[str, Any] | None = None;self.morning_busy=False;self.snapshot_marker: tuple[Any, ...] | None = None
-        self.schedule_busy: set[str] = set();self.picker=Picker({});self._entries: tuple[str, list[TIMETABLE.Entry]] = ('', [])
+        self.schedule_busy: set[str] = set();self.picker=Picker({});self._presence_off_logged=False;self._entries: tuple[str, list[TIMETABLE.Entry]] = ('', [])
         self.state: dict[str, Any] = {'version':1,'dnd':False,'last_spoken':0,'done':{},'pending':[],'last_input':None,'morning_pending':None,'morning_date':None,'schedule':{}}
         try:
             if self.path.exists():
@@ -101,7 +101,8 @@ class Manager:
             if self.error or (not force and now<self.next_tick):return None
             self.next_tick=now+max(1,float(cfg.get('proactive_tick_s',5)))
             if not cfg.get('proactive_enabled',True):return None
-            if cfg.get('morning_briefing_enabled',False):self._presence(cfg,now)
+            presence=self.presence_briefing(cfg)
+            if presence:self._presence(cfg,now)
             day=datetime.datetime.fromtimestamp(now).date();stamp=day.isoformat();snap=self._snapshot(cfg,now)
             self.state['done']={k:v for k,v in self.state['done'].items() if isinstance(v,(float,int)) and now-v<7*86400}
             self.state['pending']=[p for p in self.state['pending'] if isinstance(p,dict) and isinstance(p.get('expires'),(float,int)) and p['expires']>now]
@@ -134,10 +135,17 @@ class Manager:
             morning=self.state.get('morning_pending')
             if morning and isinstance(morning,dict) and job is None:
                 if morning['date']!=stamp or now>=wall(day,cfg.get('morning_end','12:00')) or morning.get('attempts',0)>=int(cfg.get('morning_max_attempts',3)):self.state['morning_pending']=None
-                elif cfg.get('morning_briefing_enabled',False) and self.can_speak(cfg,now) and self.state.get('morning_date')!=stamp and not self.morning_busy and now>=morning.get('retry_at',0):
+                elif presence and self.can_speak(cfg,now) and self.state.get('morning_date')!=stamp and not self.morning_busy and now>=morning.get('retry_at',0):
                     morning['attempts']=morning.get('attempts',0)+1;morning['retry_at']=now+max(30,float(cfg.get('morning_retry_s',120)));self.morning_busy=True
                     job=dict(morning,kind='morning_briefing',local_date=stamp,timezone=(cfg.get('timezone') or datetime.datetime.fromtimestamp(now).astimezone().tzname()),reply_mode='proactive',outbox_file='proactive-'+morning['request_id']+'.txt',expires_iso=datetime.datetime.fromtimestamp(wall(day,cfg.get('morning_end','12:00'))).astimezone().isoformat())
             self.save();return job
+    def presence_briefing(self, cfg: Config) -> bool:
+        """The old first-activity briefing; off while the schedule has a briefing, so it never sounds twice."""
+        if not cfg.get('morning_briefing_enabled',False):return False
+        if any(e.kind=='briefing' for e in self.entries(cfg)):
+            if not self._presence_off_logged:log.info('morning_briefing_enabled ignored: the schedule has a briefing entry');self._presence_off_logged=True
+            return False
+        return True
     # ------------------------------------------------------------ schedule
     def entries(self, cfg: Config) -> list[TIMETABLE.Entry]:
         """Parsed ``schedule`` section, re-parsed only when it changes (a bad entry warns once)."""

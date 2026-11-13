@@ -173,6 +173,14 @@ def test_old_presence_briefing_stays_off_by_default():
     assert P.DEFAULTS["morning_briefing_enabled"] is False
 
 
+def test_presence_briefing_yields_to_the_schedule(tmp_path):
+    clock = Clock(at(7, 0)); m = manager(tmp_path, clock); cfg = config(morning_briefing_enabled=True)
+    assert not m.presence_briefing(cfg)
+    clock.t = at(9, 30); clock.input = at(9, 30) - 1; m.state["last_input"] = at(3, 0)
+    m.tick(cfg, True); assert m.state["morning_pending"] is None  # no second, presence-driven briefing
+    assert m.presence_briefing(config(morning_briefing_enabled=True, schedule=[]))
+
+
 # ------------------------------------------------------------ bedtime
 def test_bedtime_and_one_repeat(tmp_path):
     clock = Clock(at(22, 0)); m = manager(tmp_path, clock); cfg = config()
