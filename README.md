@@ -7,7 +7,7 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-Current version: 3.18.0 — see the [changelog](CHANGELOG.md).
+Current version: 3.22.0 — see the [changelog](CHANGELOG.md).
 
 An offline Russian-language voice assistant for Windows. Say "Джарвис" (or clap twice),
 give a command, hear the answer. Speech recognition and speech synthesis run on your
@@ -16,7 +16,12 @@ forwarded to your own AI server through a simple webhook.
 
 ## Features
 
-- **Activation:** wake word "Джарвис" / "hey Jarvis" (openWakeWord + Vosk) or two claps.
+- **Activation:** wake word "Джарвис" / "hey Jarvis" (openWakeWord + Vosk) or two claps;
+  extra names such as «нубас» or «кусок железа» are configurable (`wake_names`).
+- **Schedule:** a daily alarm at full volume, a Grok-written plan for the day an hour later,
+  and a bedtime reminder (`schedule`).
+- **Protocols:** one phrase runs a chain of steps, e.g. «протокол спящая красавица» (sleep
+  until the alarm) or «протокол бобик сдох» (close apps and lock, after a spoken «да»).
 - **Strict wake word:** every wake is re-checked by free recognition; background speech,
   videos and garbled phrases are dropped silently. Optional owner-voice verification
   (WeSpeaker ONNX, off by default).
