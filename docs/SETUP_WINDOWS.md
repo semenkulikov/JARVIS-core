@@ -81,6 +81,29 @@ Get-Content .\runtime\logs\jarvis_voice.log -Tail 40
 
 В журнале бывают распознанные фразы и ответы. Перед тем как отдать журнал другому человеку, вычистите их. Перед тем как открыть репозиторий всем, просмотрите дерево файлов и историю коммитов.
 
+## Перезапуск одной командой
+
+Плановый перезапуск — это та же остановка файлом `stop` и новый запуск. Его удобно положить в маленький скрипт и задачу планировщика, чтобы перезапускать помощника одной командой, в том числе удалённо и без окон. Пример скрипта (пути замените на свои, `<JARVIS_HOME>` — рабочий каталог, `<checkout>` — каталог со `start_jarvis.vbs`):
+
+```powershell
+# restart_jarvis.ps1
+$home_ = "<JARVIS_HOME>"; $start = "<checkout>\start_jarvis.vbs"
+New-Item -ItemType File -Force "$home_\stop" | Out-Null
+$deadline = (Get-Date).AddSeconds(25)
+while ((Get-Date) -lt $deadline -and (Get-CimInstance Win32_Process | ? { $_.CommandLine -match 'jarvis_(supervisor|voice)\.py' })) { Start-Sleep 1 }
+Get-CimInstance Win32_Process | ? { $_.CommandLine -match 'jarvis_(supervisor|voice)\.py' } | % { Stop-Process -Id $_.ProcessId -Force }
+Start-Process wscript.exe -ArgumentList "`"$start`""
+```
+
+Задача запускается от своего пользователя в интерактивном сеансе и без повышенных прав, иначе помощник не услышит микрофон и не покажет шпаргалку:
+
+```powershell
+schtasks /Create /TN JarvisRestart /SC ONCE /ST 00:00 /RL LIMITED /IT /F /TR "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File <путь>\restart_jarvis.ps1"
+schtasks /Run /TN JarvisRestart
+```
+
+Скрипт принудительно завершает только оставшиеся процессы `jarvis_supervisor.py` и `jarvis_voice.py`. После перезапуска в журнале появляется строка `listening (vX.Y.Z)` с номером версии. Окно PowerShell может мелькнуть; чтобы его не было, запускайте скрипт через короткий VBS с `WScript.Shell.Run …, 0`.
+
 ## Запуск из checkout при существующем рабочем каталоге
 
 Если настройки, модели и журналы уже лежат в другом месте, код можно запускать прямо из клона репозитория. `scripts/deploy_home.py` пишет в рабочий каталог `start_jarvis.vbs`, который задаёт `JARVIS_HOME` и остальные переменные и запускает `src/jarvis_supervisor.py` из клона. Первый прежний `start_jarvis.vbs` сохраняется как `start_jarvis.vbs.pre-repo`.
