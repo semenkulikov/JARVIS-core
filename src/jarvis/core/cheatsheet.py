@@ -16,15 +16,15 @@ CORNERS = ("top-right", "top-left", "bottom-right", "bottom-left")
 DEFAULTS: dict[str, Any] = {
     "overlay_enabled": True,             # the voice command and the hotkey work; the panel starts hidden
     "overlay_corner": "top-right",
-    "overlay_opacity": 0.85,             # of the pinned panel; the unpinned card is opaque
+    "overlay_opacity": 0.95,             # of the pinned panel; the unpinned card is opaque
     "overlay_margin_px": 18,
     "overlay_font_size": 9,
     "overlay_font": "Segoe UI",
     "overlay_hotkey": "ctrl+alt+j",      # show / hide; empty string: no global hotkey
     "overlay_pin_hotkey": "ctrl+alt+shift+j",  # pin / unpin (a pinned panel lets clicks through, so its button cannot)
-    "overlay_commands": ["status", "tasks_left", "time", "q:timer", "vol_up", "play", "q:mute", "jarvis_sleep",
-                         "proactive_dnd", "q:mode", "q:screenshot", "lock", "stop", "protocol_list", "protocol_cancel",
-                         "cheatsheet_hide"],
+    # a short top list; every command is in the folded category sections below it
+    "overlay_commands": ["status", "tasks_left", "time", "q:timer", "vol_up", "play", "q:mode", "lock", "stop",
+                         "protocol_cancel", "cheatsheet_hide"],
 }
 SHOW_PHRASES = ("покажи шпаргалку", "открой шпаргалку", "шпаргалка")
 # «скрой» is not in the small Russian Vosk model, so it is not offered.

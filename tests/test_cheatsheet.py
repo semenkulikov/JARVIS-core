@@ -45,7 +45,7 @@ def test_sections_come_from_the_protocols_and_the_catalogue():
     cmds = {ln.phrase: ln.effect for ln in sections[1].lines}
     assert cmds["статус"] == CATALOG.BY_ID["status"].summary
     assert cmds["который час"] == ""   # a summary that only repeats the phrase is dropped
-    assert "убери шпаргалку" in cmds and "какие протоколы" in cmds
+    assert "убери шпаргалку" in cmds and "отмена протокола" in cmds
     assert len(sections[1].lines) == len(DEFAULTS["overlay_commands"])
     assert [s.key for s in sections] == ["protocols", "main"]
 

@@ -308,7 +308,7 @@ class TkPanel:
         bg = KEY if pinned else CARD
         row = tk.Frame(body, bg=bg); row.pack(fill="x")
         bar = tk.Frame(row, bg=bg, width=3); bar.pack(side="left", fill="y")
-        inner = tk.Frame(row, bg=bg, padx=10, pady=3); inner.pack(side="left", fill="x", expand=True)
+        inner = tk.Frame(row, bg=bg, padx=10, pady=2); inner.pack(side="left", fill="x", expand=True)
         phrase = tk.Label(inner, text=ln.phrase, font=self.fonts["semi"], fg=PIN_TEXT if pinned else TEXT, bg=bg, justify="left",
                           anchor="nw", wraplength=WIDTH_PHRASE, width=0)
         phrase.grid(row=0, column=0, sticky="nw", padx=(0, 12))
@@ -356,6 +356,16 @@ def _work_area(root: Any) -> tuple[int, int, int, int]:
 GWL_EXSTYLE, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE = -20, 0x20, 0x80, 0x80000, 0x08000000
 
 
+DWMWA_WINDOW_CORNER_PREFERENCE, DWMWA_BORDER_COLOR, DWMWCP_DONOTROUND, DWMWCP_ROUND = 33, 34, 1, 2
+DWMWA_COLOR_DEFAULT, DWMWA_COLOR_NONE = 0xFFFFFFFF, 0xFFFFFFFE
+
+
+def _dwm(hwnd: int, attr: int, value: int) -> bool:
+    v = ctypes.c_uint(value)
+    try: return bool(_WIN.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), 4) == 0)
+    except Exception: return False
+
+
 def _style(root: Any, pinned: bool, size: tuple[int, int]) -> None:
     """No taskbar button and never activated; pinned also lets every click through; unpinned gets rounded corners."""
     if sys.platform != "win32": return
@@ -364,9 +374,9 @@ def _style(root: Any, pinned: bool, size: tuple[int, int]) -> None:
     ex = u.GetWindowLongW(hwnd, GWL_EXSTYLE) | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
     ex = ex | WS_EX_TRANSPARENT | WS_EX_LAYERED if pinned else ex & ~WS_EX_TRANSPARENT
     u.SetWindowLongW(hwnd, GWL_EXSTYLE, ex)
+    # Windows 11 frame: rounded with the system border when unpinned; square and borderless when pinned
+    ok = _dwm(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND if pinned else DWMWCP_ROUND)
+    _dwm(hwnd, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE if pinned else DWMWA_COLOR_DEFAULT)
     if pinned: u.SetWindowRgn(hwnd, None, True); return
-    pref = ctypes.c_int(2)  # DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND (Windows 11)
-    try: ok = _WIN.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(pref), 4) == 0
-    except Exception: ok = False
     if not ok:  # Windows 10: clip to a rounded region
         u.SetWindowRgn(hwnd, _WIN.windll.gdi32.CreateRoundRectRgn(0, 0, size[0] + 1, size[1] + 1, RADIUS * 2, RADIUS * 2), True)
