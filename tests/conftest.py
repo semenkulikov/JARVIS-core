@@ -20,7 +20,7 @@ def guards(monkeypatch):
  from jarvis.adapters import credentials as C
  monkeypatch.setattr(urllib.request,'urlopen',forbidden)
  monkeypatch.setattr(C,'backend',lambda:None)
- for name in ('_run','mute','volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk','window_ocr'):
+ for name in ('_run','mute','volume','output_volume','screenshot','close_window','clipboard','media','monitor_off','lock','shutdown','shutdown_cancel','playlist','git','disk','window_ocr'):
   monkeypatch.setattr(SystemBackend,name,forbidden)
  monkeypatch.setattr(laptop,'press',forbidden)
  import socket

@@ -26,7 +26,9 @@ def test_example_config_is_neutral():
  ('clipboard_translate',{'clipboard_text':'Synthetic clipboard','target_language':'ru','clipboard_truncated':False,'context_source':'clipboard'}),
  ('clipboard_summary',{'clipboard_text':'Synthetic clipboard','clipboard_truncated':False,'context_source':'clipboard'}),
  ('food_log',{'food_text':'Synthetic food entry','confirmation_policy':'chat_if_ambiguous'}),
- ('morning_briefing',{'local_date':'2030-01-01','timezone':'UTC','reply_mode':'proactive','outbox_file':'proactive-synthetic.txt','presence_at':0,'idle_seconds':18000,'expires_iso':'2030-01-01T12:00:00+00:00'})])
+ ('morning_briefing',{'local_date':'2030-01-01','timezone':'UTC','reply_mode':'proactive','outbox_file':'proactive-synthetic.txt','presence_at':0,'idle_seconds':18000,'expires_iso':'2030-01-01T12:00:00+00:00'}),
+ ('morning_briefing',{'local_date':'2030-01-01','timezone':'UTC','reply_mode':'proactive','outbox_file':'proactive-synthetic.txt','expires_iso':'2030-01-01T12:00:00+00:00',
+                      'style':'plan_and_recommendations','local_time':'2030-01-01T08:50:00+00:00','weekday':'вторник'})])
 def test_transport_allowlist(cfg,monkeypatch,kind,extra):
  from jarvis.adapters.transport import WebhookTransport
  from jarvis.core.state import RequestLedger,Signals

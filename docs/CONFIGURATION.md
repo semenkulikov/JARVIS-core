@@ -54,7 +54,8 @@
 | `proactive_calendar_enabled` / `proactive_calendar_lead_min` | true / 15. Работает только если сервер прислал события |
 | `proactive_protein_enabled` / `proactive_protein_time` | false / `18:00`. Выключено, пока не включите |
 | `proactive_protein_left_g` / `proactive_cache_max_age_h` | 60 / 3 |
-| `morning_briefing_enabled` / `morning_start` / `morning_end` | false / `07:00` / `12:00` |
+| `morning_briefing_enabled` / `morning_start` / `morning_end` | false / `07:00` / `12:00`. Брифинг по первой активности; оставьте выключенным, если брифинг задан в `schedule`, иначе он прозвучит дважды |
+| `schedule` | Фиксированное расписание: Jarvis сам говорит в местное время Windows. По умолчанию 08:00 будильник (`wake_up`, громкость 100, сквозь тихие часы, «не беспокоить» и сон, только при запуске до 08:10), 09:00 брифинг от Grok (`morning_briefing`: `after: "wake_up"`, `delay_min: 60`, запрос за `prefetch_min: 10`, ждёт до `catch_up_until: "12:00"`), 22:00 отбой (`bedtime`, один повтор через 15 минут; в тихие часы, «не беспокоить» и сон молчит). Поля записи: `id`, `kind` (`say` или `briefing`), `time` (`ЧЧ:ММ`) или `after` + `delay_min`, `say` (список фраз, без повтора подряд), `volume` (0–100, на время фразы), `override_quiet`, `late_skip_min` (по умолчанию 10), `prefetch_min`, `catch_up_until`, `repeat_after_min` + `max_repeats`, `weekdays` (понедельник — 0), `style`, `enabled`. «Сказано сегодня» хранится в `cache/proactive_state.json` по паре (`id`, дата) и переживает перезапуск. Брифинг, пропущенный из-за выключенного Jarvis или сна ноутбука, звучит при первой активности до `catch_up_until`. Сломанная запись пропускается с предупреждением, остальные работают. Пустой список выключает расписание |
 | `morning_idle_s` / `morning_max_attempts` / `morning_retry_s` | 14400 / 3 / 120 |
 | `timezone` | Пусто — в запрос уходит имя пояса Windows. Можно указать имя IANA для сервера |
 

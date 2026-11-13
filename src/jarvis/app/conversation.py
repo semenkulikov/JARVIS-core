@@ -4,14 +4,16 @@ Implements jarvis.commands.base.Services for the command handlers.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 import uuid
-from typing import Any
+from typing import Any, Iterator
 
 from jarvis.core import codemode as CODE
 from jarvis.core import dialog as DIALOG
 from jarvis.core import sleep as SLEEP
+from jarvis.core import timetable as TIMETABLE
 from jarvis.adapters.audio import Capture
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.app import server_jobs as SERVER_JOBS
@@ -32,6 +34,9 @@ from jarvis.core.wake import strip_wake
 log = logging.getLogger("jarvis")
 SLEEP_END_PHRASE = "Я снова на связи, сэр."
 TIMER_DONE_PHRASE = "Сэр, время вышло."
+MORNING_TEXT = "Составь короткий утренний брифинг по моим свежим данным. Ответ только в указанном proactive outbox, без вводного подтверждения."
+MORNING_PLAN_TEXT = ("Составь план на сегодня с рекомендациями: задачи и события из всех подключённых источников, питание и тренировки, "
+                     "что делать и во сколько, связным текстом, а не списком. Ответ только в указанном proactive outbox, без вводного подтверждения.")
 
 
 class Conversation:
@@ -121,13 +126,15 @@ class Conversation:
         st.followup_eligible = job.done and not job.cancelled and not interrupt.is_set()
 
     def request_morning(self, job: dict[str, Any], cfg: Config, test: bool = False) -> None:
-        extra = {k: v for k, v in job.items() if k not in ("request_id", "kind", "date", "attempts", "retry_at")}
-        text = "Составь короткий утренний брифинг по моим свежим данным. Ответ только в указанном proactive outbox, без вводного подтверждения."
+        """POST a morning briefing request (presence or schedule); the text comes back as a proactive-outbox file."""
+        extra = {k: v for k, v in job.items() if k not in ("request_id", "kind", "date", "attempts", "retry_at", "trigger", "schedule_key")}
+        trigger = str(job.get("trigger") or "presence")
+        text = MORNING_PLAN_TEXT if trigger == "schedule" else MORNING_TEXT
         result: Any = False
-        try: result = self.c.transport.call(job["request_id"], text, "presence", cfg, test, listener_ack="", kind="morning_briefing", extra_payload=extra)
+        try: result = self.c.transport.call(job["request_id"], text, trigger, cfg, test, listener_ack="", kind="morning_briefing", extra_payload=extra)
         finally:
             if not test: self.proactive().morning_result(job, result, cfg)
-        log.info("morning briefing POST date=%s ok=%s", job.get("local_date"), bool(result))
+        log.info("morning briefing POST trigger=%s date=%s ok=%s", trigger, job.get("local_date"), bool(result))
 
     # ------------------------------------------------------------ turns
     def run_alias(self, al: Alias, text: str, cfg: Config, trig: str, test: bool) -> None:
@@ -153,8 +160,9 @@ class Conversation:
             self.perf("route", route="proactive_" + str(item.get("kind", "file")))
             try:
                 if item.get("expires") is None or time.time() < item["expires"]:
-                    st.followup_eligible = True
-                    self.say(item.get("text", ""), cfg)
+                    st.followup_eligible = not self.sleep().active()  # a sleeping alarm opens no follow-up window
+                    text = self.briefing_fallback(cfg) if item.get("fallback") else item.get("text", "")
+                    with self.raised_volume(item.get("volume"), test): self.say(text, cfg)
             finally:
                 if not test: self.proactive().complete(item, interrupt.is_set())
             return True
@@ -176,6 +184,26 @@ class Conversation:
             except Exception: pass
             self.say(notice.get("label") or TIMER_DONE_PHRASE, cfg); return True
         return False
+
+    def briefing_fallback(self, cfg: Config) -> str:
+        """The server sent no briefing in time: say so, then the short status from the snapshot if it may be spoken."""
+        policy, text, _ = self.c.status.cached_status(None, cfg)
+        log.info("schedule briefing fallback: snapshot %s", policy)
+        return TIMETABLE.FALLBACK_PHRASE + " " + (text if policy in ("fresh", "stale") and text else TIMETABLE.NO_SNAPSHOT_PHRASE)
+
+    @contextlib.contextmanager
+    def raised_volume(self, volume: Any, test: bool) -> Iterator[None]:
+        """System volume at ``volume`` (0..100) while speaking, then back to what it was."""
+        backend = self.controller().backend if volume is not None else None
+        if backend is None or (test and not backend.is_fake): yield; return
+        before = None
+        try: before = backend.output_volume(); backend.volume(float(volume)); log.info("volume %s -> %s for a schedule entry", before, volume)
+        except Exception as e: log.info("volume raise failed: %s", type(e).__name__)
+        try: yield
+        finally:
+            if before is not None:
+                try: backend.volume(before)
+                except Exception as e: log.info("volume restore failed: %s", type(e).__name__)
 
     def not_understood(self, trig: str, cfg: Config, reason: str, text: str) -> None:
         """The name was heard but the phrase dropped: a short low tone instead of silence (never a spoken

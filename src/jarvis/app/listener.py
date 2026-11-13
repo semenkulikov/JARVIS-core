@@ -186,8 +186,8 @@ class Listener:
             lp.next_proactive = time.monotonic() + max(1, float(cfg.get("proactive_tick_s", 5)))
             job = lp.pm.tick(cfg)
             if job: threading.Thread(target=self.conversation.request_morning, args=(job, dict(cfg)), name="morning-post", daemon=True).start()
-            if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending:
-                item = lp.pm.take(cfg)
+            if not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending:
+                item = lp.pm.take(cfg, sleeping=sleeping)  # while asleep only the override_quiet alarm comes out
                 if item: self.start("proactive", text=item)
         if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending:
             job = c.jobs.ready()

@@ -18,7 +18,7 @@ log = logging.getLogger("jarvis")
 # Optional payload fields a caller may forward; anything else never leaves the machine.
 ALLOWED_EXTRA = frozenset({"task_text", "clipboard_text", "clipboard_truncated", "context_source", "target_language", "food_text",
                            "confirmation_policy", "local_date", "timezone", "reply_mode", "outbox_file", "presence_at",
-                           "idle_seconds", "expires_iso", "intent"}) | CODE.PAYLOAD_FIELDS
+                           "idle_seconds", "expires_iso", "intent", "style", "local_time", "weekday"}) | CODE.PAYLOAD_FIELDS
 
 
 def placeholder(cfg: Config) -> bool:

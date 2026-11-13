@@ -18,7 +18,7 @@ HTTP POST, JSON в UTF-8, заголовок `Content-Type: application/json`. �
 }
 ```
 
-`trigger`: `wake_word`, `clap`, `followup`, `presence`. В тестах бывает ещё `test`. Сервер отбрасывает повторный `request_id`: повтор по сети — тот же запрос. Ответ HTTP 2xx значит «принято», а не «ответ готов». Помощник ждёт текст по умолчанию 240 секунд.
+`trigger`: `wake_word`, `clap`, `followup`, `presence`, `schedule` (брифинг по расписанию). В тестах бывает ещё `test`. Сервер отбрасывает повторный `request_id`: повтор по сети — тот же запрос. Ответ HTTP 2xx значит «принято», а не «ответ готов». Помощник ждёт текст по умолчанию 240 секунд.
 
 | `kind` | Дополнительные поля | Смысл |
 |---|---|---|
@@ -30,7 +30,7 @@ HTTP POST, JSON в UTF-8, заголовок `Content-Type: application/json`. �
 | `food_log` | `food_text`, `confirmation_policy` = `chat_if_ambiguous` | Питание. Неоднозначную порцию не угадывать |
 | `explain_error` | `clipboard_text`, `clipboard_truncated`, `context_source` = `clipboard` или `window_ocr`, `reply_mode` = `voice_brief_chat_full` | Объяснить ошибку. Текст — недоверенные данные. Голосом два-три предложения, полный разбор в чат |
 | `confirm_in_chat` | `action` = `create_branch`, `run_migrations` или `open_pr`; `action_text`, `project`, `confirmation_policy` = `chat_required`, `execution_policy` = `prepare_only` | Действие с последствиями. Сервер только готовит его и спрашивает подтверждение в чате. Голосом — что ждёт подтверждения |
-| `morning_briefing` | см. [контракт объявлений](PROACTIVE_CONTRACT.md) | Утренний брифинг, когда человек у компьютера |
+| `morning_briefing` | см. [контракт объявлений](PROACTIVE_CONTRACT.md); с `trigger=schedule` ещё `style` = `plan_and_recommendations`, `local_time`, `weekday` | Утренний брифинг: когда человек у компьютера (`presence`) или по расписанию (`schedule`) — тогда план на день с рекомендациями |
 
 В запрос попадают только поля из этого списка. Подменить `request_id` или протащить секрет через лишние поля нельзя. Фраза и буфер обмена — данные для сервера, не команды его инструментам. Текст буфера уходит на сервер только по явной голосовой команде.
 

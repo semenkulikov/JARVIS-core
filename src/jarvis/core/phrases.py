@@ -9,6 +9,7 @@ from jarvis.core import quick as QUICK
 from jarvis.core import dialog as DIALOG
 from jarvis.core import text as JT
 from jarvis.core import proactive as PROACTIVE
+from jarvis.core import timetable as TIMETABLE
 
 # Local conversation: whole short utterances only, never a substring in a request.
 SMALLTALK: list[tuple[str, list[str], list[str]]] = [
@@ -69,7 +70,7 @@ def all_phrases(cfg: dict[str, Any]) -> list[str]:
                 for greeting in ("Доброе утро", "Добрый день", "Добрый вечер", "Доброй ночи"):
                     for daypart in ("дня", "вечера", "отдыха"):
                         out.append(r.format(greeting=greeting, daypart=daypart))
-    out += QUICK.CACHED_REPLIES + PROACTIVE.REPLIES
+    out += QUICK.CACHED_REPLIES + PROACTIVE.REPLIES + TIMETABLE.phrases(TIMETABLE.parse(cfg))
     return list(dict.fromkeys(out))
 
 

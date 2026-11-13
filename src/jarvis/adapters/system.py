@@ -30,6 +30,12 @@ class SystemBackend:
         return subprocess.run(args,capture_output=True,text=True,timeout=timeout,creationflags=0x08000000 if os.name=='nt' else 0)
     def mute(self, muted: bool) -> None:self._audio('mute',bool(muted))
     def volume(self, value: float) -> None:self._audio('volume',float(value)/100)
+    def output_volume(self) -> float | None:
+        """Windows level (0..100) of the default speakers, read only; None when Core Audio is unavailable."""
+        try:
+            level=self._audio('get',0.0)
+            return None if level is None else level*100
+        except Exception:return None
     def input_volume(self) -> float | None:
         """Windows level (0..1) of the default microphone, read only; None when Core Audio is unavailable."""
         try:return self._audio('get',0.0,flow=1)
