@@ -79,7 +79,7 @@ def route(text, cfg): return ROUTING.match_alias(text, cfg)
 def test_default_protocols():
     ps = {p.name: p for p in P.parse(P.DEFAULTS)}
     assert list(ps) == ["Спящая красавица", "Негры пашут", "Бобик сдох", "Взлом Пентагона"]
-    assert ps["Бобик сдох"].needs_confirm and not ps["Взлом Пентагона"].needs_confirm
+    assert not any(p.needs_confirm for p in ps.values())  # «Бобик сдох» runs at once (owner's choice)
     assert all(s.name in CMD.STEPS for p in ps.values() for s in p.steps)
 
 
@@ -160,29 +160,38 @@ def test_workers_protocol_launches_the_workspace_and_focus(cfg, rig):
     assert any(t["group"] == "focus" for t in ctl.timers.items) and s.said == ["Рабочий режим включён, сэр."]
 
 
-def test_bobik_asks_first_and_does_nothing_without_yes(cfg, rig):
-    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0])
+def test_bobik_runs_at_once_without_a_question(cfg, rig):
+    j, s, ctl = rig()
     run(alias(cfg, "протокол бобик сдох"), "", cfg, s)
+    assert names(j) == ["close_windows", "minimize_all", "media", "lock"]  # every window, not a list
+    assert os.getpid() in j[0][1]  # Jarvis protects itself
+    assert s.said == ["Бобик сдох, сэр."] and ctl.pending is None
+
+
+CONFIRMED = [{"name": "Осторожно", "phrases": ["протокол осторожно"], "confirm": True, "steps": ["minimize_all", "lock"], "reply": "Готово, сэр."}]
+
+
+def test_confirm_protocol_asks_first_and_does_nothing_without_yes(cfg, rig):
+    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0]); cfg["protocols"] = CONFIRMED
+    run({"name": "x", "action": "protocol", "protocol": "Осторожно"}, "", cfg, s)
     assert j == [] and "Подтверждаете" in s.said[-1] and ctl.pending["kind"] == "protocol"
     answer = ctl.confirmation("нет", "followup", 1.0)
     run({"name": "protocol_confirmation", "action": "protocol_confirm", **answer}, "нет", cfg, s)
     assert j == [] and s.said[-1] == CMD.NOT_CONFIRMED
 
 
-def test_bobik_runs_after_a_spoken_yes(cfg, rig):
-    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0])
-    run(alias(cfg, "протокол бобик сдох"), "", cfg, s)
+def test_confirm_protocol_runs_after_a_spoken_yes(cfg, rig):
+    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0]); cfg["protocols"] = CONFIRMED
+    run({"name": "x", "action": "protocol", "protocol": "Осторожно"}, "", cfg, s)
     clock[0] += 3; answer = ctl.confirmation("да", "followup", 0.95)
-    assert answer["approved"] and answer["protocol"] == "Бобик сдох"
+    assert answer["approved"] and answer["protocol"] == "Осторожно"
     run({"name": "protocol_confirmation", "action": "protocol_confirm", **answer}, "да", cfg, s)
-    assert names(j) == ["close_windows", "minimize_all", "media", "lock"]  # every window, not a list
-    assert os.getpid() in j[0][1]  # Jarvis protects itself
-    assert s.said[-1] == "Бобик сдох, сэр."
+    assert names(j) == ["minimize_all", "lock"] and s.said[-1] == "Готово, сэр."
 
 
-def test_bobik_yes_too_late_or_not_a_follow_up_is_refused(cfg, rig):
-    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0])
-    run(alias(cfg, "протокол бобик сдох"), "", cfg, s)
+def test_confirm_yes_too_late_is_refused(cfg, rig):
+    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0]); cfg["protocols"] = CONFIRMED
+    run({"name": "x", "action": "protocol", "protocol": "Осторожно"}, "", cfg, s)
     clock[0] += 60; answer = ctl.confirmation("да", "followup", 1.0)
     run({"name": "protocol_confirmation", "action": "protocol_confirm", **answer}, "да", cfg, s)
     assert j == [] and s.said[-1] == CMD.NOT_CONFIRMED
@@ -283,10 +292,11 @@ def test_in_sleep_only_timers_and_the_alarm_sound(app, cfg, monkeypatch, tmp_pat
 def test_spoken_yes_reaches_the_protocol_through_the_conversation(app, cfg, monkeypatch):
     j = Journal(); ctl = app.conversation.controller(); ctl.backend = Backend(j); said = []
     monkeypatch.setattr(app.conversation, "say", lambda text, cfg, **kw: said.append(text) or True)
-    ctl.ask("protocol", cfg, protocol="Бобик сдох", seconds=None)
+    cfg["protocols"] = cfg["protocols"] + CONFIRMED
+    ctl.ask("protocol", cfg, protocol="Осторожно", seconds=None)
     st = app.c.state; st.last_input_conf = 0.95; st.last_input_end = ctl.clock()
     app.conversation.handle_turn("followup", None, "да", False, 0.0)
-    assert names(j) == ["close_windows", "minimize_all", "media", "lock"] and said[-1] == "Бобик сдох, сэр."
+    assert names(j) == ["minimize_all", "lock"] and said[-1] == "Готово, сэр."
 
 
 def test_close_apps_step_still_closes_a_named_list(cfg, rig):

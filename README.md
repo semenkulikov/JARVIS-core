@@ -21,7 +21,7 @@ forwarded to your own AI server through a simple webhook.
 - **Schedule:** a daily alarm at full volume, a Grok-written plan for the day an hour later,
   and a bedtime reminder (`schedule`).
 - **Protocols:** one phrase runs a chain of steps, e.g. «протокол спящая красавица» (sleep
-  until the alarm) or «протокол бобик сдох» (close every window and lock, after a spoken «да»).
+  until the alarm) or «протокол бобик сдох» (end of the workday: close every window, pause music, lock).
 - **Strict wake word:** every wake is re-checked by free recognition; background speech,
   videos and garbled phrases are dropped silently. Optional owner-voice verification
   (WeSpeaker ONNX, off by default).
