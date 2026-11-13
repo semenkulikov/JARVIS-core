@@ -26,7 +26,8 @@ DEFAULTS: dict[str, Any] = {
                          "cheatsheet_hide"],
 }
 SHOW_PHRASES = ("покажи шпаргалку", "открой шпаргалку", "шпаргалка")
-HIDE_PHRASES = ("скрой шпаргалку", "убери шпаргалку", "спрячь шпаргалку", "закрой шпаргалку")
+# «скрой» is not in the small Russian Vosk model, so it is not offered.
+HIDE_PHRASES = ("убери шпаргалку", "спрячь шпаргалку", "закрой шпаргалку")
 # One word per step, for a protocol without its own ``summary``.
 STEP_LABELS = {
     "sleep": "сон", "sleep_until_alarm": "сон до будильника", "cancel_bedtime_repeat": "без повтора отбоя",
@@ -36,7 +37,7 @@ STEP_LABELS = {
     "minimize_all": "свернуть", "lock": "блокировка", "hacker_windows": "окна «хакера»", "shutdown": "выключение",
 }
 TITLE = "Джарвис · шпаргалка"
-HINT_HIDE = "«скрой шпаргалку»"
+HINT_HIDE = "«убери шпаргалку»"
 SLEEP_STEPS = ("sleep", "sleep_until_alarm")
 
 

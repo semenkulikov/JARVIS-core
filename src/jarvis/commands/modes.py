@@ -32,7 +32,7 @@ def do_not_disturb(ctx: CommandContext, al: Alias) -> None:
 
 @handles("overlay")
 def cheatsheet(ctx: CommandContext, al: Alias) -> None:
-    """«покажи шпаргалку» / «скрой шпаргалку»: the translucent panel; showing is silent apart from a short line."""
+    """«покажи шпаргалку» / «убери шпаргалку»: the translucent panel; showing is silent apart from a short line."""
     overlay = ctx.services.overlay()
     visible = bool(al.get("visible", True))
     if overlay is None or (visible and not overlay.show()): ctx.services.say(OVERLAY_OFF, ctx.cfg); return

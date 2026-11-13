@@ -42,7 +42,7 @@ def test_sections_come_from_the_protocols_and_the_catalogue():
     cmds = {ln.phrase: ln.effect for ln in sections[1].lines}
     assert cmds["статус"] == CATALOG.BY_ID["status"].summary
     assert cmds["который час"] == ""   # a summary that only repeats the phrase is dropped
-    assert "скрой шпаргалку" in cmds and "какие протоколы" in cmds
+    assert "убери шпаргалку" in cmds and "какие протоколы" in cmds
     assert len(sections[1].lines) == len(DEFAULTS["overlay_commands"])
 
 
@@ -70,7 +70,7 @@ def test_app_content_rebuilds_from_the_live_config():
     assert cfg is store.cfg and [ln.phrase for ln in sections[1].lines] == ["который час"]
 
 
-@pytest.mark.parametrize("text,visible", [("покажи шпаргалку", True), ("Покажи шпаргалку!", True), ("скрой шпаргалку", False),
+@pytest.mark.parametrize("text,visible", [("покажи шпаргалку", True), ("Покажи шпаргалку!", True), ("закрой шпаргалку", False),
                                           ("убери шпаргалку", False), ("спрячь шпаргалку", False)])
 def test_voice_phrases_route_to_the_overlay(cfg, text, visible):
     al = match_alias(text, cfg)
@@ -78,10 +78,14 @@ def test_voice_phrases_route_to_the_overlay(cfg, text, visible):
     assert CATALOG.route_id(al) in CATALOG.BY_ID
 
 
+def test_no_phrase_uses_a_word_missing_from_the_vosk_model():
+    assert not any("скрой" in ph for ph in CS.phrases())
+
+
 def test_grammar_has_the_phrases():
     names = {a["name"] for a in CS.aliases()}
     assert names == {"cheatsheet_show", "cheatsheet_hide"}
-    assert set(CS.phrases()) >= {"покажи шпаргалку", "скрой шпаргалку"}
+    assert set(CS.phrases()) >= {"покажи шпаргалку", "убери шпаргалку"}
 
 
 @pytest.mark.parametrize("spec,expected", [("ctrl+alt+j", (0x0002 | 0x0001 | 0x4000, 0x4A)), ("Win+Shift+F1", (0x0008 | 0x0004 | 0x4000, 0x70)),
@@ -144,7 +148,7 @@ class FakeOverlay:
 def test_voice_handler_shows_and_hides(cfg):
     ov = FakeOverlay(); s = FakeServices(overlay=ov)
     run(match_alias("покажи шпаргалку", cfg), "покажи шпаргалку", cfg, s)
-    run(match_alias("скрой шпаргалку", cfg), "скрой шпаргалку", cfg, s)
+    run(match_alias("убери шпаргалку", cfg), "убери шпаргалку", cfg, s)
     assert ov.calls == ["show", "hide"] and s.said == ["Шпаргалка на экране, сэр.", "Убрал шпаргалку, сэр."]
 
 
@@ -152,7 +156,7 @@ def test_voice_handler_reports_a_disabled_or_missing_overlay(cfg):
     s = FakeServices(overlay=FakeOverlay(enabled=False))
     run(match_alias("покажи шпаргалку", cfg), "покажи шпаргалку", cfg, s)
     s2 = FakeServices(overlay=None)
-    run(match_alias("скрой шпаргалку", cfg), "скрой шпаргалку", cfg, s2)
+    run(match_alias("убери шпаргалку", cfg), "убери шпаргалку", cfg, s2)
     assert s.said == s2.said == ["Шпаргалка выключена в настройках, сэр."]
 
 
