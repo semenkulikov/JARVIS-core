@@ -24,6 +24,7 @@
 | `grammar_hint` / `vosk_agc` | true. Узкий распознаватель команд и автоусиление |
 | `wake_prebuffer_s` / `phrase_wait_s` | 1,6 / 1,5. Не потерять начало фразы и дождаться речи |
 | `phrase_silence_s` / `phrase_max_s` | 0,95 / 10. Тишина кончает фразу, если звук это подтверждает |
+| `phrase_silence_fast_s` | 0,45. Короткая тишина для фразы, которую уже целиком узнали как безопасную команду без хвоста (громкость, медиаклавиши, время, статус, «стоп»), если никакая другая фраза с неё не начинается. Свободная речь и остальные команды ждут `phrase_silence_s`. Флаг псевдонима `"fast_end": true/false` переопределяет правило |
 | `followup_window_s` / `followup_question_window_s` | 7 / 10. Сколько секунд слушать без имени |
 | `followup_echo_guard_s` / `followup_min_conf` / `followup_max_turns` | 0,3 / 0,65 / 8. Эхо, уверенность, длина серии |
 | `outbox_watch_enabled` / `outbox_event_batch_s` | true / 0,02. Чтение `outbox` по событиям файлов |

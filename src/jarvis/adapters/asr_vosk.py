@@ -13,9 +13,9 @@ from jarvis.core import gate as GATE
 from jarvis.core import sleep as SLEEP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, clip_level, normalize_clip, ring_audio
 from jarvis.core.matching import norm_phrase
-from jarvis.core.routing import grammar_phrases
+from jarvis.core.routing import fast_end_phrases, grammar_phrases
 from jarvis.core.state import ListenerState
-from jarvis.core.wake import heard_after, phrase_finished, strip_wake_words
+from jarvis.core.wake import heard_after, phrase_finished, strip_wake, strip_wake_words
 
 Config = dict[str, Any]
 Word = dict[str, Any]
@@ -29,6 +29,12 @@ class VoskASR:
 
     def __init__(self, state: ListenerState) -> None:
         self.state = state
+        self._fast: tuple[int, frozenset[str]] = (0, frozenset())
+
+    def fast_phrases(self, cfg: Config) -> frozenset[str]:
+        """routing.fast_end_phrases, rebuilt only when the configuration object changes (a reload)."""
+        if self._fast[0] != id(cfg): self._fast = (id(cfg), fast_end_phrases(cfg))
+        return self._fast[1]
 
     @staticmethod
     def load_model(path: str) -> Any:
@@ -70,6 +76,8 @@ class VoskASR:
             except Exception as e: log.info("grammar recognizer failed: %s", e)
         agc = AGC(cfg)
         max_s = max_s or float(cfg["phrase_max_s"]); sil = float(cfg["phrase_silence_s"])
+        fast_sil = min(sil, float(cfg.get("phrase_silence_fast_s", sil))); fast = self.fast_phrases(cfg) if fast_sil < sil else frozenset()
+        fast_hit = False
         words: list[Word] = []; gwords: list[Word] = []; t0 = time.time(); last_change: float | None = None; partial = ""; pwords: list[Word] | None = None; cut = True
         acoustic_last: float | None = None; noise_floor = 0.001; samples = 0; endpoint_lag = 0.0
         try:
@@ -96,7 +104,10 @@ class VoskASR:
                             if p: last_change = time.time()
                     if not cap.q.empty(): continue
                 heard = heard_after(words, pwords if partial else [], partial, skip_s)
-                if phrase_finished(time.time(), t0, heard, last_change, acoustic_last, nospeech_s, sil, wake_pause_s, skip_s): cut = False; break
+                # A phrase already heard whole as a safe command ends after the short silence.
+                fast_hit = bool(fast) and " ".join(norm_phrase(strip_wake(heard))) in fast
+                if phrase_finished(time.time(), t0, heard, last_change, acoustic_last, nospeech_s, fast_sil if fast_hit else sil,
+                                   wake_pause_s, skip_s): cut = False; break
             words += json.loads(rec.FinalResult()).get("result", [])
             if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
         finally:
@@ -112,7 +123,8 @@ class VoskASR:
                  " ".join(w["word"] for w in words), text, conf, gtext, gconf, gmin, time.time() - t0)
         if kept:
             endpoint_lag = max(0.0, time.time() - (cap.audio_start + kept[-1].get("end", 0)))
-            log.info("capture endpoint lag_s=%.3f silence_s=%.2f (audio timestamp estimate)", endpoint_lag, sil)
+            log.info("capture endpoint lag_s=%.3f silence_s=%.2f%s (audio timestamp estimate)", endpoint_lag, fast_sil if fast_hit else sil,
+                     " fast_end" if fast_hit else "")
         tr = self.state.trace
         if tr is not None and kept:
             tr.mark("speech_end", at=time.perf_counter() - endpoint_lag, estimated=True)

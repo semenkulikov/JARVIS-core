@@ -70,7 +70,7 @@ DEFAULTS: dict[str, Any] = {
     "vosk_wake_min_conf": 0.80,
     "followup_enabled": True, "followup_window_s": 7.0, "followup_question_window_s": 10.0,
     "followup_echo_guard_s": 0.3, "followup_min_conf": 0.65, "followup_max_turns": 8,
-    "wake_prebuffer_s": 1.6, "phrase_wait_s": 1.5, "phrase_silence_s": 0.95, "phrase_max_s": 10.0, "followup_listen_s": 7.0,
+    "wake_prebuffer_s": 1.6, "phrase_wait_s": 1.5, "phrase_silence_s": 0.95, "phrase_silence_fast_s": 0.45, "phrase_max_s": 10.0, "followup_listen_s": 7.0,
     "ack_command": ["Есть, сэр.", "Как прикажете, сэр.", "Будет сделано, сэр.", "Слушаюсь, сэр.", "Сию минуту, сэр.", "Уже делаю, сэр."],
     "ack_free": ["Да, сэр.", "Слушаюсь, сэр.", "Секунду, сэр."],
     "ack_wait": ["Минуту, сэр, уточняю.", "Секунду, сэр.", "Почти готово, сэр."],

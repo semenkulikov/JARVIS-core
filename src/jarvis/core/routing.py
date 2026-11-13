@@ -93,6 +93,41 @@ def match_alias(text: str, cfg: Config) -> Alias | None:
     return fuzzy_alias(text, cfg)
 
 
+# Alias actions without an argument or a lasting side effect: volume and media keys, time, status, stop.
+FAST_END_ACTIONS = frozenset({"key", "time", "status", "stop"})
+# Quick commands of the same kind («повтори»); anything with a tail, shutdown, lock or a protocol is never fast.
+FAST_END_QUICK = ("повтори", "повтори ответ", "еще раз", "что ты сказал", "помедленнее", "еще раз помедленнее", "повтори помедленнее")
+
+
+def _phrase(p: str) -> str:
+    return " ".join(norm_phrase(p))
+
+
+def fast_end_phrases(cfg: Config) -> frozenset[str]:
+    """Whole phrases that may end after the short silence ``phrase_silence_fast_s``.
+
+    A phrase qualifies when it is a full phrase of a safe alias (``FAST_END_ACTIONS`` or its own
+    ``"fast_end": true``; ``"fast_end": false`` opts out) and no other known phrase starts with it
+    and a space: otherwise «громче» would cut off «громче на пять»."""
+    safe: set[str] = set(); every: set[str] = set()
+    for al in cfg.get("aliases") or []:
+        flag = al.get("fast_end")
+        for p in al.get("phrases", []):
+            t = _phrase(p)
+            if not t: continue
+            every.add(t)
+            if flag is True or (flag is None and al.get("action") in FAST_END_ACTIONS): safe.add(t)
+    safe.update(_phrase(p) for p in FAST_END_QUICK)
+    every.update(_phrase(p) for p in grammar_phrases(cfg) if p != "[unk]")
+    every.update(_phrase(p) for p in FAST_END_QUICK)
+    return frozenset(t for t in safe if not any(o.startswith(t + " ") for o in every))
+
+
+def fast_end_eligible(text: str, cfg: Config, phrases: frozenset[str] | None = None) -> bool:
+    """True when ``text`` (the command, name already stripped) is a whole safe phrase, see fast_end_phrases."""
+    return _phrase(text) in (phrases if phrases is not None else fast_end_phrases(cfg))
+
+
 def grammar_phrases(cfg: Config) -> list[str]:
     """Phrases for the narrow command recognizer that runs next to the free one."""
     ph: list[str] = []
