@@ -1,30 +1,37 @@
 from jarvis.core import matching as M
 import time,pytest
 from jarvis.core import routing as ROUTING
-from jarvis.app import conversation as CONV
+from jarvis.app import server_jobs as CONV
+from jarvis.core.state import ServerJob
 class Sig:
  def clear(self):pass
  def wait(self,cfg):time.sleep(0.01)
 @pytest.fixture
 def outbox(app,cfg,monkeypatch,tmp_path):
  from jarvis.adapters.outbox import Outbox
- said=[];monkeypatch.setattr(app.c, "outbox",Outbox(str(tmp_path),done=str(tmp_path/'done'),signal=Sig()));app.c.outbox.ensure()
- monkeypatch.setattr(app.conversation, "say",lambda t,c,**k:said.append(t));monkeypatch.setattr(app.conversation, "say_reply",lambda t,c,**k:said.append(t))
+ monkeypatch.setattr(app.c, "outbox",Outbox(str(tmp_path),done=str(tmp_path/'done'),signal=Sig()));app.c.outbox.ensure()
+ monkeypatch.setattr(app.c.jobs, "outbox",app.c.outbox)
  app.c.signals.interrupt.clear();app.c.ledger.down_since=None
  cfg.update(reply_timeout_s=0.4,server_notice_s=0.1,server_down_wait_s=0.1,server_down_ttl_s=60)
+ said=[]
+ def wait(rid):
+  job=ServerJob(rid=rid,text='вопрос',kind='free',created=time.time(),listener_ack='Сейчас, сэр.');ok=app.c.jobs.wait(job,cfg)
+  while (p:=job.pop(time.time())) is not None:said.append(p.text)
+  return ok
+ app.wait=wait
  return said
 def test_no_server_file_says_server_down_and_marks(app,cfg,outbox):
- assert app.conversation.wait_replies('r1',cfg,listener_ack='Сейчас, сэр.') is False
+ assert app.wait('r1') is False
  assert outbox==[CONV.SERVER_SLOW_PHRASE,CONV.SERVER_DOWN_PHRASE]
  assert app.c.ledger.down_since is not None and app.c.ledger.is_cancelled('r1')
 def test_second_request_fails_fast_when_down(app,cfg,outbox):
  app.c.ledger.down_since=time.time();t=time.time()
- assert app.conversation.wait_replies('r2',cfg,listener_ack='Сейчас, сэр.') is False
+ assert app.wait('r2') is False
  assert time.time()-t<0.35 and outbox==[CONV.SERVER_DOWN_PHRASE]
 def test_reply_clears_down_flag(app,cfg,outbox,tmp_path):
  app.c.ledger.down_since=time.time()
  (tmp_path/'r3.txt').write_text('Готово, сэр.',encoding='utf-8')
- assert app.conversation.wait_replies('r3',cfg,listener_ack='Сейчас, сэр.') is True
+ assert app.wait('r3') is True
  assert app.c.ledger.down_since is None and outbox==['Готово, сэр.']
 def test_down_flag_expires(app,cfg):
  app.c.ledger.down_since=time.time()-120;cfg['server_down_ttl_s']=60

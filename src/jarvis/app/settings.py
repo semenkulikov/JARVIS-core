@@ -11,6 +11,7 @@ from typing import Any
 from jarvis.core import codemode as CODE
 from jarvis.core import quick as QUICK
 from jarvis.adapters import credentials as CREDS
+from jarvis.app import server_jobs as SERVER_JOBS
 from jarvis.core import dialog as DIALOG
 from jarvis.core import food as FOOD
 from jarvis.core import gate as GATE
@@ -90,7 +91,7 @@ DEFAULTS: dict[str, Any] = {
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
-for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP, SERVER_JOBS): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 
 def finalize(cfg: dict[str, Any], home: str) -> None:

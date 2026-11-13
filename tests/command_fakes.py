@@ -24,6 +24,9 @@ class FakeServices:
     def ask_server(self, text, cfg, trig, test, **kw):
         self.asked.append((text, kw))
 
+    def stop_reply(self):
+        self.stopped_reply = True
+
     def pick(self, cfg, key):
         return f"<{key}>"
 

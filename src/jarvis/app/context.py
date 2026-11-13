@@ -30,6 +30,7 @@ from jarvis.app import settings
 from jarvis.app.components import Components, Paths
 from jarvis.app.conversation import Conversation
 from jarvis.app.listener import Listener
+from jarvis.app.server_jobs import ServerWorker
 from jarvis.app.warmup import Warmup
 from jarvis.commands.controller import Controller
 from jarvis.core.lazy import Lazy
@@ -75,13 +76,14 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         return ctl is not None and bool(getattr(ctl, "pending_shutdown", None))
 
     player = AUDIO.Player(sd); accent = Accentizer()
+    config = settings.config_store(paths.home); transport = WebhookTransport(signals, ledger)
     c = Components(
-        paths=paths, config=settings.config_store(paths.home), picker=Picker(settings.DEFAULTS),
+        paths=paths, config=config, picker=Picker(settings.DEFAULTS),
         signals=signals, fsm=fsm, state=state, ledger=ledger, router=Router(state, shutdown_pending),
         mic=MicInput(), asr=VoskASR(state), speaker=SpeakerGate(paths.home),
-        transport=WebhookTransport(signals, ledger), player=player, accent=accent,
+        transport=transport, player=player, accent=accent,
         voice=Voice(paths.home, state, signals, fsm, player, accent),
-        outbox=outbox, status=StatusCache(os.path.join(paths.cache, "status.json")),
+        outbox=outbox, jobs=ServerWorker(transport, outbox, ledger, lambda: config.load()), status=StatusCache(os.path.join(paths.cache, "status.json")),
         controller=controller, laptop=LAPTOP,
         sleep=Lazy(lambda: SleepState(os.path.join(paths.cache, "sleep.json"))),
         proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),

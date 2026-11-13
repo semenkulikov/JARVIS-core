@@ -26,6 +26,7 @@ def smalltalk(ctx: CommandContext, al: Alias) -> None:
 @handles("stop")
 def stop(ctx: CommandContext, al: Alias) -> None:
     s = ctx.services
+    s.stop_reply()
     s.say(s.pick(ctx.cfg, "ack_stop"), ctx.cfg, role="stop_ack")
 
 

@@ -110,11 +110,19 @@ class Outbox:
         except OSError: lag = -1
         log.info("outbox %s (%d chars) rid=%s wait_s=%.3f file_age_s=%.3f", label, len(txt), rid, time.time() - t0, lag)
 
+    def drop(self, rid: str) -> int:
+        """Delete every reply file of ``rid`` (parts and final) still in the outbox; the count removed."""
+        n = 0
+        try: names = os.listdir(self.path)
+        except OSError: return 0
+        for fn in names:
+            if fn.startswith(rid + ".") and fn.endswith(".txt"):
+                try: os.remove(os.path.join(self.path, fn)); n += 1; log.info("dropped cancelled outbox part %s", fn)
+                except Exception as e: log.info("drop failed %s: %s", fn, e)
+        return n
+
     def purge_cancelled(self, ledger: RequestLedger, max_age_s: float = 900) -> None:
         """Delete late files of abandoned requests; forget requests older than ``max_age_s``."""
         for rid_c, tc in list(ledger.cancelled.items()):
             if time.time() - tc > max_age_s: ledger.cancelled.pop(rid_c, None); continue
-            for fn in os.listdir(self.path):
-                if fn.startswith(rid_c):
-                    try: os.remove(os.path.join(self.path, fn)); log.info("dropped cancelled outbox part %s", fn)
-                    except Exception as e: log.info("drop failed %s: %s", fn, e)
+            self.drop(rid_c)

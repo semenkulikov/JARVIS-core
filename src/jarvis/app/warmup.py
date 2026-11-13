@@ -10,15 +10,16 @@ from jarvis.core import text as JT
 from jarvis.adapters.process import trim_memory
 from jarvis.adapters.tts import split_text
 from jarvis.app.components import Components
-from jarvis.app.conversation import (NO_REPLY_PHRASE, SEND_FAILED_PHRASE, SERVER_DOWN_PHRASE, SERVER_SLOW_PHRASE,
-                                     TIMER_DONE_PHRASE)
+from jarvis.app.conversation import TIMER_DONE_PHRASE
+from jarvis.app.server_jobs import (BUSY_PHRASE, NO_REPLY_PHRASE, SEND_FAILED_PHRASE, SERVER_DOWN_PHRASE, SERVER_SLOW_PHRASE,
+                                    STILL_WORKING_PHRASE)
 from jarvis.core.phrases import all_phrases, template_phrases
 from jarvis.core.ports import Config
 
 log = logging.getLogger("jarvis")
 FIXED_PHRASES = ("Блокирую, сэр.", TIMER_DONE_PHRASE, "Таймер отменён, сэр.", "Вебхук не настроен, сэр.", SEND_FAILED_PHRASE,
                  NO_REPLY_PHRASE, SERVER_DOWN_PHRASE, SERVER_SLOW_PHRASE, "Хорошо, сэр.", "Свежих данных нет, сэр, запрашиваю.",
-                 "Не нашёл приложение, сэр.")
+                 "Не нашёл приложение, сэр.", BUSY_PHRASE, STILL_WORKING_PHRASE)
 PRONUNCIATION_AUDIT = "pronunciation_audit_v312.json"
 
 

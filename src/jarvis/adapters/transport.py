@@ -49,10 +49,12 @@ class WebhookTransport:
             return int(r.status)
 
     def post_retry(self, cfg: Config, payload: dict[str, Any], total: float = 30, independent: bool = False) -> int | None:
-        """Retry network errors and 5xx/429 for ``total`` s; None when the user abandoned the request."""
+        """Retry network errors and 5xx/429 for ``total`` s; None when the request was cancelled meanwhile.
+
+        Stopping speech is not cancelling: only the ledger says a request was abandoned."""
         t0 = time.time(); err: Exception | None = None
         while time.time() - t0 < total:
-            if not independent and (self.signals.interrupt.is_set() or self.ledger.is_cancelled(payload.get("request_id"))): return None
+            if not independent and self.ledger.is_cancelled(payload.get("request_id")): return None
             try: return self.post(cfg, payload)
             except Exception as e:
                 err = e; log.warning("webhook attempt failed: %s code=%s", type(e).__name__, getattr(e, "code", None))

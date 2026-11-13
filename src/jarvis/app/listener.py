@@ -76,17 +76,18 @@ class Listener:
         self.c, self.conversation, self.warmup, self.sd = c, conversation, warmup, sd
 
     # ------------------------------------------------------------ helpers
-    def start(self, trig: str, pre: list[np.ndarray] | None = None, text: Any = None, test: bool = False, skip_s: float = 0.0) -> None:
+    def start(self, trig: str, pre: list[np.ndarray] | None = None, text: Any = None, test: bool = False, skip_s: float = 0.0,
+              trace: Trace | None = None) -> None:
         sig = self.c.signals
         sig.interrupt.clear(); sig.busy.set()
         cap = Capture(pre) if (text is None and pre is not None) else None
         self.c.state.capture = cap
-        threading.Thread(target=self.conversation.handle, args=(trig, cap, text, test, skip_s, Trace(trig)), daemon=True).start()
+        threading.Thread(target=self.conversation.handle, args=(trig, cap, text, test, skip_s, trace or Trace(trig)), daemon=True).start()
 
     def do_stop(self, reason: str) -> None:
         log.info("STOP barge-in (%s): speech stopped", reason)
         self.c.signals.interrupt.set()  # the speech thread stops its own stream
-        self.c.ledger.cancel(self.c.state.rid)
+        self.c.jobs.cancel_speaking("stop")  # only the server reply being spoken; waiting jobs go on
         self.c.state.stop_pending = True
 
     def _stop_requested(self) -> bool:
@@ -187,6 +188,9 @@ class Listener:
             if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending:
                 item = lp.pm.take(cfg)
                 if item: self.start("proactive", text=item)
+        if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending:
+            job = c.jobs.ready()
+            if job is not None: self.start("server_reply", text=job, trace=job.trace); return NEXT
         if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending and lp.pm.can_speak(cfg):
             for notice in c.controller.get().timers.pop_fired(limit=1): self.start("timer_fire", text=notice, test=False); break
         if time.time() - lp.lastlvl > cfg["level_log_interval_s"]:
@@ -244,8 +248,7 @@ class Listener:
                     if PROACTIVE.priority_candidate(fr.get("text", ""), fc, state.speaking_text, cfg) and any(
                             w.get("word") in PRIORITY_WAKE_WORDS and w.get("conf", 0) >= float(cfg.get("priority_wake_min_conf", .85)) for w in fw[:3]):
                         log.info("PRIORITY vosk wake conf=%.2f -> interrupt and capture", fc)
-                        interrupt.set()
-                        c.ledger.cancel(state.rid)
+                        interrupt.set()  # pauses a server reply, never cancels it
                         wake = next((w for w in fw[:3] if w.get("word") in PRIORITY_WAKE_WORDS), None)
                         lp.pending = borigin + int((wake.get("start", 0) if wake else 0) * SR) - int(.25 * SR)
                         return
@@ -266,7 +269,6 @@ class Listener:
             if sc < 0.2: lp.barge_armed = True
             elif lp.barge_armed and sc >= cfg["barge_in_threshold"] and not interrupt.is_set():
                 log.info("BARGE-IN oww %.2f -> interrupt", sc); interrupt.set()
-                c.ledger.cancel(state.rid)
                 lp.pending = st + len(x) - int(cfg["wake_prebuffer_s"] * SR)
 
     def _after_busy(self, lp: Loop) -> bool:
@@ -275,7 +277,7 @@ class Listener:
         lp.was_busy = False; lp.last_end = time.time(); lp.wrec = c.asr.wake_recognizer(); lp.wbase = lp.pos; lp.wake_check = None
         lp.clap.events = []; lp.clap.cur = None
         if lp.oww is not None: lp.oww.reset()
-        lp.cfg = c.config.load(); c.state.rid = None
+        lp.cfg = c.config.load()
         if c.state.stop_pending:
             c.state.stop_pending = False; lp.pending = None; self.start("stop_ack", text=""); return True
         if lp.pending is not None:

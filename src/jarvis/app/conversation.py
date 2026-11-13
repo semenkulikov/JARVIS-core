@@ -5,38 +5,32 @@ Implements jarvis.commands.base.Services for the command handlers.
 from __future__ import annotations
 
 import logging
-import os
-import threading
 import time
 import uuid
 from typing import Any
 
 from jarvis.core import codemode as CODE
 from jarvis.core import dialog as DIALOG
-from jarvis.core import gate as GATE
 from jarvis.core import sleep as SLEEP
 from jarvis.adapters.audio import Capture
 from jarvis.adapters.status_cache import StatusCache
+from jarvis.app import server_jobs as SERVER_JOBS
 from jarvis.app.components import Components
+from jarvis.app.server_jobs import BUSY_PHRASE
 from jarvis.commands import registry as COMMANDS
 from jarvis.commands.base import Alias, CommandContext
 from jarvis.commands.controller import Controller
 from jarvis.core.followup import FollowupSettings
-from jarvis.core.matching import filler_only, followup_echo, natural_status_alias, norm_phrase, pure_wait_filler
+from jarvis.core.matching import filler_only, followup_echo, natural_status_alias, norm_phrase
 from jarvis.core.perf import Trace
 from jarvis.core.phrases import Picker
 from jarvis.core.ports import Config, Laptop
 from jarvis.core.routing import match_alias
-from jarvis.core.state import ListenerState, Mode
+from jarvis.core.state import ListenerState, Mode, ServerJob
 from jarvis.core.wake import strip_wake
 
 log = logging.getLogger("jarvis")
-SERVER_DOWN_PHRASE = "Сервер не отвечает, сэр. Локальные команды работают."
-SERVER_SLOW_PHRASE = "Сервер пока молчит, сэр. Подожду ещё немного."
 SLEEP_END_PHRASE = "Я снова на связи, сэр."
-NO_REPLY_PHRASE = "Ответ не пришёл, сэр. Попробуйте ещё раз позже."
-SEND_FAILED_PHRASE = "Не получилось отправить запрос, сэр."
-STILL_WORKING_PHRASE = "Ответ ещё готовится, сэр."
 TIMER_DONE_PHRASE = "Сэр, время вышло."
 
 
@@ -63,6 +57,10 @@ class Conversation:
             if self.c.signals.interrupt.is_set() or time.time() - t0 > 30: return
             time.sleep(3)
 
+    def stop_reply(self) -> None:
+        """«Стоп» as a command: cancel the server reply a barge-in has just cut."""
+        self.c.jobs.cancel_paused("stop command")
+
     def pick(self, cfg: Config, key: str) -> str: return self.c.picker.pick(cfg, key)
     def controller(self) -> Controller: return self.c.controller.get()
     def laptop(self) -> Laptop: return self.c.laptop
@@ -76,86 +74,51 @@ class Conversation:
     def perf(self, event: str, **meta: Any) -> None:
         self.c.state.perf(event, **meta)
 
-    # ------------------------------------------------------------ server round trip
+    # ------------------------------------------------------------ server requests
     def ask_server(self, text: str, cfg: Config, trig: str, test: bool, ack: str | None = None, listener_ack: str | None = None,
                    kind: str | None = None, extra_payload: dict[str, Any] | None = None) -> None:
-        """POST the phrase to the server while the acknowledgement plays, then speak the outbox replies."""
+        """Hand the phrase to the background worker and speak the acknowledgement; the conversation ends here.
+
+        The answer is spoken later by a ``server_reply`` turn, so local commands work meanwhile."""
         st, interrupt = self.c.state, self.c.signals.interrupt
         trace = st.trace
-        rid = trace.rid if trace is not None else str(uuid.uuid4()); res: list[Any] = []; st.rid = rid
+        rid = trace.rid if trace is not None else str(uuid.uuid4())
         chosen_ack = ack if ack is not None else (self.pick(cfg, "ack_server") or cfg.get("fast_ack", "Сейчас, сэр."))
         acknowledged = chosen_ack if listener_ack is None else listener_ack
         kind = kind or ("status" if natural_status_alias(text) else "free")
-        log.info("FREE -> webhook rid=%s kind=%s listener_ack=%r: %r", rid, kind, acknowledged, text)
-        call = self.c.transport.call
-        th = threading.Thread(target=lambda: res.append(call(rid, text, trig, cfg, test, listener_ack=acknowledged, kind=kind, trace=trace,
-                                                             extra_payload=extra_payload)), daemon=True)
-        th.start()
-        self.perf("ack_start")
+        job = ServerJob(rid=rid, text=text, kind=kind, created=time.time(), trigger=trig, listener_ack=acknowledged, test=test,
+                        extra_payload=extra_payload, private=kind.startswith("clipboard_") or kind in CODE.PRIVATE_KINDS, trace=trace)
+        st.followup_eligible = False
+        if not self.c.jobs.submit(job, cfg):
+            self.say(BUSY_PHRASE, cfg); return
+        st.trace = None  # the job owns the latency trace now; its reply turn finishes it
+        log.info("FREE -> server job rid=%s kind=%s listener_ack=%r: %r", rid, kind, acknowledged, text)
+        if trace is not None: trace.mark("ack_start")
         self.say(chosen_ack, cfg, role="ack")
-        while th.is_alive() and not interrupt.is_set(): th.join(0.1)
-        if interrupt.is_set():
-            self.c.ledger.cancel(rid); log.info("webhook request abandoned rid=%s", rid); return
-        if res and res[0]: self.wait_replies(rid, cfg, listener_ack=acknowledged, kind=kind)
-        else: self.say(SEND_FAILED_PHRASE, cfg)
+        if interrupt.is_set() and st.stop_pending: self.c.jobs.cancel(job, "stop during the acknowledgement")
 
-    def wait_replies(self, rid: str, cfg: Config, listener_ack: str = "", kind: str = "free") -> bool:
-        st, ledger, outbox, interrupt = self.c.state, self.c.ledger, self.c.outbox, self.c.signals.interrupt
-        t0 = time.time(); n = 1; fillers = 0; st.rid = rid
-        real_data_seen = False; server_seen = False; slow_noticed = False
-        was_down = ledger.recently_down(cfg, t0)
-
-        def speak_part(txt: str) -> None:
-            nonlocal real_data_seen
-            if GATE.is_silent_reply(txt):
-                if txt.strip(): log.info("server asked for silence rid=%s", rid)
-                return
-            if listener_ack and not real_data_seen and pure_wait_filler(txt):
-                log.info("skipped redundant server filler rid=%s: %r", rid, txt); return
-            real_data_seen = True
-            if kind.startswith("clipboard_") or kind in CODE.PRIVATE_KINDS: self.say_reply(txt, cfg, private=True)
-            else: self.say_reply(txt, cfg)
-
-        final = outbox.final(rid)
-        while time.time() - t0 < cfg["reply_timeout_s"]:
-            outbox.signal.clear()
-            if not server_seen and (os.path.exists(final) or os.path.exists(outbox.part(rid, n))):
-                server_seen = True; ledger.down_since = None
-            el = time.time() - t0
-            if not server_seen and was_down and el > float(cfg.get("server_down_wait_s", 45)):
-                # Server already failed recently: do not hang for the full timeout again.
-                ledger.cancel(rid); ledger.down_since = time.time()
-                log.warning("server still silent rid=%s after %.0fs (down since earlier) -> local fallback", rid, el)
-                self.say(SERVER_DOWN_PHRASE, cfg); return False
-            if not server_seen and not was_down and not slow_noticed and el > float(cfg.get("server_notice_s", 90)):
-                slow_noticed = True; log.info("server silent rid=%s after %.0fs -> notice", rid, el)
-                self.say(SERVER_SLOW_PHRASE, cfg)
-            # An initial acknowledgement is enough. No second "checking" announcement.
-            if not listener_ack and not real_data_seen and fillers == 0 and time.time() - t0 > max(12.0, float(cfg.get("wait_filler_s", 12))) \
-                    and not os.path.exists(final) and not os.path.exists(outbox.part(rid, n)):
-                fillers += 1; self.say(STILL_WORKING_PHRASE, cfg)
-            if interrupt.is_set():
-                ledger.cancel(rid); log.info("reply wait for %s abandoned (interrupted), rid cancelled", rid); return False
-            part = outbox.part(rid, n)
-            if os.path.exists(part) or os.path.exists(final): self.perf("first_server_file")
-            if os.path.exists(part) and outbox.ready(part):
-                self.perf("first_server_file")
-                txt = outbox.read(part); outbox.log_arrival(part, rid, "part " + str(n), txt, t0)
-                outbox.move_done(part); speak_part(txt); n += 1; continue
-            if os.path.exists(final) and outbox.ready(final, allow_empty=real_data_seen or outbox.file_age(final) >= 0.6):
-                self.perf("first_server_file")
-                while os.path.exists(outbox.part(rid, n)):
-                    p = outbox.part(rid, n); t = outbox.read(p); outbox.move_done(p); log.info("outbox part %d (%d chars)", n, len(t)); speak_part(t); n += 1
-                txt = outbox.read(final); outbox.log_arrival(final, rid, "final", txt, t0); outbox.move_done(final)
-                speak_part(txt); return True
-            outbox.signal.wait(cfg)
-        log.warning("reply timeout for %s", rid)
-        if not server_seen and not real_data_seen:
-            ledger.down_since = time.time(); ledger.cancel(rid)
-            log.warning("server marked unresponsive (no outbox file for rid=%s)", rid)
-            self.say(SERVER_DOWN_PHRASE, cfg); return False
-        self.say(NO_REPLY_PHRASE, cfg)
-        return False
+    def speak_job(self, job: ServerJob, cfg: Config) -> None:
+        """Speak the ready parts of ``job``, waiting briefly for the next one; «стоп» cancels it (Listener.do_stop),
+        any other barge-in only pauses it: the cut part is spoken again in the next reply turn."""
+        st, interrupt, jobs = self.c.state, self.c.signals.interrupt, self.c.jobs
+        gap = float(cfg.get("server_reply_gap_s", SERVER_JOBS.DEFAULTS["server_reply_gap_s"]))
+        jobs.speaking = job
+        if jobs.paused is job: jobs.paused = None
+        try:
+            while not job.cancelled:
+                part = job.pop(time.time())
+                if part is None:
+                    if job.finished or not job.arrived.wait(gap): break
+                    continue
+                if not self.say(part.text, cfg, private=job.private):
+                    if interrupt.is_set() and not job.cancelled: job.requeue(part); jobs.paused = job
+                    break
+                if part.data:
+                    job.spoken.append(part.text)
+                    st.last_reply, st.last_reply_private = job.last_reply, job.private
+        finally:
+            jobs.speaking = None
+        st.followup_eligible = job.done and not job.cancelled and not interrupt.is_set()
 
     def request_morning(self, job: dict[str, Any], cfg: Config, test: bool = False) -> None:
         extra = {k: v for k, v in job.items() if k not in ("request_id", "kind", "date", "attempts", "retry_at")}
@@ -194,6 +157,10 @@ class Conversation:
                     self.say(item.get("text", ""), cfg)
             finally:
                 if not test: self.proactive().complete(item, interrupt.is_set())
+            return True
+        if trig == "server_reply":
+            self.perf("route", route="server_reply")
+            if isinstance(text, ServerJob): self.speak_job(text, cfg)
             return True
         if trig == "sleep_end":
             self.perf("route", route="sleep_end"); self.say(SLEEP_END_PHRASE, cfg); return True
@@ -268,7 +235,7 @@ class Conversation:
                 st.followup_eligible = False
                 serial = st.speech_serial
                 self.handle_turn(trig, cap, text, test, skip_s)
-                st.trace.finish("interrupted" if interrupt.is_set() else "done")
+                if st.trace is not None: st.trace.finish("interrupted" if interrupt.is_set() else "done")
                 cfg = c.config.load(); fs = FollowupSettings.from_cfg(cfg)
                 if interrupt.is_set() or not fs.enabled: break
                 if not st.followup_eligible or st.speech_serial == serial: break

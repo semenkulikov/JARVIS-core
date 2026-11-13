@@ -239,23 +239,34 @@ class _Sig:
 def outbox(app, cfg, said, monkeypatch, tmp_path):
     from jarvis.adapters.outbox import Outbox
     monkeypatch.setattr(app.c, "outbox", Outbox(str(tmp_path), done=str(tmp_path), signal=_Sig()))
+    monkeypatch.setattr(app.c.jobs, "outbox", app.c.outbox)
     app.c.signals.interrupt.clear(); app.c.ledger.down_since = None
     cfg.update(reply_timeout_s=3.0, server_notice_s=5.0, server_down_wait_s=5.0)
     return tmp_path
 
 
+def _wait(app, cfg, rid, listener_ack=""):
+    """Run the worker's outbox wait for one job; (answered, texts of the parts it collected)."""
+    from jarvis.core.state import ServerJob
+    job = ServerJob(rid=rid, text="вопрос", kind="free", created=time.time(), listener_ack=listener_ack)
+    ok = app.c.jobs.wait(job, cfg)
+    parts = []
+    while (p := job.pop(time.time())) is not None: parts.append(p.text)
+    return ok, parts
+
+
 @pytest.mark.parametrize("body", ["<silent>", ""])
-def test_silent_final_speaks_nothing(app, cfg, said, outbox, body):
+def test_silent_final_speaks_nothing(app, cfg, outbox, body):
     (outbox / "s1.txt").write_text(body, encoding="utf-8")
     t = time.time()
-    assert app.conversation.wait_replies("s1", cfg, listener_ack="Сейчас, сэр.") is True
-    assert said == [] and time.time() - t < 2.5
+    assert _wait(app, cfg, "s1", listener_ack="Сейчас, сэр.") == (True, [])
+    assert time.time() - t < 2.5
 
 
-def test_silent_after_parts_keeps_parts(app, cfg, said, outbox):
+def test_silent_after_parts_keeps_parts(app, cfg, outbox):
     (outbox / "s2.1.txt").write_text("Первая часть.", encoding="utf-8")
     (outbox / "s2.txt").write_text("<silent>", encoding="utf-8")
-    assert app.conversation.wait_replies("s2", cfg) is True and said == ["Первая часть."]
+    assert _wait(app, cfg, "s2") == (True, ["Первая часть."])
 
 
 

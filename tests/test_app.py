@@ -34,8 +34,8 @@ def test_two_apps_do_not_share_state(tmp_path):
     from jarvis.app.context import build_app
     import sounddevice as sd
     a, b = build_app(tmp_path / "a", sd=sd), build_app(tmp_path / "b", sd=sd)
-    a.c.state.rid = "x"; a.c.signals.busy.set()
-    assert b.c.state.rid is None and not b.c.signals.busy.is_set()
+    a.c.state.last_reply = "x"; a.c.signals.busy.set()
+    assert b.c.state.last_reply == "" and not b.c.signals.busy.is_set() and a.c.jobs is not b.c.jobs
 
 
 def test_timer_turn_beeps_and_speaks_label(app, cfg, monkeypatch):

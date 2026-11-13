@@ -14,6 +14,7 @@ from jarvis.adapters.speaker import SpeakerGate
 from jarvis.adapters.status_cache import StatusCache
 from jarvis.adapters.transport import WebhookTransport
 from jarvis.adapters.tts import Voice
+from jarvis.app.server_jobs import ServerWorker
 from jarvis.commands.controller import Controller
 from jarvis.core.config import ConfigStore
 from jarvis.core.lazy import Lazy
@@ -66,6 +67,7 @@ class Components:
     accent: Accentizer
     voice: Voice
     outbox: Outbox
+    jobs: ServerWorker
     status: StatusCache
     controller: Lazy[Controller]
     laptop: Laptop
