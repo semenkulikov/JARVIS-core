@@ -12,6 +12,8 @@ config.json
 config.legacy.json
 config_public.json
 secrets*
+*.local.json
+config.local*
 credentials.json
 *.bak*
 *before*.py

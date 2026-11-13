@@ -4,6 +4,8 @@ The generic loading, reloading and validation lives in :mod:`jarvis.core.config`
 """
 from __future__ import annotations
 
+import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,8 @@ from jarvis.core import voiceprint as SPEAKER
 from jarvis.core import text as JT
 from jarvis.core.config import ConfigStore, merge_aliases
 from jarvis.core.phrases import SMALLTALK_ALIASES
+
+log = logging.getLogger("jarvis")
 
 DEFAULT_ALIASES: list[dict[str, Any]] = [
     {"name": "status", "phrases": ["статус", "статус по задачам", "отчёт", "доклад", "сводка", "что по задачам"], "action": "status"},
@@ -97,10 +101,23 @@ DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS}
 for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP, SERVER_JOBS, NAMES, TIMETABLE, PROTOCOLS): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 
+def read_local_protocols(cfg: dict[str, Any], home: str) -> Any:
+    """The owner's gitignored protocol additions; None when absent. Its content is never logged."""
+    name = str(cfg.get("protocols_local_file") or "")
+    if not name: return None
+    path = Path(home) / name
+    if not path.is_file(): return None
+    try: data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as e: log.warning("local protocol file unreadable (%s); ignored", type(e).__name__); return None
+    if not isinstance(data, dict): log.warning("local protocol file: an object expected; ignored"); return None
+    return data
+
+
 def finalize(cfg: dict[str, Any], home: str) -> None:
     """Values derived after loading: secrets, merged aliases, stress marks, process-wide text settings."""
     cfg["latin_words"] = JT.latin_words(cfg.get("latin_words"))
     cfg["webhook_auth_header"] = CREDS.webhook(cfg, home)
+    cfg["protocols"] = PROTOCOLS.merge_local(cfg.get("protocols"), read_local_protocols(cfg, home))
     cfg["aliases"] = merge_aliases(cfg.get("aliases"), DEFAULT_ALIASES) + SMALLTALK_ALIASES + PROTOCOLS.aliases(cfg)
     cfg["stress_dict"] = dict(dict(PROACTIVE.STRESS, **QUICK.STRESS, **DIALOG.STRESS), **(cfg.get("stress_dict") or {}))
 

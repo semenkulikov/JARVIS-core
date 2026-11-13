@@ -294,3 +294,54 @@ def test_close_apps_step_still_closes_a_named_list(cfg, rig):
     cfg["protocols"] = [{"name": "Тест", "phrases": ["протокол тест"], "steps": ["close_apps"]}]
     run({"name": "x", "action": "protocol", "protocol": "Тест"}, "", cfg, s)
     assert j[0][:2] == ("close_apps", ("telegram", "chrome")) and os.getpid() in j[0][2]
+
+
+# ------------------------------------------------------------ the owner's local (gitignored) protocol file
+LOCAL = {"extend": {"Взлом Пентагона": {"steps": [{"step": "launch_tracked", "targets": ["C:/private/one.cmd", "C:/private/two.cmd"]}]}},
+         "protocols": [{"name": "Личный", "phrases": ["протокол личный"], "steps": ["beep"]}]}
+
+
+def test_merge_local_extends_and_adds():
+    merged = P.merge_local(copy.deepcopy(P.DEFAULTS["protocols"]), LOCAL)
+    hack = next(p for p in merged if p["name"] == "Взлом Пентагона")
+    assert hack["steps"] == ["hacker_windows", LOCAL["extend"]["Взлом Пентагона"]["steps"][0]]
+    assert merged[-1]["name"] == "Личный" and P.DEFAULTS["protocols"][3]["steps"] == ["hacker_windows"]  # defaults untouched
+    assert P.merge_local(P.DEFAULTS["protocols"], None) == P.DEFAULTS["protocols"]
+    assert P.merge_local(P.DEFAULTS["protocols"], {"extend": "junk", "protocols": "junk"}) == P.DEFAULTS["protocols"]
+
+
+def test_settings_read_the_local_file(tmp_path, caplog):
+    import json
+    from jarvis.app import settings
+    home = tmp_path / "home"; (home / "secrets").mkdir(parents=True)
+    (home / "secrets" / "protocols.local.json").write_text(json.dumps(LOCAL, ensure_ascii=False), encoding="utf-8")
+    cfg = settings.config_store(home).load()
+    assert any(s == LOCAL["extend"]["Взлом Пентагона"]["steps"][0] for p in cfg["protocols"] if p["name"] == "Взлом Пентагона" for s in p["steps"])
+    assert any(a["name"] == "protocol_личный" for a in cfg["aliases"]) and "private" not in caplog.text
+    (home / "secrets" / "protocols.local.json").write_text("{broken", encoding="utf-8")
+    cfg = settings.config_store(home).load()
+    assert next(p for p in cfg["protocols"] if p["name"] == "Взлом Пентагона")["steps"] == ["hacker_windows"]
+    assert "local protocol file unreadable" in caplog.text and "private" not in caplog.text
+
+
+class TrackedBackend(Backend):
+    def open_window(self, target): self._do("open_window", target); self.pid += 1; return self.pid
+
+
+def test_local_server_windows_open_and_cancel_closes_them(cfg, tmp_path, caplog):
+    j = Journal(); b = TrackedBackend(j); ctl = build_controller(tmp_path / "h", backend=b)
+    s = FakeServices(controller=ctl, sleep=Sleep(j), proactive=Proactive(j))
+    cfg["protocols"] = P.merge_local(cfg["protocols"], LOCAL)
+    run({"name": "x", "action": "protocol", "protocol": "Взлом Пентагона"}, "", cfg, s)
+    assert [c[1] for c in j if c[0] == "open_window"] == ["C:/private/one.cmd", "C:/private/two.cmd"]
+    assert len(ctl.protocol_pids) == 8 and "private" not in caplog.text and s.said == ["Доступ получен, сэр."]
+    j.clear(); run({"name": "protocol_cancel", "action": "protocol_cancel"}, "", cfg, s)
+    assert [c[1] for c in j if c[0] == "end_process"] == list(range(101, 109)) and ctl.protocol_pids == []
+
+
+def test_one_failing_server_window_does_not_stop_the_other(cfg, tmp_path):
+    j = Journal(); b = TrackedBackend(j, fail={"open_window"}); ctl = build_controller(tmp_path / "h", backend=b)
+    s = FakeServices(controller=ctl, sleep=Sleep(j), proactive=Proactive(j))
+    cfg["protocols"] = [{"name": "Тест", "phrases": ["протокол тест"], "steps": [{"step": "launch_tracked", "targets": ["a", "b"]}, "lock"]}]
+    run({"name": "x", "action": "protocol", "protocol": "Тест"}, "", cfg, s)
+    assert names(j) == ["open_window", "open_window", "lock"] and ctl.protocol_pids == []

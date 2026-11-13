@@ -31,6 +31,8 @@ DEFAULTS: dict[str, Any] = {
     "workspace": [],        # programs, folders and URLs «launch» opens: paths, URLs or command lines
     "close_apps": [],       # process names «close_apps» asks to close, e.g. "telegram", "chrome"
     "protocol_hacker_windows": 6,
+    # Owner-only additions kept out of git, relative to the Jarvis home (see merge_local).
+    "protocols_local_file": "secrets/protocols.local.json",
 }
 LIST_PHRASES = ("какие протоколы", "какие есть протоколы", "список протоколов", "перечисли протоколы")
 CANCEL_PHRASES = ("отмена протокола", "отмени протокол", "отменить протокол", "отбой протокола")
@@ -95,6 +97,22 @@ def _parse(key: str) -> tuple[Protocol, ...]:
         except (ValueError, TypeError) as e:
             log.warning("protocol %r skipped: bad %s", r.get("name") if isinstance(r, dict) else r, e)
     return tuple(out)
+
+
+def merge_local(protocols: Any, local: Any) -> list[Any]:
+    """Protocols with the owner's local file applied: ``{"extend": {name: {"steps": [...], "reply": ...}},
+    "protocols": [...]}``. Extra steps go after the protocol's own; new protocols are appended.
+    The local file is for personal hosts and paths that must never reach the repository."""
+    out = [dict(p) if isinstance(p, dict) else p for p in (protocols if isinstance(protocols, list) else [])]
+    if not isinstance(local, dict): return out
+    raw = local.get("extend"); extend: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    for p in out:
+        add = extend.get(str(p.get("name"))) if isinstance(p, dict) else None
+        if not isinstance(add, dict): continue
+        if isinstance(add.get("steps"), list): p["steps"] = list(p.get("steps") or []) + add["steps"]
+        if isinstance(add.get("reply"), str): p["reply"] = add["reply"]
+    extra = local.get("protocols")
+    return out + ([x for x in extra if isinstance(x, dict)] if isinstance(extra, list) else [])
 
 
 def _same(said: list[str], phrase: list[str]) -> bool:

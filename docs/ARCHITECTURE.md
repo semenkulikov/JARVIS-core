@@ -264,14 +264,14 @@ stateDiagram-v2
 | `jarvis/app/conversation.py` | 317 | Ход разговора, служебные триггеры, запрос серверу и озвучка его ответа, продолжение |
 | `jarvis/app/server_jobs.py` | 177 | Фоновый воркер серверных запросов: очередь `ServerJob`, POST, файлы `outbox`, отмена только «стопом» |
 | `jarvis/app/warmup.py` | 64 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
-| `jarvis/app/settings.py` | 106 | Значения по умолчанию и псевдонимы, сборка конфигурации |
+| `jarvis/app/settings.py` | 127 | Значения по умолчанию и псевдонимы, сборка конфигурации |
 | `jarvis/app/supervisor.py` | 84 | Один рабочий процесс, перезапуск после сбоя, без прав администратора |
 | `jarvis/commands/registry.py` | 46 | `@handles`, поиск модулей, `dispatch` |
 | `jarvis/commands/base.py` | 60 | `CommandContext`, порт `Services` |
 | `jarvis/commands/conversation.py` | 40 | Ответ псевдонима, болтовня, «стоп», «проснись», «что ты умеешь» |
 | `jarvis/commands/day.py` | 50 | Статус, задачи, время, тренировка |
 | `jarvis/commands/modes.py` | 28 | Спящий режим, «не беспокоить» |
-| `jarvis/commands/protocols.py` | 186 | Протоколы: шаги `STEPS`, белый список `HACKER_COMMANDS`, подтверждение, список и отмена |
+| `jarvis/commands/protocols.py` | 196 | Протоколы: шаги `STEPS`, белый список `HACKER_COMMANDS`, подтверждение, список и отмена |
 | `jarvis/commands/pc.py` | 125 | Клавиши, экран, таймеры, батарея, температура, проекты, программы |
 | `jarvis/commands/server.py` | 32 | Быстрые команды контроллера, псевдонимы на сервер |
 | `jarvis/commands/controller.py` | 158 | Выполнение быстрых команд через внедрённые порты |
@@ -288,7 +288,7 @@ stateDiagram-v2
 | `jarvis/core/followup.py` | 37 | `FollowupSettings` |
 | `jarvis/core/schedule.py` | 32 | Ответ о тренировке |
 | `jarvis/core/timetable.py` | 138 | Фиксированное расписание (`schedule`): разбор записей, время срабатывания с учётом перехода на летнее время, поля запроса брифинга |
-| `jarvis/core/protocols.py` | 148 | Протоколы, чистая часть: конфиг `protocols`, фразы с длительностью, алиасы для роутера и грамматики, сетка окон |
+| `jarvis/core/protocols.py` | 166 | Протоколы, чистая часть: конфиг `protocols`, фразы с длительностью, алиасы для роутера и грамматики, сетка окон |
 | `jarvis/core/lazy.py` | 27 | `Lazy`: объект при первом обращении |
 | `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
 | `jarvis/core/numbers.py` | 41 | Числа и длительности на слух: «полтора часа», «двадцать пять» |
@@ -318,7 +318,7 @@ stateDiagram-v2
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
 | `jarvis/adapters/playback.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis/adapters/fx.py` | 62 | Тембр через NumPy и SciPy |
-| `jarvis/adapters/system.py` | 218 | Действия на рабочем столе Windows за одним бэкендом |
+| `jarvis/adapters/system.py` | 226 | Действия на рабочем столе Windows за одним бэкендом |
 | `jarvis/adapters/timers.py` | 69 | Постоянные таймеры, напоминания и объявления |
 | `jarvis/adapters/laptop.py` | 120 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
 | `jarvis/adapters/proactive.py` | 295 | Постоянная очередь проактивных сообщений, утренний брифинг и расписание `schedule` |

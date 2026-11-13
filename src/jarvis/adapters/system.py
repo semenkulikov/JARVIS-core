@@ -134,10 +134,18 @@ class SystemBackend:
     # ------------------------------------------------------------ protocol steps
     def launch(self, target: str) -> None:
         """Open a configured workspace entry: a URL, an existing file or folder, else a command line."""
-        target=target.strip()
+        target=os.path.expandvars(target.strip())
         if not target:raise ValueError('empty_target')
-        if re.match(r'^https?://',target) or os.path.exists(os.path.expandvars(target)):_WIN_OS.startfile(os.path.expandvars(target));return
-        subprocess.Popen(target,shell=False,creationflags=0x00000008 if os.name=='nt' else 0)  # DETACHED_PROCESS
+        uri=re.match(r'^[a-z][a-z0-9+.-]+:',target,re.I) is not None  # https:, spotify:, ... but not C:\
+        if uri or os.path.exists(target):_WIN_OS.startfile(target);return
+        subprocess.Popen(target,shell=False,creationflags=CREATE_NEW_CONSOLE if os.name=='nt' else 0)  # «cmd.exe» gets its window
+    def open_window(self, target: str) -> int:
+        """Start a program or .bat/.cmd in a new console window and return its process id, so
+        «отмена протокола» can close it (end_process takes the whole tree, e.g. cmd and its ssh)."""
+        target=os.path.expandvars(target.strip())
+        if not target:raise ValueError('empty_target')
+        args: Any=['cmd.exe','/c',target] if target.lower().endswith(('.bat','.cmd')) else target
+        return int(subprocess.Popen(args,shell=False,cwd=os.path.dirname(target) or None,creationflags=CREATE_NEW_CONSOLE if os.name=='nt' else 0).pid)
     def _windows(self) -> list[tuple[int, int, str]]:
         """Visible, titled, uncloaked top-level user windows as (hwnd, pid, process name without .exe, lower case)."""
         u=_WIN.windll.user32;k=_WIN.windll.kernel32;out: list[tuple[int, int, str]] = []
