@@ -24,8 +24,10 @@ forwarded to your own AI server through a simple webhook.
   or a call: pause music and keep Jarvis silent until the alarm (or «… на час»), windows stay open.
   «протокол бобик сдох» ends the workday at once: close every window, pause music, lock the screen.
   Personal steps (paths, hosts) can live in a local gitignored file merged over the config.
-- **Cheat sheet overlay:** «покажи шпаргалку» / «убери шпаргалку» or Ctrl+Alt+J toggles a small translucent,
-  click-through panel in a screen corner listing the protocols and main commands, generated from the catalogue.
+- **Cheat sheet overlay:** «покажи шпаргалку» / «убери шпаргалку» or Ctrl+Alt+J toggles a card styled like the
+  Xbox Game Bar Performance widget: protocols, main commands and every command by category in foldable sections,
+  draggable by its header. Pinned (button or Ctrl+Alt+Shift+J), it stays on top as text on a transparent,
+  click-through background. Position, pin and folds are remembered.
 - **Strict wake word:** every wake is re-checked by free recognition; background speech,
   videos and garbled phrases are dropped; when the name was heard but the phrase is dropped, a short
   low tone says so (`reject_beep_enabled`). Optional owner-voice verification (WeSpeaker ONNX, off by default).

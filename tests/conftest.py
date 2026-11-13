@@ -36,8 +36,7 @@ def guards(monkeypatch):
  monkeypatch.setattr(overlay,'HotkeyThread',InertHotkey)
 class InertHotkey:
  """Stands in for the global hotkey: never registers anything system-wide."""
- registered=False
- def __init__(self,keys,callback):self.keys=keys;self.callback=callback
+ def __init__(self,bindings):self.bindings=list(bindings);self.registered=[False]*len(self.bindings)
  def stop(self):pass
 @pytest.fixture
 def cfg(app,monkeypatch):

@@ -68,10 +68,11 @@ def build_controller(home: str | Path, backend: DesktopBackend | None = None, cl
 def cheatsheet_content(config: Any) -> Callable[[], tuple[list[CHEATSHEET.Section], Config]]:
     """The overlay text, rebuilt from the live config and the command catalogue on every show."""
     catalog = {c.id: (c.summary, c.examples) for c in CATALOG.COMMANDS}
+    groups = [(key, title, [c.id for c in cmds]) for (key, _), (title, cmds) in zip(CATALOG.CATEGORIES, CATALOG.by_category(), strict=True)]
 
     def content() -> tuple[list[CHEATSHEET.Section], Config]:
         cfg = config.load()
-        return CHEATSHEET.build(cfg, catalog), cfg
+        return CHEATSHEET.build(cfg, catalog, groups), cfg
     return content
 
 
@@ -101,7 +102,7 @@ def build_app(home: str | Path, sd: Any = None) -> App:
         sleep=Lazy(lambda: SleepState(os.path.join(paths.cache, "sleep.json"))),
         proactive=Lazy(lambda: PROACTIVE.Manager(paths.home)),
         input_volume=SystemBackend().input_volume if os.name == "nt" else (lambda: None),
-        overlay=Overlay(cheatsheet_content(config)),
+        overlay=Overlay(cheatsheet_content(config), os.path.join(paths.cache, "overlay.json")),
     )
     conversation = Conversation(c)
     warmup = Warmup(c)

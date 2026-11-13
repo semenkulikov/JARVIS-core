@@ -6,7 +6,7 @@ The window itself is jarvis.adapters.overlay.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from jarvis.core import protocols as PROTOCOLS
@@ -16,11 +16,12 @@ CORNERS = ("top-right", "top-left", "bottom-right", "bottom-left")
 DEFAULTS: dict[str, Any] = {
     "overlay_enabled": True,             # the voice command and the hotkey work; the panel starts hidden
     "overlay_corner": "top-right",
-    "overlay_opacity": 0.85,
+    "overlay_opacity": 0.85,             # of the pinned panel; the unpinned card is opaque
     "overlay_margin_px": 18,
     "overlay_font_size": 9,
     "overlay_font": "Segoe UI",
-    "overlay_hotkey": "ctrl+alt+j",      # empty string: no global hotkey
+    "overlay_hotkey": "ctrl+alt+j",      # show / hide; empty string: no global hotkey
+    "overlay_pin_hotkey": "ctrl+alt+shift+j",  # pin / unpin (a pinned panel lets clicks through, so its button cannot)
     "overlay_commands": ["status", "tasks_left", "time", "q:timer", "vol_up", "play", "q:mute", "jarvis_sleep",
                          "proactive_dnd", "q:mode", "q:screenshot", "lock", "stop", "protocol_list", "protocol_cancel",
                          "cheatsheet_hide"],
@@ -36,7 +37,7 @@ STEP_LABELS = {
     "launch_workspace": "программы", "launch_tracked": "окна", "close_apps": "закрыть программы", "close_all": "закрыть всё",
     "minimize_all": "свернуть", "lock": "блокировка", "hacker_windows": "окна «хакера»", "shutdown": "выключение",
 }
-TITLE = "Джарвис · шпаргалка"
+TITLE = "Джарвис"
 HINT_HIDE = "«убери шпаргалку»"
 SLEEP_STEPS = ("sleep", "sleep_until_alarm")
 
@@ -51,10 +52,15 @@ class Line:
 class Section:
     title: str
     lines: tuple[Line, ...]
+    key: str = ""        # stable id for the remembered collapsed state
 
 
 # id -> (summary, examples), as in jarvis.commands.catalog.Command
 Catalog = Mapping[str, tuple[str, Sequence[str]]]
+# (key, title, command ids) per catalogue category, in display order
+Groups = Sequence[tuple[str, str, Sequence[str]]]
+PROTOCOLS_KEY, MAIN_KEY, PANEL_KEY = "protocols", "main", "panel"
+OPEN_BY_DEFAULT = frozenset({PROTOCOLS_KEY, MAIN_KEY})
 
 
 def protocol_effect(p: PROTOCOLS.Protocol) -> str:
@@ -68,13 +74,51 @@ def protocol_phrase(p: PROTOCOLS.Protocol) -> str:
     return phrase + " [на …]" if any(s.name in SLEEP_STEPS for s in p.steps) else phrase
 
 
-def build(cfg: Mapping[str, Any], catalog: Catalog) -> list[Section]:
-    """Sections of the panel: the protocols, then the configured main commands (unknown ids are skipped)."""
+def _lines(ids: Sequence[str], catalog: Catalog) -> tuple[Line, ...]:
+    return tuple(Line(catalog[i][1][0], _effect(catalog[i][1][0], catalog[i][0])) for i in ids if i in catalog and catalog[i][1])
+
+
+def build(cfg: Mapping[str, Any], catalog: Catalog, groups: Groups = ()) -> list[Section]:
+    """Sections of the panel: the protocols, the configured main commands (unknown ids are skipped),
+    then every catalogue category with all its commands."""
     protos = tuple(Line(protocol_phrase(p), protocol_effect(p)) for p in PROTOCOLS.parse(cfg))
     ids = cfg.get("overlay_commands", DEFAULTS["overlay_commands"])
-    cmds = tuple(Line(catalog[i][1][0], _effect(catalog[i][1][0], catalog[i][0])) for i in (ids if isinstance(ids, list) else [])
-                 if i in catalog and catalog[i][1])
-    return [s for s in (Section("Протоколы", protos), Section("Основные команды", cmds)) if s.lines]
+    out = [Section("Протоколы", protos, PROTOCOLS_KEY), Section("Основные команды", _lines(ids if isinstance(ids, list) else [], catalog), MAIN_KEY)]
+    out += [Section(title, _lines(gids, catalog), "cat:" + key) for key, title, gids in groups]
+    return [s for s in out if s.lines]
+
+
+@dataclass
+class PanelState:
+    """What the panel remembers between shows and restarts: position, pin and folded sections."""
+    x: int | None = None
+    y: int | None = None
+    pinned: bool = False
+    collapsed: dict[str, bool] = field(default_factory=dict)
+
+    def is_collapsed(self, key: str) -> bool:
+        return self.collapsed.get(key, key not in OPEN_BY_DEFAULT and key != PANEL_KEY)
+
+    def to_json(self) -> dict[str, Any]:
+        return {"x": self.x, "y": self.y, "pinned": self.pinned, "collapsed": dict(self.collapsed)}
+
+    @classmethod
+    def from_json(cls, raw: Any) -> "PanelState":
+        """Anything unreadable falls back to the defaults, key by key."""
+        if not isinstance(raw, dict): return cls()
+        def coord(v: Any) -> int | None: return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) < 100000 else None
+        col = raw.get("collapsed")
+        return cls(coord(raw.get("x")), coord(raw.get("y")), raw.get("pinned") is True,
+                   {str(k): v for k, v in col.items() if isinstance(v, bool)} if isinstance(col, dict) else {})
+
+    def copy(self) -> "PanelState":
+        return PanelState(self.x, self.y, self.pinned, dict(self.collapsed))
+
+
+def clamp(pos: tuple[int, int], size: tuple[int, int], area: tuple[int, int, int, int]) -> tuple[int, int]:
+    """Keep a panel of ``size`` at ``pos`` fully inside the work area (left, top, width, height)."""
+    left, top, aw, ah = area; w, h = size
+    return min(max(left, pos[0]), left + max(0, aw - w)), min(max(top, pos[1]), top + max(0, ah - h))
 
 
 def _effect(phrase: str, summary: str) -> str:
@@ -145,5 +189,5 @@ def position(corner_name: str, size: tuple[int, int], screen: tuple[int, int], m
     """Top-left pixel of a panel of ``size`` in a screen corner."""
     w, h = size; sw, sh = screen
     x = margin if corner_name.endswith("left") else max(0, sw - w - margin)
-    y = margin if corner_name.startswith("top") else max(0, sh - h - margin - 40)  # keep clear of the taskbar
+    y = margin if corner_name.startswith("top") else max(0, sh - h - margin)  # ``screen`` is the work area, taskbar excluded
     return x, y
