@@ -21,6 +21,10 @@ from jarvis.core import text as JT
 _WIN: Any = ctypes
 _WIN_OS: Any = os
 # Never closed by a protocol, whatever close_apps lists: Jarvis itself, its terminal and the shell.
+# Kept when «close everything»: Jarvis, the shell and system UI hosts; user terminals are closed too.
+SHELL_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "explorer", "dwm", "winlogon", "csrss", "logonui", "lockapp",
+                             "shellexperiencehost", "startmenuexperiencehost", "searchhost", "searchapp", "textinputhost",
+                             "systemsettingsbroker", "applicationframehost"})
 PROTECTED_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "cmd", "powershell", "pwsh", "windowsterminal", "conhost",
                                  "openconsole", "wt", "explorer", "dwm", "winlogon", "csrss"})
 CREATE_NEW_CONSOLE = 0x00000010
@@ -135,8 +139,10 @@ class SystemBackend:
         if re.match(r'^https?://',target) or os.path.exists(os.path.expandvars(target)):_WIN_OS.startfile(os.path.expandvars(target));return
         subprocess.Popen(target,shell=False,creationflags=0x00000008 if os.name=='nt' else 0)  # DETACHED_PROCESS
     def _windows(self) -> list[tuple[int, int, str]]:
-        """Visible top-level windows as (hwnd, pid, process name without .exe, lower case)."""
+        """Visible, titled, uncloaked top-level user windows as (hwnd, pid, process name without .exe, lower case)."""
         u=_WIN.windll.user32;k=_WIN.windll.kernel32;out: list[tuple[int, int, str]] = []
+        dwm=_WIN.WinDLL('dwmapi');dwm.DwmGetWindowAttribute.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_void_p,ctypes.c_uint]
+        u.GetWindowTextLengthW.argtypes=[ctypes.c_void_p];u.GetWindowLongW.argtypes=[ctypes.c_void_p,ctypes.c_int]
         proto=_WIN.WINFUNCTYPE(ctypes.c_bool,ctypes.c_void_p,ctypes.c_void_p)
         u.GetWindowThreadProcessId.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_ulong)];u.IsWindowVisible.argtypes=[ctypes.c_void_p]
         u.GetWindow.argtypes=[ctypes.c_void_p,ctypes.c_uint];u.GetWindow.restype=ctypes.c_void_p
@@ -144,6 +150,9 @@ class SystemBackend:
         k.CloseHandle.argtypes=[ctypes.c_void_p]
         def visit(h: Any, _: Any) -> bool:
             if not u.IsWindowVisible(h) or u.GetWindow(h,4):return True  # GW_OWNER: skip dialogs owned by another window
+            if not u.GetWindowTextLengthW(h) or u.GetWindowLongW(h,-20)&0x80:return True  # untitled or WS_EX_TOOLWINDOW
+            cloaked=ctypes.c_int(0);dwm.DwmGetWindowAttribute(h,14,ctypes.byref(cloaked),4)  # DWMWA_CLOAKED: hidden UWP frames
+            if cloaked.value:return True
             pid=ctypes.c_ulong();u.GetWindowThreadProcessId(h,ctypes.byref(pid));name=''
             hp=k.OpenProcess(0x1000,False,pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
             if hp:
@@ -160,6 +169,13 @@ class SystemBackend:
         u=_WIN.windll.user32;u.PostMessageW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_ssize_t]
         for h,pid,name in self._windows():
             if name in wanted and pid not in protect and u.PostMessageW(h,0x10,0,0):count+=1
+        return count
+    def close_windows(self, protect: set[int]) -> int:
+        """Ask every open user window to close (WM_CLOSE, like the × button); never kills. Jarvis
+        (``protect`` pids and Python), Explorer and system UI hosts stay; unsaved work keeps its window."""
+        u=_WIN.windll.user32;u.PostMessageW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_ssize_t];count=0
+        for h,pid,name in self._windows():
+            if name and name not in SHELL_PROCESSES and pid not in protect and u.PostMessageW(h,0x10,0,0):count+=1
         return count
     def minimize_all(self) -> None:
         u=_WIN.windll.user32;u.FindWindowW.restype=ctypes.c_void_p;u.FindWindowW.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p]

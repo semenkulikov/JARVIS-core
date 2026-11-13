@@ -93,6 +93,11 @@ def _close_apps(run: Run, step: Step) -> None:
     log.info("protocol close_apps: asked %d windows to close", closed)
 
 
+def _close_all(run: Run, step: Step) -> None:
+    closed = run.backend.close_windows({os.getpid(), os.getppid()})
+    log.info("protocol close_all: asked %d windows to close", closed)
+
+
 def _hacker_windows(run: Run, step: Step) -> None:
     ctl = run.ctx.services.controller(); b = run.backend
     n = max(1, min(len(HACKER_COMMANDS), int(step.params.get("count") or run.ctx.cfg.get("protocol_hacker_windows", 6))))
@@ -105,7 +110,7 @@ def _hacker_windows(run: Run, step: Step) -> None:
 STEPS: dict[str, StepFn] = {
     "sleep": _sleep, "sleep_until_alarm": _sleep_until_alarm, "cancel_bedtime_repeat": _cancel_repeats, "cancel_repeats": _cancel_repeats,
     "dnd": _dnd, "media_pause": _media_pause, "mute": _mute, "volume": _volume, "focus": _focus, "say": _say, "beep": _beep,
-    "launch": _launch, "launch_workspace": _launch, "close_apps": _close_apps, "minimize_all": _minimize_all, "lock": _lock,
+    "launch": _launch, "launch_workspace": _launch, "close_apps": _close_apps, "close_all": _close_all, "minimize_all": _minimize_all, "lock": _lock,
     "hacker_windows": _hacker_windows, "shutdown": _shutdown,
 }
 SLEEP_STEPS = frozenset({"sleep", "sleep_until_alarm"})

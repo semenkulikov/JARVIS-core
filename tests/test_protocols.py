@@ -38,6 +38,7 @@ class Backend:
     def shutdown(self, secs): self._do("shutdown", secs)
     def launch(self, target): self._do("launch", target)
     def close_apps(self, names, protect): self._do("close_apps", tuple(names), frozenset(protect)); return len(names)
+    def close_windows(self, protect): self._do("close_windows", frozenset(protect)); return 7
     def minimize_all(self): self._do("minimize_all")
     def screen_size(self): return (1920, 1080)
     def open_console(self, cmd, title, rect, cwd=None): self._do("open_console", cmd, rect); self.pid += 1; return self.pid
@@ -169,13 +170,13 @@ def test_bobik_asks_first_and_does_nothing_without_yes(cfg, rig):
 
 
 def test_bobik_runs_after_a_spoken_yes(cfg, rig):
-    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0]); cfg["close_apps"] = ["telegram", "chrome"]
+    clock = [100.0]; j, s, ctl = rig(clock=lambda: clock[0])
     run(alias(cfg, "протокол бобик сдох"), "", cfg, s)
     clock[0] += 3; answer = ctl.confirmation("да", "followup", 0.95)
     assert answer["approved"] and answer["protocol"] == "Бобик сдох"
     run({"name": "protocol_confirmation", "action": "protocol_confirm", **answer}, "да", cfg, s)
-    assert names(j) == ["close_apps", "minimize_all", "media", "lock"] and j[0][1] == ("telegram", "chrome")
-    assert os.getpid() in j[0][2]  # Jarvis protects itself
+    assert names(j) == ["close_windows", "minimize_all", "media", "lock"]  # every window, not a list
+    assert os.getpid() in j[0][1]  # Jarvis protects itself
     assert s.said[-1] == "Бобик сдох, сэр."
 
 
@@ -210,7 +211,7 @@ def test_pentagon_commands_come_only_from_the_code(cfg, rig):
 def test_one_failing_step_does_not_stop_the_rest(cfg, rig, entry):
     proto = next(p for p in P.parse(P.DEFAULTS) if p.name == entry)
     first = proto.steps[0].name
-    fail = {"media_pause": "media", "launch_workspace": "launch", "close_apps": "close_apps", "hacker_windows": "open_console"}[first]
+    fail = {"media_pause": "media", "launch_workspace": "launch", "close_apps": "close_apps", "close_all": "close_windows", "hacker_windows": "open_console"}[first]
     j, s, ctl = rig(fail={fail}); cfg["workspace"] = ["a", "b"]; cfg["close_apps"] = ["telegram"]
     run_ = CMD.run_steps(CommandContext("", cfg, "wake_word", False, s), proto, None)
     assert run_.failed and fail in names(j)
@@ -285,4 +286,11 @@ def test_spoken_yes_reaches_the_protocol_through_the_conversation(app, cfg, monk
     ctl.ask("protocol", cfg, protocol="Бобик сдох", seconds=None)
     st = app.c.state; st.last_input_conf = 0.95; st.last_input_end = ctl.clock()
     app.conversation.handle_turn("followup", None, "да", False, 0.0)
-    assert names(j) == ["minimize_all", "media", "lock"] and said[-1] == "Бобик сдох, сэр."  # close_apps list is empty
+    assert names(j) == ["close_windows", "minimize_all", "media", "lock"] and said[-1] == "Бобик сдох, сэр."
+
+
+def test_close_apps_step_still_closes_a_named_list(cfg, rig):
+    j, s, _ = rig(); cfg["close_apps"] = ["telegram", "chrome"]
+    cfg["protocols"] = [{"name": "Тест", "phrases": ["протокол тест"], "steps": ["close_apps"]}]
+    run({"name": "x", "action": "protocol", "protocol": "Тест"}, "", cfg, s)
+    assert j[0][:2] == ("close_apps", ("telegram", "chrome")) and os.getpid() in j[0][2]

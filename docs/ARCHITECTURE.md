@@ -271,7 +271,7 @@ stateDiagram-v2
 | `jarvis/commands/conversation.py` | 40 | Ответ псевдонима, болтовня, «стоп», «проснись», «что ты умеешь» |
 | `jarvis/commands/day.py` | 50 | Статус, задачи, время, тренировка |
 | `jarvis/commands/modes.py` | 28 | Спящий режим, «не беспокоить» |
-| `jarvis/commands/protocols.py` | 181 | Протоколы: шаги `STEPS`, белый список `HACKER_COMMANDS`, подтверждение, список и отмена |
+| `jarvis/commands/protocols.py` | 186 | Протоколы: шаги `STEPS`, белый список `HACKER_COMMANDS`, подтверждение, список и отмена |
 | `jarvis/commands/pc.py` | 125 | Клавиши, экран, таймеры, батарея, температура, проекты, программы |
 | `jarvis/commands/server.py` | 32 | Быстрые команды контроллера, псевдонимы на сервер |
 | `jarvis/commands/controller.py` | 158 | Выполнение быстрых команд через внедрённые порты |
@@ -318,7 +318,7 @@ stateDiagram-v2
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
 | `jarvis/adapters/playback.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis/adapters/fx.py` | 62 | Тембр через NumPy и SciPy |
-| `jarvis/adapters/system.py` | 202 | Действия на рабочем столе Windows за одним бэкендом |
+| `jarvis/adapters/system.py` | 218 | Действия на рабочем столе Windows за одним бэкендом |
 | `jarvis/adapters/timers.py` | 69 | Постоянные таймеры, напоминания и объявления |
 | `jarvis/adapters/laptop.py` | 120 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
 | `jarvis/adapters/proactive.py` | 295 | Постоянная очередь проактивных сообщений, утренний брифинг и расписание `schedule` |

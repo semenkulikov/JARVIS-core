@@ -25,7 +25,7 @@ DEFAULTS: dict[str, Any] = {
         {"name": "Негры пашут", "phrases": ["протокол негры пашут"], "steps": ["launch_workspace", "focus"],
          "reply": "Рабочий режим включён, сэр."},
         {"name": "Бобик сдох", "phrases": ["протокол бобик сдох"], "confirm": True,
-         "steps": ["close_apps", "minimize_all", "media_pause", "lock"], "reply": "Бобик сдох, сэр."},
+         "steps": ["close_all", "minimize_all", "media_pause", "lock"], "reply": "Бобик сдох, сэр."},
         {"name": "Взлом Пентагона", "phrases": ["протокол взлом пентагона"], "steps": ["hacker_windows"], "reply": "Доступ получен, сэр."},
     ],
     "workspace": [],        # programs, folders and URLs «launch» opens: paths, URLs or command lines
