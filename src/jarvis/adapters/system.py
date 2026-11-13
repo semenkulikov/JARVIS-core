@@ -37,11 +37,12 @@ def _windows_terminal_is_default() -> bool:
     """True when this Windows user picked Windows Terminal as the default terminal app."""
     if os.name != "nt": return False
     try:
-        import winreg
+        # __import__ + Any: winreg has no Linux stubs, so a direct import fails mypy on Ubuntu CI.
+        winreg: Any = __import__("winreg")
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Console\%%Startup") as key:
             value, _ = winreg.QueryValueEx(key, "DelegationConsole")
         return str(value).upper().replace("{", "").replace("}", "") == WT_DELEGATION_CONSOLE
-    except OSError:
+    except (OSError, ImportError):
         return False
 
 
@@ -50,6 +51,19 @@ def _wt_exe() -> str | None:
     if found: return found
     alias = Path(os.environ.get("LOCALAPPDATA") or "") / "Microsoft" / "WindowsApps" / "wt.exe"
     return str(alias) if alias.is_file() else None
+
+
+def wt_launch_args(wt: str, title: str, target: str, *, already_open: bool) -> list[str]:
+    """Command line for one Windows Terminal window running ``target``.
+
+    ``--window new`` is only used when Terminal already has a window: a cold start
+    creates the first window by itself, and ``-w new`` would leave a spare default one.
+    """
+    args = [wt]
+    if already_open:
+        args += ["--window", "new"]
+    args += ["--title", title, "--suppressApplicationTitle", "--", "cmd.exe", "/c", target]
+    return args
 
 
 
@@ -186,7 +200,9 @@ class SystemBackend:
         if hwnd and place:
             rect = placed_rect(self.work_area(), place)
             if rect: self._set_window_rect(hwnd, rect)
-        if hwnd: self._protocol_hwnds()[int(pid)] = hwnd
+        if hwnd:
+            self._protocol_hwnds()[int(pid)] = hwnd
+            self._close_stray_terminals(before, {hwnd}, title)
         return int(pid)
     def _protocol_hwnds(self) -> dict[int, int]:
         store = getattr(self, "_protocol_hwnd_map", None)
@@ -197,12 +213,23 @@ class SystemBackend:
         cwd = os.path.dirname(target) or None
         wt = _wt_exe() if _windows_terminal_is_default() else None
         if wt:
-            # Force a new window, never a tab on an already open Terminal session.
-            args = [wt, "--window", "new", "--title", title, "--suppressApplicationTitle", "--", "cmd.exe", "/c", target]
-            return int(subprocess.Popen(args, shell=False, cwd=cwd).pid)
+            already = self._windows_terminal_has_window()
+            return int(subprocess.Popen(wt_launch_args(wt, title, target, already_open=already), shell=False, cwd=cwd).pid)
         flags = CREATE_NEW_CONSOLE if os.name == "nt" else 0
         args = ["cmd.exe", "/c", "title " + title + " & " + target]
         return int(subprocess.Popen(args, shell=False, cwd=cwd, creationflags=flags).pid)
+    def _windows_terminal_has_window(self) -> bool:
+        return any(cls == "CASCADIA_HOSTING_WINDOW_CLASS" for _h, cls, _t in self._enum_terminals())
+    def _close_stray_terminals(self, before: set[int], keep: set[int], title: str) -> None:
+        """Close terminal windows this launch created that we did not ask for
+        (Windows Terminal often opens a default window on a cold start)."""
+        needle = title.casefold()
+        u = _WIN.windll.user32
+        u.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t]
+        for h, _cls, text in self._enum_terminals():
+            if h in before or h in keep: continue
+            if needle and needle in text.casefold(): continue
+            u.PostMessageW(h, 0x10, 0, 0)  # WM_CLOSE, this window only
     def _terminal_hwnds(self) -> set[int]:
         return {h for h, _cls, _title in self._enum_terminals()}
     def _enum_terminals(self) -> list[tuple[int, str, str]]:

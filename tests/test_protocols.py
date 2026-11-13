@@ -12,6 +12,7 @@ from jarvis.commands.base import CommandContext
 from jarvis.core import protocols as P
 from jarvis.core import routing as ROUTING
 from jarvis.core import sleep as SLEEP
+from jarvis.adapters.system import wt_launch_args
 
 
 class Journal(list):
@@ -410,4 +411,13 @@ def test_one_failing_placed_window_does_not_stop_the_other(cfg, tmp_path):
     ]}, "lock"]}]
     run({"name": "x", "action": "protocol", "protocol": "Тест"}, "", cfg, s)
     assert names(j) == ["open_window", "open_window", "lock"] and ctl.protocol_pids == []
+
+
+def test_wt_launch_args_skips_new_window_on_a_cold_start():
+    cold = wt_launch_args("wt.exe", "PENTAGON HOLLYWOOD", "left.cmd", already_open=False)
+    assert cold == ["wt.exe", "--title", "PENTAGON HOLLYWOOD", "--suppressApplicationTitle", "--", "cmd.exe", "/c", "left.cmd"]
+    assert "--window" not in cold
+    warm = wt_launch_args("wt.exe", "PENTAGON GENACT", "right.cmd", already_open=True)
+    assert warm[:3] == ["wt.exe", "--window", "new"]
+    assert warm[-3:] == ["cmd.exe", "/c", "right.cmd"]
 
