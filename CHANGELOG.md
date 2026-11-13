@@ -3,6 +3,18 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Номера версий — [семантические](https://semver.org/lang/ru/).
 
+## [3.23.0] — 2026-11-13
+
+### Добавлено
+
+- Личный файл протоколов `secrets/protocols.local.json` в домашней папке (`protocols_local_file`, вне git): дополнительные шаги к протоколам и свои протоколы без хостов и путей в репозитории. Шаг `launch_tracked` открывает окна, которые закрывает «отмена протокола».
+
+### Изменено
+
+- «Бобик сдох» закрывает все открытые окна пользователя (обычный запрос закрытия), кроме самого Jarvis, проводника и системных; список `close_apps` остался для шага `close_apps`.
+- Имя «железный болванчик» (слова нет в модели Vosk) заменено на «железяка» и «железка».
+- Шаг `launch` открывает URI вроде `spotify:` и даёт консольным программам (`cmd.exe`) своё окно.
+
 ## [3.22.0] — 2026-11-13
 
 ### Добавлено
@@ -153,6 +165,7 @@
 - Тесты без моделей, звука и сети. Проверка запускается на Windows и Linux.
 - Документация на русском, README на двух языках, шаблоны задач, `pyproject.toml` с версией и ruff.
 
+[3.23.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.22.0...v3.23.0
 [3.22.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.19.0...v3.20.0
