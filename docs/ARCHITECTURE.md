@@ -325,7 +325,7 @@ stateDiagram-v2
 | `jarvis/adapters/playback.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis/adapters/fx.py` | 62 | Тембр через NumPy и SciPy |
 | `jarvis/adapters/overlay.py` | 382 | Шпаргалка в стиле виджета Game Bar (tkinter в своём потоке): перетаскивание, закрепление со сквозными кликами, сворачиваемые разделы, файл состояния; глобальные горячие клавиши |
-| `jarvis/adapters/system.py` | 327 | Действия на рабочем столе Windows за одним бэкендом |
+| `jarvis/adapters/system.py` | 354 | Действия на рабочем столе Windows за одним бэкендом |
 | `jarvis/adapters/timers.py` | 69 | Постоянные таймеры, напоминания и объявления |
 | `jarvis/adapters/laptop.py` | 120 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
 | `jarvis/adapters/proactive.py` | 295 | Постоянная очередь проактивных сообщений, утренний брифинг и расписание `schedule` |

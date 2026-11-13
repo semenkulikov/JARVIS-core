@@ -3,6 +3,13 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Номера версий — [семантические](https://semver.org/lang/ru/).
 
+## [3.26.1] — 2026-11-13
+
+### Исправлено
+
+- На холодном старте Windows Terminal больше не оставляет третье, лишнее окно: первое занимает стартовое окно, следующие открываются через `--window new`. Случайное окно по умолчанию, если оно всё же появилось, закрывается.
+- Проверка «стандартный терминал» через реестр проходит mypy на Linux (CI).
+
 ## [3.26.0] — 2026-11-13
 
 ### Добавлено
@@ -195,6 +202,7 @@
 - Тесты без моделей, звука и сети. Проверка запускается на Windows и Linux.
 - Документация на русском, README на двух языках, шаблоны задач, `pyproject.toml` с версией и ruff.
 
+[3.26.1]: https://github.com/semenkulikov/JARVIS-core/compare/v3.26.0...v3.26.1
 [3.26.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.25.0...v3.26.0
 [3.25.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.24.0...v3.25.0
 [3.24.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.23.0...v3.24.0
