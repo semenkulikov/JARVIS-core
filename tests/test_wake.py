@@ -23,7 +23,8 @@ def words(text, conf=1.0, start=0.0):
     ("кусок железа который час", "который час"),
     ("хей жестянка статус", "статус"),
     ("эй нуб пауза", "пауза"),
-    ("железный болванчик тише", "тише"),
+    ("железяка тише", "тише"),
+    ("эй железка громче", "громче"),
     ("джарвис громче", "громче"),
     ("хей джарвис стоп", "стоп"),
 ])
@@ -67,7 +68,7 @@ def test_any_name_wakes_from_sleep(phrase):
 
 def test_name_grammar_has_every_name_with_prefixes():
     g = NAMES.DEFAULT.grammar()
-    for n in ("джарвис", "нуб", "нубас", "кусок железа", "жестянка", "железный болванчик"):
+    for n in ("джарвис", "нуб", "нубас", "кусок железа", "жестянка", "железяка", "железка"):
         assert {n, "хей " + n, "эй " + n} <= set(g)
     assert g[-1] == "[unk]"
 
@@ -81,8 +82,8 @@ def test_flags_and_extra_names_from_config():
 
 
 def test_names_with_unknown_words_are_left_out():
-    names = NameSet.from_cfg(NAMES.DEFAULTS, missing={"болванчик", "нубас"})
-    assert "железный болванчик" not in names.grammar() and "нубас" not in names.grammar() and "джарвис" in names.grammar()
+    names = NameSet.from_cfg(NAMES.DEFAULTS, missing={"железяка", "нубас"})
+    assert "железяка" not in names.grammar() and "железка" in names.grammar() and "нубас" not in names.grammar() and "джарвис" in names.grammar()
 
 
 class Model:
@@ -91,13 +92,13 @@ class Model:
 
 
 def test_vocabulary_check_warns_once_and_keeps_jarvis(app, cfg, caplog):
-    asr = app.c.asr; app.c.state.model = Model({"болванчик", "сдох"})
+    asr = app.c.asr; app.c.state.model = Model({"железяка", "сдох"})
     with caplog.at_level(logging.WARNING, logger="jarvis"):
         missing = asr.check_vocabulary(cfg, ["протокол бобик сдох"])
         asr.check_vocabulary(cfg, ["протокол бобик сдох"])
-    assert missing == {"болванчик", "сдох"}
-    assert caplog.text.count("'болванчик' is not in the Vosk model") == 1 and caplog.text.count("'сдох'") == 1
-    assert "железный болванчик" not in asr.names(cfg).grammar() and "джарвис" in asr.names(cfg).grammar()
+    assert missing == {"железяка", "сдох"}
+    assert caplog.text.count("'железяка' is not in the Vosk model") == 1 and caplog.text.count("'сдох'") == 1
+    assert "железяка" not in asr.names(cfg).grammar() and "джарвис" in asr.names(cfg).grammar()
 
 
 @pytest.mark.parametrize("heard,conf,name,sure", [

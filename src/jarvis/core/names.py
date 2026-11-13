@@ -27,7 +27,7 @@ PRIORITY_WORDS = ("джарвис", "жарвис", "джервис", "дарв�
 GRAMMAR_PREFIXES = ("хей", "эй")
 # Call words in front of a name («хей», «слушай»): dropped with it.
 CALL_WORDS = frozenset({"хей", "эй", "хэй", "эх", "ай", "а", "о", "ну", "слушай"})
-ALIASES = ("нуб", "нубас", "кусок железа", "жестянка", "железный болванчик")
+ALIASES = ("нуб", "нубас", "кусок железа", "жестянка", "железяка", "железка")
 WAKE_VERB = "проснись"
 DEFAULTS: dict[str, Any] = {
     "wake_names": [{"name": n, "enabled": True} for n in ALIASES],  # built-in extra names, each can be switched off
