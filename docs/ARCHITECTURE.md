@@ -45,6 +45,7 @@ flowchart TB
         REG[registry: action → handler] --> H1[conversation / day]
         REG --> H2[pc]
         REG --> H3[modes / server]
+        REG --> H4[protocols: цепочки шагов]
     end
     subgraph core[core: чистая логика]
         PORTS[ports: Protocol]
@@ -56,6 +57,7 @@ flowchart TB
         RULES[sleep, proactive, projects, food, tasks, codemode, gate, dialog]
         TEXT[text, vocab, voiceprint, perf, fuzzy]
         MISC[status, phrases, schedule, lazy]
+        PLAN[timetable, protocols, cheatsheet: расписание, протоколы, шпаргалка]
     end
     subgraph adapters[adapters: ввод-вывод]
         AUDIO[audio: микрофон, хлопки, кольцевой буфер]
@@ -68,6 +70,7 @@ flowchart TB
         SPK[speaker: проверка голоса]
         WIN[system, laptop, runtime, credentials, paths: Windows и файлы]
         STORE[timers, sleep_store, proactive, food_diary, fatsecret, project_tools]
+        OVL[overlay: панель-шпаргалка и горячая клавиша]
     end
     CTL[commands.controller: быстрые команды через порты]
     CONV --> REG
@@ -139,7 +142,7 @@ def battery(ctx: CommandContext, al: Alias) -> None:
 - `CommandContext` — неизменяемый dataclass: текст, конфигурация, триггер, признак теста и
   `services`.
 - `Services` — порт, который реализует `Conversation`: `say`, `say_reply`, `ask_server`, `pick`,
-  состояние, кэш статуса, контроллер быстрых команд, ноутбук, сон, объявления.
+  состояние, кэш статуса, контроллер быстрых команд, ноутбук, сон, объявления, шпаргалка.
 - `registry.load_builtin()` импортирует все модули пакета; у действия один владелец, повторная
   регистрация — ошибка. Действие без обработчика произносит `reply` псевдонима, как раньше.
 - `jarvis/commands/catalog.py` остаётся единым описанием команд для «что ты умеешь» и `docs/COMMANDS.md`;
@@ -204,9 +207,11 @@ stateDiagram-v2
 | Наблюдатель `outbox` | события файлов будят ожидание ответа | `OutboxSignal` |
 | Прогрев | Vosk (`vosk-warmup`), синтез и шаблоны (`tts-warmup`) | пауза, пока занят разговор |
 | Утренний брифинг | отдельный POST без ожидания ответа | `proactive.Manager` |
+| Шпаргалка (`overlay`) | свой цикл Tk: показать, скрыть, отрисовать панель | очередь сообщений `TkPanel.post`, флаг `Overlay.visible` под замком |
+| Горячая клавиша (`overlay-hotkey`) | `RegisterHotKey` и цикл сообщений Windows, нажатие переключает шпаргалку | вызывает `Overlay.toggle` |
 
 Правила: разговор всегда один (`busy`); прерывание — только `threading.Event`; звук играет только
-поток разговора; долгие операции проверяют `interrupt`. Остановить речь (`interrupt`) и отменить
+поток разговора; окно шпаргалки трогает только его поток; долгие операции проверяют `interrupt`. Остановить речь (`interrupt`) и отменить
 серверную задачу (`ServerWorker.cancel`, `RequestLedger`) — разные сигналы: задачу отменяет только
 «стоп» во время озвучки её ответа, любая другая команда её не трогает. Ответ сервера звучит, когда
 слушатель свободен: цикл запускает ход `server_reply` для самой старой задачи с готовыми частями.
