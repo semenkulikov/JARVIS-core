@@ -11,6 +11,8 @@ from typing import Optional
 from jarvis.core import numbers as NUMBERS
 from jarvis.core import quick as Q
 from jarvis.core.fold import fold
+from jarvis.core.names import DEFAULT as NAMES
+from jarvis.core.names import NameSet
 
 DEFAULT_S = 3600
 MIN_S = 60
@@ -22,22 +24,19 @@ _VERB = r"(?:засни|усни|спи|поспи|иди спать|уйди с
 SLEEP_RE = re.compile(rf"^(?:{_ENTER}|{_VERB})(?: (?:на|в течение) (?P<dur>.+?))?(?: пожалуйста)?$")
 # Bare «режим сна» stays the old desktop sleep command (screen off + lock) from jarvis.core.quick.
 LEGACY_BARE = {"режим сна", "режим сон", "включи режим сна", "включи режим сон"}
-WAKE_PHRASES = ("джарвис проснись", "проснись джарвис", "хей джарвис проснись")
 WAKE_FILE = "wake_up"
-HINT_WORD = "джарвис"
 WAKE_HINT = "Разбудить: Джарвис, проснись."
 DEFAULTS = {"sleep_hint_enabled": True, "sleep_hint_interval_s": 600}
 
 
-def _norm(text: str) -> str:
+def _norm(text: str, names: NameSet = NAMES) -> str:
     t = fold(text)
-    t = " ".join(re.sub(r"[^\w\s]", " ", t).split())
-    return re.sub(r"^(?:(?:хей|эй) )?джарвис ", "", t)
+    return " ".join(names.strip(re.sub(r"[^\w\s]", " ", t).split()))
 
 
-def parse(text: str) -> Optional[int]:
+def parse(text: str, names: NameSet = NAMES) -> Optional[int]:
     """Seconds of sleep requested by ``text``; None when it is not a sleep command."""
-    t = _norm(text)
+    t = _norm(text, names)
     if t in LEGACY_BARE:
         return None
     m = SLEEP_RE.fullmatch(t)
@@ -61,5 +60,11 @@ def hint_phrase(remaining_s: float) -> str:
     return "Я в спящем режиме ещё " + label(max(60, int(remaining_s))) + ", сэр. " + WAKE_HINT
 
 
-def is_wake_phrase(text: str) -> bool:
-    return " ".join(fold(text).split()) in WAKE_PHRASES
+def is_wake_phrase(text: str, names: NameSet = NAMES) -> bool:
+    """«<любое имя> проснись» and its variants (jarvis.core.names)."""
+    return " ".join(fold(text).split()) in names.wake_phrases()
+
+
+def is_hint_word(text: str, names: NameSet = NAMES) -> bool:
+    """A bare name while asleep."""
+    return " ".join(fold(text).split()) in names.hint_phrases()

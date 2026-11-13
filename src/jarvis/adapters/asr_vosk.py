@@ -10,7 +10,7 @@ from typing import Any, Callable, Iterable, Sequence
 import numpy as np
 
 from jarvis.core import gate as GATE
-from jarvis.core import sleep as SLEEP
+from jarvis.core import names as NAMES
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, clip_level, normalize_clip, ring_audio
 from jarvis.core.matching import norm_phrase
 from jarvis.core.routing import fast_end_phrases, grammar_phrases
@@ -21,7 +21,6 @@ Config = dict[str, Any]
 Word = dict[str, Any]
 log = logging.getLogger("jarvis")
 
-WAKE_GRAMMAR = ["джарвис", "хей джарвис", "эй джарвис", "[unk]"]
 
 
 class VoskASR:
@@ -30,6 +29,37 @@ class VoskASR:
     def __init__(self, state: ListenerState) -> None:
         self.state = state
         self._fast: tuple[int, frozenset[str]] = (0, frozenset())
+        self._names: tuple[int, NAMES.NameSet] = (0, NAMES.DEFAULT)
+        self.missing_words: frozenset[str] = frozenset()   # grammar words the loaded model does not know
+
+    def names(self, cfg: Config) -> NAMES.NameSet:
+        """Enabled wake names of this configuration, without names the model cannot hear."""
+        if self._names[0] != id(cfg): self._names = (id(cfg), NAMES.NameSet.from_cfg(cfg, self.missing_words))
+        return self._names[1]
+
+    def check_vocabulary(self, cfg: Config, phrases: Iterable[str] = ()) -> frozenset[str]:
+        """Words of the name grammar and of ``phrases`` the loaded model lacks; each logged once as a WARNING.
+
+        Vosk drops an unknown grammar word without an error, so a name or a protocol phrase with such a
+        word would simply never be recognised."""
+        model = self.state.model
+        find = getattr(model, "vosk_model_find_word", None)
+        if find is None: log.info("vocabulary check unavailable for this Vosk version"); return frozenset()
+        words = NAMES.NameSet.from_cfg(cfg).vocabulary() | {w for p in phrases for w in norm_phrase(p)}
+        missing = frozenset(w for w in sorted(words) if find(w) < 0)
+        for w in sorted(missing - self.missing_words): log.warning("word %r is not in the Vosk model vocabulary; phrases with it are not recognised", w)
+        self.missing_words = missing; self._names = (0, NAMES.DEFAULT)
+        return missing
+
+    def wake_hit(self, words: Sequence[Word], cfg: Config) -> tuple[list[Word], bool] | None:
+        """Words of the first name the wake grammar heard and whether they are sure enough
+        (``vosk_wake_min_conf``; names other than «Джарвис» also ``wake_alias_min_conf``); None without a name."""
+        spans = self.names(cfg).spans([str(w.get("word", "")) for w in words])
+        if not spans: return None
+        a, b, name = spans[0]; ws = list(words[a:b])
+        need = float(cfg["vosk_wake_min_conf"])
+        if not name.primary: need = max(need, float(cfg.get("wake_alias_min_conf", NAMES.DEFAULTS["wake_alias_min_conf"])))
+        return ws, min(float(w.get("conf", 0)) for w in ws) >= need
 
     def fast_phrases(self, cfg: Config) -> frozenset[str]:
         """routing.fast_end_phrases, rebuilt only when the configuration object changes (a reload)."""
@@ -53,11 +83,13 @@ class VoskASR:
              else KaldiRecognizer(self.state.model, SR, json.dumps(list(grammar), ensure_ascii=False)))
         r.SetWords(True); return r
 
-    def wake_recognizer(self) -> Any:
-        return self.recognizer(WAKE_GRAMMAR)
+    def wake_recognizer(self, cfg: Config | None = None) -> Any:
+        names = self.names(cfg) if cfg is not None else NAMES.DEFAULT
+        return self.recognizer(names.grammar())
 
-    def sleep_recognizer(self) -> Any:
-        return self.recognizer(list(SLEEP.WAKE_PHRASES) + [SLEEP.HINT_WORD, "[unk]"])
+    def sleep_recognizer(self, cfg: Config | None = None) -> Any:
+        names = self.names(cfg) if cfg is not None else NAMES.DEFAULT
+        return self.recognizer(list(names.wake_phrases()) + list(names.hint_phrases()) + ["[unk]"])
 
     def stop_recognizer(self, cfg: Config) -> Any:
         ph = sorted(set(" ".join(norm_phrase(p)) for p in cfg.get("stop_phrases", [])) - {""})
@@ -77,7 +109,7 @@ class VoskASR:
         agc = AGC(cfg)
         max_s = max_s or float(cfg["phrase_max_s"]); sil = float(cfg["phrase_silence_s"])
         fast_sil = min(sil, float(cfg.get("phrase_silence_fast_s", sil))); fast = self.fast_phrases(cfg) if fast_sil < sil else frozenset()
-        fast_hit = False
+        fast_hit = False; names = self.names(cfg)
         words: list[Word] = []; gwords: list[Word] = []; t0 = time.time(); last_change: float | None = None; partial = ""; pwords: list[Word] | None = None; cut = True
         acoustic_last: float | None = None; noise_floor = 0.001; samples = 0; endpoint_lag = 0.0
         try:
@@ -105,15 +137,15 @@ class VoskASR:
                     if not cap.q.empty(): continue
                 heard = heard_after(words, pwords if partial else [], partial, skip_s)
                 # A phrase already heard whole as a safe command ends after the short silence.
-                fast_hit = bool(fast) and " ".join(norm_phrase(strip_wake(heard))) in fast
+                fast_hit = bool(fast) and " ".join(norm_phrase(strip_wake(heard, names))) in fast
                 if phrase_finished(time.time(), t0, heard, last_change, acoustic_last, nospeech_s, fast_sil if fast_hit else sil,
-                                   wake_pause_s, skip_s): cut = False; break
+                                   wake_pause_s, skip_s, names): cut = False; break
             words += json.loads(rec.FinalResult()).get("result", [])
             if grec is not None: gwords += json.loads(grec.FinalResult()).get("result", [])
         finally:
             if self.state.capture is cap: self.state.capture = None
         kept = [w for w in words if w.get("end", 99) > skip_s]
-        kept = strip_wake_words(kept)
+        kept = strip_wake_words(kept, self.names(cfg))
         text = " ".join(w["word"] for w in kept).strip()
         conf = sum(w.get("conf", 1) for w in kept) / len(kept) if kept else 0.0
         gk = [w for w in gwords if w.get("end", 99) > skip_s and w["word"] != "[unk]"]
@@ -156,8 +188,10 @@ class VoskASR:
         def has_need(ws: list[Word], conf: float) -> bool:
             return all(any(w.get("word") == n and w.get("conf", 0) >= conf for w in ws) for n in need)
 
+        names = self.names(cfg); alias_conf = float(cfg.get("wake_alias_min_conf", NAMES.DEFAULTS["wake_alias_min_conf"]))
+
         def confirmed(ws: list[Word], conf: float) -> bool:
-            return bool(GATE.wake_word_confirmed(ws, conf)) and has_need(ws, conf)
+            return bool(GATE.wake_word_confirmed(ws, conf, names, alias_conf)) and has_need(ws, conf)
 
         def owner_candidate(ws: list[Word], conf: float) -> bool:
             return (confirmed(ws, conf) or GATE.wake_soundalike_heard(ws, conf)) and has_need(ws, conf)

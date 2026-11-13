@@ -8,9 +8,12 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Optional, Sequence
 
+from jarvis.core.names import DEFAULT as NAMES
+from jarvis.core.names import DEFAULTS as NAME_DEFAULTS
+from jarvis.core.names import NameSet
+
 Word = Mapping[str, Any]
 
-WAKE_NAME = re.compile(r"(?:джарвис|жарвис|джервис|дарвис|гарвис|джарви|джави|харвис|jarvis)\w*")
 # What the free recognizer makes of the owner's «Джарвис» on a bad take (live log and calibration run):
 # never enough alone, only together with the speaker check.
 WAKE_SOUNDALIKE = re.compile(r"(?:джордж|жорж|гаррис|харрис|гарис|джарис|джонс)\w*")
@@ -42,9 +45,11 @@ def setting(cfg: Mapping[str, Any], key: str) -> Any:
     return cfg.get(key, DEFAULTS[key])
 
 
-def wake_word_confirmed(words: Sequence[Word], min_conf: float) -> bool:
-    """True when a free-vocabulary transcript contains the wake name with high confidence."""
-    return any(WAKE_NAME.fullmatch(str(w.get("word", ""))) and float(w.get("conf", 0)) >= min_conf for w in words)
+def wake_word_confirmed(words: Sequence[Word], min_conf: float, names: NameSet = NAMES,
+                        alias_min_conf: float = float(NAME_DEFAULTS["wake_alias_min_conf"])) -> bool:
+    """True when a free-vocabulary transcript contains a wake name with high confidence (every word of a
+    two-word name; names other than «Джарвис» at the stricter ``alias_min_conf``)."""
+    return names.confirmed(words, min_conf, alias_min_conf)
 
 
 def wake_soundalike_heard(words: Sequence[Word], min_conf: float) -> bool:

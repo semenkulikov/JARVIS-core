@@ -8,6 +8,7 @@ import datetime
 import re
 from typing import Any, Mapping
 from jarvis.core.fold import fold
+from jarvis.core.names import PRIORITY_WORDS
 
 DEFAULTS: dict[str, Any] = {
     "proactive_enabled": True, "proactive_quiet_start": "23:00", "proactive_quiet_end": "08:00",
@@ -23,7 +24,7 @@ REPLIES = ["Не беспокою, сэр.", "Уведомления включ�
            "Сэр, до нормы белка осталось больше шестидесяти граммов. Не забудьте про ужин."]
 STRESS = {w.replace("+", ""): w for w in ["б+ольше", "ч+ерез", "беспок+ою", "уведомл+ения", "включен+ы", "тренир+овка", "пятн+адцать",
                                          "шест+идесяти", "гр+аммов", "заб+удьте", "+ужин", "начн+ется", "соб+ытие"]}
-WAKE_NAMES = {"джарвис", "жарвис", "джервис", "дарвис", "гарвис", "джарви", "джави", "jarvis"}
+WAKE_NAMES = frozenset(PRIORITY_WORDS)  # only «Джарвис» interrupts speech (jarvis.core.names)
 
 
 def intent(text: str) -> dict[str, Any] | None:

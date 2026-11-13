@@ -117,6 +117,7 @@ class Listener:
                 self._consume_stop(); c.outbox.signal.stop(); return False
         if model_error: raise model_error[0]
         c.state.model = model_box[0]
+        c.asr.check_vocabulary(cfg)
         return True
 
     def _load_oww(self, cfg: Config) -> Any:
@@ -147,7 +148,7 @@ class Listener:
         level = c.input_volume()
         if level is not None: log.info("windows input volume %.0f%% (default microphone, not changed)", level * 100)
         c.speaker.preload(cfg)
-        lp.wrec = c.asr.wake_recognizer(); lp.lastlvl = time.time(); lp.lastmem = time.monotonic()
+        lp.wrec = c.asr.wake_recognizer(cfg); lp.lastlvl = time.time(); lp.lastmem = time.monotonic()
         while True:
             try:
                 if self.step(lp) == STOP: break
@@ -274,10 +275,9 @@ class Listener:
     def _after_busy(self, lp: Loop) -> bool:
         """First frame after a conversation: reset detectors, then a stop ack or the interrupting turn. True when one started."""
         c = self.c
-        lp.was_busy = False; lp.last_end = time.time(); lp.wrec = c.asr.wake_recognizer(); lp.wbase = lp.pos; lp.wake_check = None
+        lp.was_busy = False; lp.last_end = time.time(); lp.cfg = c.config.load(); lp.wrec = c.asr.wake_recognizer(lp.cfg); lp.wbase = lp.pos; lp.wake_check = None
         lp.clap.events = []; lp.clap.cur = None
         if lp.oww is not None: lp.oww.reset()
-        lp.cfg = c.config.load()
         if c.state.stop_pending:
             c.state.stop_pending = False; lp.pending = None; self.start("stop_ack", text=""); return True
         if lp.pending is not None:
@@ -286,26 +286,26 @@ class Listener:
         return False
 
     def _while_sleeping(self, lp: Loop, st: int, i16: np.ndarray) -> None:
-        """Sleep: no clap, no wake word, no follow-ups. Only a strict «Джарвис, проснись»."""
+        """Sleep: no clap, no wake word, no follow-ups. Only a strict «<имя>, проснись»."""
         c, cfg = self.c, lp.cfg
         lp.wake_check = None
-        if lp.srec is None: lp.srec = c.asr.sleep_recognizer(); lp.sbase = st
+        if lp.srec is None: lp.srec = c.asr.sleep_recognizer(cfg); lp.sbase = st
         if not lp.srec.AcceptWaveform(i16.tobytes()): return
         ws = json.loads(lp.srec.Result()).get("result", [])
         said = " ".join(w.get("word", "") for w in ws)
-        min_conf = GATE.setting(cfg, "sleep_wake_min_conf")
-        if SLEEP.is_wake_phrase(said) and min(w.get("conf", 0) for w in ws) >= 0.9:
+        min_conf = GATE.setting(cfg, "sleep_wake_min_conf"); names = c.asr.names(cfg)
+        if SLEEP.is_wake_phrase(said, names) and min(w.get("conf", 0) for w in ws) >= 0.9:
             a = lp.sbase + int((ws[0]["start"] - 0.45) * SR); b = lp.sbase + int((ws[-1]["end"] + 0.3) * SR)
             if c.asr.verify_wake(lp.ring, a, b, cfg, need=("проснись",), min_conf=min_conf):
                 c.sleep.get().stop("phrase"); lp.srec = None
                 self.start("sleep_end", text="")
-        elif said == SLEEP.HINT_WORD and ws and ws[0].get("conf", 0) >= 0.9 and self.conversation.sleep_hint_due(cfg):
+        elif ws and SLEEP.is_hint_word(said, names) and min(w.get("conf", 0) for w in ws) >= 0.9 and self.conversation.sleep_hint_due(cfg):
             a = lp.sbase + int((ws[0]["start"] - 0.45) * SR); b = lp.sbase + int((ws[-1]["end"] + 0.3) * SR)
             if c.asr.verify_wake(lp.ring, a, b, cfg, min_conf=min_conf) and c.speaker.owner_confirmed(lp.ring, b, cfg):
                 c.state.sleep_hint_at = time.time(); self.start("sleep_hint", text="")
 
     def _detect_wake(self, lp: Loop, x: np.ndarray, st: int, i16: np.ndarray, sc: float) -> None:
-        """Clap, openWakeWord and the Vosk «джарвис» grammar; a weak hit is re-checked by free recognition."""
+        """Clap, openWakeWord and the Vosk name grammar (jarvis.core.names); a weak hit is re-checked by free recognition."""
         c, cfg = self.c, lp.cfg
         trig: str | None = None; frm: int | None = None; skip = 0.0
         if cfg["clap_enabled"] and lp.clap.feed(x, st, cfg): trig = "clap"
@@ -317,11 +317,11 @@ class Listener:
                     if c.speaker.ok(lp.ring, lp.pos, cfg): trig = "wake_word"
                 else: lp.wake_check = {"a": frm, "b": lp.pos + int(0.3 * SR), "frm": frm, "src": "oww"}
             if lp.wrec.AcceptWaveform(i16.tobytes()):
-                res = json.loads(lp.wrec.Result())
-                ws = [w for w in res.get("result", []) if w.get("word") == "джарвис"]
-                if ws and ws[0].get("conf", 0) >= cfg["vosk_wake_min_conf"]:
+                hit = c.asr.wake_hit(json.loads(lp.wrec.Result()).get("result", []), cfg)
+                ws = hit[0] if hit else []
+                if hit and hit[1]:
                     if not trig and (lp.wake_check is None or lp.wake_check["src"] == "oww"):
-                        log.info("vosk wake candidate conf %.2f", ws[0]["conf"])
+                        log.info("vosk wake candidate %r conf %.2f", " ".join(w.get("word", "") for w in ws), min(w.get("conf", 0) for w in ws))
                         lp.wake_check = {"a": lp.wbase + int((ws[0]["start"] - float(GATE.setting(cfg, "wake_verify_pre_s"))) * SR),
                                          "b": lp.wbase + int((ws[-1]["end"] + float(GATE.setting(cfg, "wake_verify_post_s"))) * SR),
                                          "frm": lp.wbase + int(ws[-1]["end"] * SR) - int(VOSK_WAKE_TAIL_S * SR), "src": "vosk"}

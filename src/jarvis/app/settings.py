@@ -15,6 +15,7 @@ from jarvis.app import server_jobs as SERVER_JOBS
 from jarvis.core import dialog as DIALOG
 from jarvis.core import food as FOOD
 from jarvis.core import gate as GATE
+from jarvis.core import names as NAMES
 from jarvis.core import proactive as PROACTIVE
 from jarvis.core import projects as PROJECTS
 from jarvis.core import sleep as SLEEP
@@ -91,7 +92,7 @@ DEFAULTS: dict[str, Any] = {
 DEFAULTS.update(PROACTIVE.DEFAULTS)
 DEFAULTS.update({k: v for k, v in GATE.DEFAULTS.items() if k not in DEFAULTS})
 DEFAULTS.update({k: v for k, v in SPEAKER.DEFAULTS.items() if k not in DEFAULTS})
-for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP, SERVER_JOBS): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
+for _mod in (CODE, PROJECTS, FOOD, DIALOG, SLEEP, SERVER_JOBS, NAMES): DEFAULTS.update({k: v for k, v in _mod.DEFAULTS.items() if k not in DEFAULTS})
 
 
 def finalize(cfg: dict[str, Any], home: str) -> None:

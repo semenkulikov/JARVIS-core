@@ -157,7 +157,7 @@ class Pipeline:
         """The listener's wake path over [background, clip, background]: candidate, verify, owner voice."""
         cfg = self.cfg; x = np.concatenate([bg, audio, bg, bg]).astype(np.float32); self.last_score = None
         ring: list[tuple[int, np.ndarray]] = []; pos = 0
-        wrec = self.asr.wake_recognizer(); oww = self.oww_factory() if self.oww_factory else None
+        wrec = self.asr.wake_recognizer(cfg); oww = self.oww_factory() if self.oww_factory else None
         check: Optional[dict[str, Any]] = None
         out: dict[str, Any] = {"candidate": False, "conf": None, "oww": 0.0, "verify": None, "speaker_ok": None,
                                "triggered": False, "frm": None, "skip": 0.0}
@@ -173,10 +173,11 @@ class Pipeline:
                     out.update(verify=True, speaker_ok=strong, triggered=strong, frm=frm, ring=ring); return out
                 check = {"a": frm, "b": pos + int(0.3 * SR), "frm": frm, "src": "oww"}
             if wrec.AcceptWaveform(i16.tobytes()):
-                ws = [w for w in json.loads(wrec.Result()).get("result", []) if w.get("word") == "джарвис"]
-                if ws:
-                    out["conf"] = round(float(ws[0].get("conf", 0)), 3)
-                    if ws[0].get("conf", 0) >= cfg["vosk_wake_min_conf"] and (check is None or check["src"] == "oww"):
+                hit = self.asr.wake_hit(json.loads(wrec.Result()).get("result", []), cfg)
+                if hit:
+                    ws = hit[0]
+                    out["conf"] = round(min(float(w.get("conf", 0)) for w in ws), 3)
+                    if hit[1] and (check is None or check["src"] == "oww"):
                         out["candidate"] = True
                         check = {"a": int((ws[0]["start"] - float(GATE.setting(cfg, "wake_verify_pre_s"))) * SR),
                                  "b": int((ws[-1]["end"] + float(GATE.setting(cfg, "wake_verify_post_s"))) * SR),

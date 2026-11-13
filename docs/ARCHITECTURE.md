@@ -49,7 +49,7 @@ flowchart TB
     subgraph core[core: чистая логика]
         PORTS[ports: Protocol]
         ROUTE[routing: разбор фразы, выбор]
-        WAKE[wake, matching: имя, границы и нормализация фразы]
+        WAKE[names, wake, matching: имена, границы и нормализация фразы]
         STATE[state: автомат и данные разговора]
         CFG[config, followup: значения, проверка, типы]
         QUICK[quick, numbers, fold: быстрые команды, числа, длительности]
@@ -281,6 +281,7 @@ stateDiagram-v2
 | `jarvis/core/config.py` | 94 | `ConfigStore`, проверка типов, слияние псевдонимов |
 | `jarvis/core/matching.py` | 87 | Нормализация фразы, обрывки, паразиты, эхо, «стоп» |
 | `jarvis/core/phrases.py` | 86 | Болтовня, выбор фразы без повторов, список фраз для кэша |
+| `jarvis/core/names.py` | 150 | Имена помощника — единственный источник: грамматика имени, правила, фразы пробуждения, проверка словаря |
 | `jarvis/core/wake.py` | 65 | Имя в начале фразы, конец фразы |
 | `jarvis/core/status.py` | 60 | Политика свежести кэша статуса, ответ из снимка |
 | `jarvis/core/followup.py` | 37 | `FollowupSettings` |

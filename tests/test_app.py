@@ -81,7 +81,7 @@ def test_test_trigger_starts_a_test_turn(app, loop):
 
 def test_stop_after_speech_plays_the_stop_ack(app, loop, monkeypatch):
     lp, started = loop
-    monkeypatch.setattr(app.c.asr, "wake_recognizer", lambda: "wake-rec")
+    monkeypatch.setattr(app.c.asr, "wake_recognizer", lambda cfg=None: "wake-rec")
     lp.was_busy = True; app.c.state.stop_pending = True; lp.pending = 123
     assert app.listener._after_busy(lp) is True
     assert started == [("stop_ack", {"text": ""})] and lp.pending is None and lp.wrec == "wake-rec" and not app.c.state.stop_pending
@@ -134,7 +134,7 @@ def test_listener_runs_until_the_stop_file(app, cfg, monkeypatch, caplog):
         def stop(self): pass
     monkeypatch.setattr(c.asr, "quiet", lambda: None)
     monkeypatch.setattr(c.asr, "load_model", lambda path: "model:" + os.path.basename(path))
-    monkeypatch.setattr(c.asr, "wake_recognizer", Rec)
+    monkeypatch.setattr(c.asr, "wake_recognizer", lambda cfg=None: Rec())
     monkeypatch.setattr(c.mic, "open", lambda sd, dev: Stream())
     monkeypatch.setattr(c.speaker, "preload", lambda cfg: None)
     monkeypatch.setattr(c.outbox, "signal", Signal())

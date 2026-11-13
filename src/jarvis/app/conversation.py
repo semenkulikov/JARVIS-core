@@ -202,7 +202,7 @@ class Conversation:
                 text, ok = choose(text, conf, g, cfg)
                 if st.dropped: self.not_understood(trig, cfg, st.drop_reason, text); return
             else:
-                text = strip_wake(norm_phrase(text))
+                text = strip_wake(norm_phrase(text), c.asr.names(cfg))
                 if trig != "followup":
                     st.last_input_conf = 1.0
                     st.last_input_end = None
