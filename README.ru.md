@@ -7,7 +7,7 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 
-Текущая версия: 3.24.0 — см. [историю изменений](CHANGELOG.md).
+Текущая версия: 3.25.0 — см. [историю изменений](CHANGELOG.md).
 
 Офлайн-голосовой помощник для Windows на русском языке. Скажите «Джарвис» (или хлопните
 дважды), назовите команду и услышите ответ. Распознавание и синтез речи работают на вашем
