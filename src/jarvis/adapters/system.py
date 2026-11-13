@@ -20,6 +20,10 @@ from jarvis.core import text as JT
 # Windows-only ctypes and os entry points (absent from the Linux stubs mypy also checks against).
 _WIN: Any = ctypes
 _WIN_OS: Any = os
+# Never closed by a protocol, whatever close_apps lists: Jarvis itself, its terminal and the shell.
+PROTECTED_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "cmd", "powershell", "pwsh", "windowsterminal", "conhost",
+                                 "openconsole", "wt", "explorer", "dwm", "winlogon", "csrss"})
+CREATE_NEW_CONSOLE = 0x00000010
 
 
 class SystemBackend:
@@ -123,6 +127,63 @@ class SystemBackend:
         r=self._run(['shutdown.exe','/a'])
         if r.returncode not in (0,1116):raise OSError('shutdown_cancel_failed')
         return r.returncode==0
+    # ------------------------------------------------------------ protocol steps
+    def launch(self, target: str) -> None:
+        """Open a configured workspace entry: a URL, an existing file or folder, else a command line."""
+        target=target.strip()
+        if not target:raise ValueError('empty_target')
+        if re.match(r'^https?://',target) or os.path.exists(os.path.expandvars(target)):_WIN_OS.startfile(os.path.expandvars(target));return
+        subprocess.Popen(target,shell=False,creationflags=0x00000008 if os.name=='nt' else 0)  # DETACHED_PROCESS
+    def _windows(self) -> list[tuple[int, int, str]]:
+        """Visible top-level windows as (hwnd, pid, process name without .exe, lower case)."""
+        u=_WIN.windll.user32;k=_WIN.windll.kernel32;out: list[tuple[int, int, str]] = []
+        proto=_WIN.WINFUNCTYPE(ctypes.c_bool,ctypes.c_void_p,ctypes.c_void_p)
+        u.GetWindowThreadProcessId.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_ulong)];u.IsWindowVisible.argtypes=[ctypes.c_void_p]
+        u.GetWindow.argtypes=[ctypes.c_void_p,ctypes.c_uint];u.GetWindow.restype=ctypes.c_void_p
+        k.OpenProcess.restype=ctypes.c_void_p;k.QueryFullProcessImageNameW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_wchar_p,ctypes.POINTER(ctypes.c_ulong)]
+        k.CloseHandle.argtypes=[ctypes.c_void_p]
+        def visit(h: Any, _: Any) -> bool:
+            if not u.IsWindowVisible(h) or u.GetWindow(h,4):return True  # GW_OWNER: skip dialogs owned by another window
+            pid=ctypes.c_ulong();u.GetWindowThreadProcessId(h,ctypes.byref(pid));name=''
+            hp=k.OpenProcess(0x1000,False,pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if hp:
+                buf=ctypes.create_unicode_buffer(520);size=ctypes.c_ulong(520)
+                if k.QueryFullProcessImageNameW(hp,0,buf,ctypes.byref(size)):name=Path(buf.value).stem.lower()
+                k.CloseHandle(hp)
+            out.append((int(h),int(pid.value),name));return True
+        u.EnumWindows(proto(visit),None);return out
+    def close_apps(self, names: list[str], protect: set[int]) -> int:
+        """Ask the windows of the listed processes to close (WM_CLOSE, like the × button); never kills.
+        An app that asks «save?» stays open. Jarvis, its terminal and the shell are never touched."""
+        wanted={Path(n.strip().lower()).stem for n in names if n.strip()}-PROTECTED_PROCESSES;count=0
+        if not wanted:return 0
+        u=_WIN.windll.user32;u.PostMessageW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_ssize_t]
+        for h,pid,name in self._windows():
+            if name in wanted and pid not in protect and u.PostMessageW(h,0x10,0,0):count+=1
+        return count
+    def minimize_all(self) -> None:
+        u=_WIN.windll.user32;u.FindWindowW.restype=ctypes.c_void_p;u.FindWindowW.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p]
+        tray=u.FindWindowW('Shell_TrayWnd',None)
+        if not tray:raise OSError('taskbar_not_found')
+        u.SendMessageW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_ssize_t];u.SendMessageW(tray,0x111,419,0)  # WM_COMMAND MIN_ALL
+    def screen_size(self) -> tuple[int, int]:
+        u=_WIN.windll.user32;return int(u.GetSystemMetrics(0)),int(u.GetSystemMetrics(1))
+    def open_console(self, command: str, title: str, rect: tuple[int, int, int, int], cwd: str | None = None) -> int:
+        """A classic console window with green text running ``command`` (the caller passes only
+        whitelisted commands), moved to ``rect``; returns the process id to close it later."""
+        title=re.sub(r'[^\w -]','',title)[:40] or 'jarvis'
+        p=subprocess.Popen(['conhost.exe','cmd.exe','/k','title '+title+' & color 0a & '+command],cwd=cwd,creationflags=CREATE_NEW_CONSOLE)
+        u=_WIN.windll.user32;u.FindWindowW.restype=ctypes.c_void_p;u.FindWindowW.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p]
+        u.MoveWindow.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_bool]
+        for _ in range(30):  # the console sets its title a moment after start
+            h=u.FindWindowW('ConsoleWindowClass',title)
+            if h:u.MoveWindow(h,*rect,True);break
+            time.sleep(.1)
+        return int(p.pid)
+    def end_process(self, pid: int) -> None:
+        """Close a window this backend opened (the console and its command), by process id."""
+        r=self._run(['taskkill.exe','/PID',str(int(pid)),'/T','/F'])
+        if r.returncode not in (0,128):raise OSError('taskkill_failed')
     def playlist(self, url: str) -> None:
         if not re.match(r'^https?://',url):raise ValueError('invalid_playlist_url')
         _WIN_OS.startfile(url)

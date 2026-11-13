@@ -73,7 +73,7 @@ def build_app(home: str | Path, sd: Any = None) -> App:
 
     def shutdown_pending() -> bool:
         ctl = controller.peek()
-        return ctl is not None and bool(getattr(ctl, "pending_shutdown", None))
+        return ctl is not None and bool(getattr(ctl, "pending", None))
 
     player = AUDIO.Player(sd); accent = Accentizer()
     config = settings.config_store(paths.home); transport = WebhookTransport(signals, ledger)

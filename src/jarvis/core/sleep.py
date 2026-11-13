@@ -25,6 +25,7 @@ SLEEP_RE = re.compile(rf"^(?:{_ENTER}|{_VERB})(?: (?:на|в течение) (?P
 # Bare «режим сна» stays the old desktop sleep command (screen off + lock) from jarvis.core.quick.
 LEGACY_BARE = {"режим сна", "режим сон", "включи режим сна", "включи режим сон"}
 WAKE_FILE = "wake_up"
+SOUNDING_TIMERS = ("timer",)  # timer kinds that still ring in sleep mode
 WAKE_HINT = "Разбудить: Джарвис, проснись."
 DEFAULTS = {"sleep_hint_enabled": True, "sleep_hint_interval_s": 600}
 

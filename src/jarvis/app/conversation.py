@@ -34,6 +34,11 @@ from jarvis.core.wake import strip_wake
 log = logging.getLogger("jarvis")
 SLEEP_END_PHRASE = "Я снова на связи, сэр."
 TIMER_DONE_PHRASE = "Сэр, время вышло."
+# A spoken «да» / «нет» answers the action waiting for it (jarvis.commands.controller.Controller.ask).
+CONFIRMATIONS: dict[str, dict[str, Any]] = {
+    "shutdown": {"name": "shutdown_confirmation", "action": "quick2", "cmd": "shutdown_confirm"},
+    "protocol": {"name": "protocol_confirmation", "action": "protocol_confirm"},
+}
 MORNING_TEXT = "Составь короткий утренний брифинг по моим свежим данным. Ответ только в указанном proactive outbox, без вводного подтверждения."
 MORNING_PLAN_TEXT = ("Составь план на сегодня с рекомендациями: задачи и события из всех подключённых источников, питание и тренировки, "
                      "что делать и во сколько, связным текстом, а не списком. Ответ только в указанном proactive outbox, без вводного подтверждения.")
@@ -65,6 +70,10 @@ class Conversation:
     def stop_reply(self) -> None:
         """«Стоп» as a command: cancel the server reply a barge-in has just cut."""
         self.c.jobs.cancel_paused("stop command")
+
+    def beep(self) -> None:
+        try: self.c.voice.beep()
+        except Exception as e: log.info("beep failed: %s", type(e).__name__)
 
     def pick(self, cfg: Config, key: str) -> str: return self.c.picker.pick(cfg, key)
     def controller(self) -> Controller: return self.c.controller.get()
@@ -249,7 +258,7 @@ class Conversation:
                 self.not_understood(trig, cfg, st.drop_reason or ("empty" if not text else "rejected"), text); return
             self.perf("recognized")
             confirmation = self.controller().confirmation(text, trig, st.last_input_conf, heard_at=st.last_input_end)
-            al = ({"name": "shutdown_confirmation", "action": "quick2", "cmd": "shutdown_confirm", **confirmation}
+            al = (CONFIRMATIONS.get(str(confirmation.get("kind")), CONFIRMATIONS["shutdown"]) | confirmation
                   if confirmation is not None else match_alias(text, cfg))
             self.perf("route", route=(al.get("name", "local") if al else "webhook"))
             st.followup_eligible = not (al and al.get("action") == "stop")
@@ -282,8 +291,8 @@ class Conversation:
                 spoken = st.last_spoken
                 window = fs.window_for(spoken)
                 ctl = c.controller.peek()
-                if ctl is not None and ctl.pending_shutdown:
-                    window = max(0.0, ctl.pending_shutdown["expires"] - ctl.clock())
+                if ctl is not None and ctl.pending:
+                    window = max(0.0, ctl.pending["expires"] - ctl.clock())
                 if window <= 0: break
                 guard = fs.echo_guard_s
                 st.followup_guard = True

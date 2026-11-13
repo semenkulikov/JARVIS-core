@@ -27,6 +27,9 @@ class FakeServices:
     def stop_reply(self):
         self.stopped_reply = True
 
+    def beep(self):
+        self.beeps = getattr(self, "beeps", 0) + 1
+
     def pick(self, cfg, key):
         return f"<{key}>"
 

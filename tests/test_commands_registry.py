@@ -13,7 +13,7 @@ def test_every_action_has_a_handler():
     handlers = registry.load_builtin()
     actions = {a.get("action", "say") for a in DEFAULT_ALIASES + SMALLTALK_ALIASES} | ROUTED_ACTIONS
     assert actions - set(handlers) == set()
-    assert {fn.__module__.rsplit(".", 1)[-1] for fn in handlers.values()} == {"conversation", "day", "modes", "pc", "server"}
+    assert {fn.__module__.rsplit(".", 1)[-1] for fn in handlers.values()} == {"conversation", "day", "modes", "pc", "protocols", "server"}
 
 
 def test_one_owner_per_action():

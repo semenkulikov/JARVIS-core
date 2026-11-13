@@ -262,7 +262,7 @@ stateDiagram-v2
 | `jarvis/app/components.py` | 73 | `Paths` и `Components`: все объекты слушателя |
 | `jarvis/app/listener.py` | 335 | Цикл микрофона: имя, хлопки, прерывание, сон, объявления, таймеры, память |
 | `jarvis/app/conversation.py` | 317 | Ход разговора, служебные триггеры, запрос серверу и озвучка его ответа, продолжение |
-| `jarvis/app/server_jobs.py` | 160 | Фоновый воркер серверных запросов: очередь `ServerJob`, POST, файлы `outbox`, отмена только «стопом» |
+| `jarvis/app/server_jobs.py` | 177 | Фоновый воркер серверных запросов: очередь `ServerJob`, POST, файлы `outbox`, отмена только «стопом» |
 | `jarvis/app/warmup.py` | 64 | Фоновый синтез частых фраз и шаблонов, проверка произношения |
 | `jarvis/app/settings.py` | 106 | Значения по умолчанию и псевдонимы, сборка конфигурации |
 | `jarvis/app/supervisor.py` | 84 | Один рабочий процесс, перезапуск после сбоя, без прав администратора |
@@ -271,9 +271,10 @@ stateDiagram-v2
 | `jarvis/commands/conversation.py` | 40 | Ответ псевдонима, болтовня, «стоп», «проснись», «что ты умеешь» |
 | `jarvis/commands/day.py` | 50 | Статус, задачи, время, тренировка |
 | `jarvis/commands/modes.py` | 28 | Спящий режим, «не беспокоить» |
+| `jarvis/commands/protocols.py` | 181 | Протоколы: шаги `STEPS`, белый список `HACKER_COMMANDS`, подтверждение, список и отмена |
 | `jarvis/commands/pc.py` | 125 | Клавиши, экран, таймеры, батарея, температура, проекты, программы |
 | `jarvis/commands/server.py` | 32 | Быстрые команды контроллера, псевдонимы на сервер |
-| `jarvis/commands/controller.py` | 149 | Выполнение быстрых команд через внедрённые порты |
+| `jarvis/commands/controller.py` | 158 | Выполнение быстрых команд через внедрённые порты |
 | `jarvis/commands/catalog.py` | 142 | Единый список команд: описание, примеры, «что ты умеешь», таблица в COMMANDS.md |
 | `jarvis/core/ports.py` | 107 | Порты `Protocol` |
 | `jarvis/core/state.py` | 127 | Режимы и переходы, данные разговора, сигналы, отменённые запросы |
@@ -287,6 +288,7 @@ stateDiagram-v2
 | `jarvis/core/followup.py` | 37 | `FollowupSettings` |
 | `jarvis/core/schedule.py` | 32 | Ответ о тренировке |
 | `jarvis/core/timetable.py` | 138 | Фиксированное расписание (`schedule`): разбор записей, время срабатывания с учётом перехода на летнее время, поля запроса брифинга |
+| `jarvis/core/protocols.py` | 148 | Протоколы, чистая часть: конфиг `protocols`, фразы с длительностью, алиасы для роутера и грамматики, сетка окон |
 | `jarvis/core/lazy.py` | 27 | `Lazy`: объект при первом обращении |
 | `jarvis/core/text.py` | 279 | Русские числа, падежи, время, латиница и словарь ударений |
 | `jarvis/core/numbers.py` | 41 | Числа и длительности на слух: «полтора часа», «двадцать пять» |
@@ -316,15 +318,15 @@ stateDiagram-v2
 | `jarvis/adapters/process.py` | 42 | Память процесса Windows |
 | `jarvis/adapters/playback.py` | 53 | Воспроизведение с остановкой из потока разговора |
 | `jarvis/adapters/fx.py` | 62 | Тембр через NumPy и SciPy |
-| `jarvis/adapters/system.py` | 128 | Действия на рабочем столе Windows за одним бэкендом |
-| `jarvis/adapters/timers.py` | 67 | Постоянные таймеры, напоминания и объявления |
+| `jarvis/adapters/system.py` | 202 | Действия на рабочем столе Windows за одним бэкендом |
+| `jarvis/adapters/timers.py` | 69 | Постоянные таймеры, напоминания и объявления |
 | `jarvis/adapters/laptop.py` | 120 | Медиаклавиши, экран, батарея, температура, папки проектов, Cursor |
 | `jarvis/adapters/proactive.py` | 287 | Постоянная очередь проактивных сообщений, утренний брифинг и расписание `schedule` |
 | `jarvis/adapters/runtime.py` | 81 | Одна копия, намеренная остановка, нарастающая пауза после сбоев |
 | `jarvis/adapters/credentials.py` | 91 | Только свои записи в диспетчере учётных данных Windows |
 | `jarvis/adapters/paths.py` | 39 | Пути рабочего каталога. При импорте файлы не создаёт |
 | `jarvis/adapters/project_tools.py` | 123 | Проверка серверов по HTTP/TCP и запуск тестов проектов без оболочки |
-| `jarvis/adapters/sleep_store.py` | 67 | Время окончания сна на диске |
+| `jarvis/adapters/sleep_store.py` | 71 | Время окончания сна на диске |
 | `jarvis/adapters/food_diary.py` | 160 | Кэш продуктов, дневник FatSecret и журнал записей против дублей |
 | `jarvis/adapters/fatsecret.py` | 57 | Клиент OAuth1 для FatSecret |
 

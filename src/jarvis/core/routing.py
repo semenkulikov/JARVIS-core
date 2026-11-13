@@ -9,6 +9,7 @@ from typing import Any, Callable
 from jarvis.core import quick as QUICK
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
+from jarvis.core import protocols as PROTOCOLS
 from jarvis.core import sleep as SLEEP
 from jarvis.core.fuzzy import fuzzy_alias
 from jarvis.core import tasks as TASKS
@@ -47,6 +48,8 @@ def match_alias(text: str, cfg: Config) -> Alias | None:
     if secs: return {"name": "jarvis_sleep", "action": "jarvis_sleep", "seconds": secs}
     proactive = PROACTIVE.intent(text)
     if proactive: return proactive
+    protocol = PROTOCOLS.intent(text, cfg)
+    if protocol: return protocol
     task = TASKS.intent(text)
     if task: return task
     toks = norm_phrase(text)

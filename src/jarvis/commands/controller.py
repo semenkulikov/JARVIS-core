@@ -30,7 +30,8 @@ class Controller:
                  food: Callable[[Config], FoodLog], screenshots: Path, clock: Callable[[], float] = time.monotonic) -> None:
         self.base = Path(base); self.backend = backend; self.timers = timers; self.tools = tools; self.food = food
         self.screenshots = screenshots; self.clock = clock
-        self.pending_shutdown: dict[str, float] | None = None; self.notes_lock = threading.Lock()
+        self.pending: dict[str, Any] | None = None; self.notes_lock = threading.Lock()
+        self.protocol_pids: list[int] = []  # console windows a protocol opened, closed by «отмена протокола»
 
     def announce(self, text: str) -> None:
         """Spoken later by the listener loop, like a fired timer (respects quiet hours and sleep)."""
@@ -44,16 +45,25 @@ class Controller:
         if not text.strip():say('Не вижу текста ошибки, сэр. Скопируйте его в буфер обмена.',cfg);return True
         log.info('explain_error source=%s chars=%d truncated=%s',source,len(text),truncated)
         forward(CODE.EXPLAIN_INSTRUCTION,kind=CODE.EXPLAIN_KIND,extra_payload=CODE.explain_payload(text,truncated,source));return True
-    def clear_pending(self) -> None: self.pending_shutdown = None
+    def clear_pending(self) -> None: self.pending = None
+    def ask(self, kind: str, cfg: Config, **payload: Any) -> None:
+        """Wait ``shutdown_confirm_window_s`` for a follow-up «да» for this action."""
+        self.pending=dict(payload,kind=kind,expires=self.clock()+float(cfg.get('shutdown_confirm_window_s',10)))
     def confirmation(self, text: str, trigger: str, confidence: float, heard_at: float | None = None) -> dict[str, Any] | None:
-        pending=self.pending_shutdown
+        pending=self.pending
         if not pending:return None
-        self.pending_shutdown=None
+        self.pending=None
         value=norm(text).strip(' .')
         if value not in ('да','подтверждаю','да подтверждаю','нет','не надо','отмена','отмени'):return None
         heard=self.clock() if heard_at is None else heard_at
-        if trigger!='followup' or heard>pending['expires'] or confidence<.8:return {'approved':False,'reason':'expired_or_untrusted'}
-        return {'approved':value in ('да','подтверждаю','да подтверждаю'),'seconds':pending['seconds']}
+        payload={k:v for k,v in pending.items() if k!='expires'}
+        if trigger!='followup' or heard>pending['expires'] or confidence<.8:return dict(payload,approved=False,reason='expired_or_untrusted')
+        return dict(payload,approved=value in ('да','подтверждаю','да подтверждаю'))
+    def start_focus(self, cfg: Config) -> str:
+        """Focus mode without speaking: music paused, a break timer; returns the phrase to say."""
+        self.timers.cancel_groups(['focus','workout']);self.backend.media(False)
+        minutes=int(cfg.get('focus_minutes',25));self.timers.add(minutes*60,'Сэр, время сделать перерыв.',kind='timer',group='focus')
+        return 'Режим фокуса, сэр. Музыка на паузе, таймер на '+str(minutes)+' минут.'
     def execute(self, a: Mapping[str, Any], text: str, cfg: Config, say: Say, forward: Forward, last_reply: str = '', last_private: bool = False,
                 trigger: str = 'wake_word', confidence: float = 1, test: bool = False) -> bool:
         """Returns False to close follow-up; normal result True. say(text,cfg,role=...)."""
@@ -120,7 +130,7 @@ class Controller:
                 secs=a.get('seconds')
                 if not secs or secs<60 or secs>86400:say('Назовите задержку выключения от минуты до суток, сэр.',cfg);return True
                 ok=say('Выключить ноутбук через '+duration_label(secs)+'? Несохранённые данные могут быть потеряны. Скажите да или подтверждаю. Подтверждаете?',cfg)
-                if ok:self.pending_shutdown={'seconds':secs,'expires':self.clock()+float(cfg.get('shutdown_confirm_window_s',10))}
+                if ok:self.ask('shutdown',cfg,seconds=secs)
                 return True
             if cmd=='shutdown_confirm':
                 if a.get('approved'):b.shutdown(a['seconds']);say('Выключение запланировано, сэр. Для отмены скажите: отмени выключение.',cfg)
@@ -131,8 +141,7 @@ class Controller:
             if cmd=='mode':
                 mode=a['mode']
                 self.timers.cancel_groups(['focus','workout'])
-                if mode=='focus':
-                    b.media(False);self.timers.add(int(cfg.get('focus_minutes',25))*60,'Сэр, время сделать перерыв.',kind='timer',group='focus');say('Режим фокуса, сэр. Музыка на паузе, таймер на '+str(cfg.get('focus_minutes',25))+' минут.',cfg)
+                if mode=='focus':say(self.start_focus(cfg),cfg)
                 elif mode=='sleep':
                     say('Режим сна, сэр. Гашу экран и блокирую ноутбук.',cfg,role='ack');b.media(False);b.mute(True);b.monitor_off();b.lock();return False
                 else:

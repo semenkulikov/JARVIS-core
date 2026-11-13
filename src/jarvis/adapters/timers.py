@@ -51,13 +51,15 @@ class PersistentTimers:
             try:self._save()
             except Exception:self.items=old;raise
             return len(old)-len(self.items)
-    def pop_fired(self, limit: int = 1) -> list[dict[str, str]]:
+    def pop_fired(self, limit: int = 1, kinds: Iterable[str] | None = None) -> list[dict[str, str]]:
+        """Fired items, oldest first; with ``kinds`` only those (the rest wait for their turn)."""
+        only=None if kinds is None else frozenset(kinds)
         with self.lock:
             if self.error:return []
             now=self.clock();out: list[dict[str, str]] = [];changed=False;old=[dict(r) for r in self.items]
             for r in sorted(list(self.items),key=lambda x:x['due']):
                 if len(out)>=limit:break
-                if r['due']>now:continue
+                if r['due']>now or (only is not None and r['kind'] not in only):continue
                 out.append({'label':r['label'],'kind':r['kind']});changed=True
                 if r['interval']:r['due']+=((now-r['due'])//r['interval']+1)*r['interval']
                 else:self.items.remove(r)

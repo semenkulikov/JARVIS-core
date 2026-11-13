@@ -19,6 +19,7 @@ import numpy as np
 
 from jarvis.core import gate as GATE
 from jarvis.core import proactive as PROACTIVE
+from jarvis.core import protocols as PROTOCOLS
 from jarvis.adapters import runtime as RUNTIME
 from jarvis.core import sleep as SLEEP
 from jarvis.adapters.audio import AGC, CHUNK, SR, Capture, ClapDetector, frames_after, pick_device
@@ -117,7 +118,7 @@ class Listener:
                 self._consume_stop(); c.outbox.signal.stop(); return False
         if model_error: raise model_error[0]
         c.state.model = model_box[0]
-        c.asr.check_vocabulary(cfg)
+        c.asr.check_vocabulary(cfg, PROTOCOLS.phrases(cfg))
         return True
 
     def _load_oww(self, cfg: Config) -> Any:
@@ -179,8 +180,10 @@ class Listener:
         lp.sleeping = sleeping = sleep.active()
         idle = not busy.is_set() and not lp.was_busy
         if idle: c.fsm.to(Mode.SLEEP if sleeping else Mode.IDLE, "sleep" if sleeping else "awake")
-        if idle and sleep.poll(c.paths.at(SLEEP.WAKE_FILE)):
-            lp.srec = None; self.start("sleep_end", text=""); return NEXT
+        woke = sleep.poll(c.paths.at(SLEEP.WAKE_FILE)) if idle else None
+        if woke:
+            lp.srec = None; lp.sleeping = sleeping = False
+            if woke != "timeout_quiet": self.start("sleep_end", text=""); return NEXT  # the alarm speaks instead
         cfg = lp.cfg
         if time.monotonic() >= lp.next_proactive:
             lp.next_proactive = time.monotonic() + max(1, float(cfg.get("proactive_tick_s", 5)))
@@ -192,8 +195,10 @@ class Listener:
         if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending:
             job = c.jobs.ready()
             if job is not None: self.start("server_reply", text=job, trace=job.trace); return NEXT
-        if not sleeping and not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending and lp.pm.can_speak(cfg):
-            for notice in c.controller.get().timers.pop_fired(limit=1): self.start("timer_fire", text=notice, test=False); break
+        if not busy.is_set() and not lp.was_busy and lp.pending is None and not st.stop_pending and lp.pm.can_speak(cfg):
+            # Asleep, only timers ring (and the schedule alarm above); reminders and notices wait for the wake-up.
+            for notice in c.controller.get().timers.pop_fired(limit=1, kinds=SLEEP.SOUNDING_TIMERS if sleeping else None):
+                self.start("timer_fire", text=notice, test=False); break
         if time.time() - lp.lastlvl > cfg["level_log_interval_s"]:
             c.mic.levels.report(); lp.lastlvl = time.time()
         if time.monotonic() - lp.lastmem > float(cfg.get("memory_log_interval_s", 1800)):
