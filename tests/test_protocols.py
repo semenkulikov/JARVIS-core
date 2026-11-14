@@ -39,7 +39,7 @@ class Backend:
     def shutdown(self, secs): self._do("shutdown", secs)
     def launch(self, target): self._do("launch", target)
     def close_apps(self, names, protect): self._do("close_apps", tuple(names), frozenset(protect)); return len(names)
-    def close_windows(self, protect): self._do("close_windows", frozenset(protect)); return 7
+    def close_windows(self, protect, keep=()): self._do("close_windows", frozenset(protect), tuple(keep)); return 7
     def minimize_all(self): self._do("minimize_all")
     def screen_size(self): return (1920, 1080)
     def open_console(self, cmd, title, rect, cwd=None): self._do("open_console", cmd, rect); self.pid += 1; return self.pid
@@ -183,6 +183,7 @@ def test_bobik_runs_at_once_without_a_question(cfg, rig):
     run(alias(cfg, "протокол бобик сдох"), "", cfg, s)
     assert names(j) == ["close_windows", "minimize_all", "media", "lock"]  # every window, not a list
     assert os.getpid() in j[0][1]  # Jarvis protects itself
+    assert j[0][2] == ("Grok Bot",)  # default close_all_protect: the Grok Bot desktop app
     assert s.said == ["Бобик сдох, сэр."] and ctl.pending is None
 
 
@@ -420,4 +421,18 @@ def test_wt_launch_args_skips_new_window_on_a_cold_start():
     warm = wt_launch_args("wt.exe", "PENTAGON GENACT", "right.cmd", already_open=True)
     assert warm[:3] == ["wt.exe", "--window", "new"]
     assert warm[-3:] == ["cmd.exe", "/c", "right.cmd"]
+
+
+def test_process_stems_normalize_names_and_paths():
+    from jarvis.adapters.system import process_stems, SHELL_PROCESSES
+    assert process_stems(["Grok Bot", "Grok Bot.exe", r"C:\Program Files\Grok Bot\Grok Bot.exe"]) == {"grok bot"}
+    assert process_stems(["  "]) == set()
+    assert "python" in SHELL_PROCESSES and "pythonw" in SHELL_PROCESSES
+
+
+def test_close_all_uses_the_configured_protect_list(cfg, rig):
+    j, s, _ = rig()
+    cfg["close_all_protect"] = ["Grok Bot.exe", "notepad"]
+    run({"name": "x", "action": "protocol", "protocol": "Бобик сдох"}, "", cfg, s)
+    assert j[0][0] == "close_windows" and j[0][2] == ("Grok Bot.exe", "notepad")
 

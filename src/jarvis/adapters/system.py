@@ -11,7 +11,7 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from jarvis.adapters import laptop as LAPTOP
 from jarvis.core import codemode as CODE
@@ -27,6 +27,11 @@ SHELL_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "explorer", "dwm"
                              "systemsettingsbroker", "applicationframehost"})
 PROTECTED_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "cmd", "powershell", "pwsh", "windowsterminal", "conhost",
                                  "openconsole", "wt", "explorer", "dwm", "winlogon", "csrss"})
+
+
+def process_stems(names: Iterable[Any]) -> set[str]:
+    """Lower-case process stems (no path, no «.exe») from a config list of names or paths."""
+    return {Path(str(n).strip().lower()).stem for n in names if str(n).strip()}
 CREATE_NEW_CONSOLE = 0x00000010
 # Default-terminal console owner used by Windows 11 when Windows Terminal is selected.
 WT_DELEGATION_CONSOLE = "2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69"
@@ -294,12 +299,14 @@ class SystemBackend:
         for h,pid,name in self._windows():
             if name in wanted and pid not in protect and u.PostMessageW(h,0x10,0,0):count+=1
         return count
-    def close_windows(self, protect: set[int]) -> int:
+    def close_windows(self, protect: set[int], keep: Iterable[str] = ()) -> int:
         """Ask every open user window to close (WM_CLOSE, like the × button); never kills. Jarvis
-        (``protect`` pids and Python), Explorer and system UI hosts stay; unsaved work keeps its window."""
+        (``protect`` pids and Python), Explorer, system UI hosts and ``keep`` process names
+        (see ``close_all_protect``) stay; unsaved work keeps its window."""
+        held = SHELL_PROCESSES | process_stems(keep)
         u=_WIN.windll.user32;u.PostMessageW.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_size_t,ctypes.c_ssize_t];count=0
         for h,pid,name in self._windows():
-            if name and name not in SHELL_PROCESSES and pid not in protect and u.PostMessageW(h,0x10,0,0):count+=1
+            if name and name not in held and pid not in protect and u.PostMessageW(h,0x10,0,0):count+=1
         return count
     def minimize_all(self) -> None:
         u=_WIN.windll.user32;u.FindWindowW.restype=ctypes.c_void_p;u.FindWindowW.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p]

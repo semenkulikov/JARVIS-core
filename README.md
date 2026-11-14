@@ -22,7 +22,7 @@ forwarded to your own AI server through a simple webhook.
   and a bedtime reminder (`schedule`).
 - **Protocols:** one phrase runs a chain of steps. «протокол спящая красавица» is for going to bed
   or a call: pause music and keep Jarvis silent until the alarm (or «… на час»), windows stay open.
-  «протокол бобик сдох» ends the workday at once: close every window, pause music, lock the screen.
+  «протокол бобик сдох» ends the workday at once: close windows except protected ones (Jarvis, Grok Bot), pause music, lock the screen.
   Personal steps (paths, hosts) can live in a local gitignored file merged over the config.
 - **Cheat sheet overlay:** «покажи шпаргалку» / «убери шпаргалку» or Ctrl+Alt+J toggles a card styled like the
   Xbox Game Bar Performance widget: protocols, main commands and every command by category in foldable sections,

@@ -27,12 +27,15 @@ DEFAULTS: dict[str, Any] = {
          "reply": "Рабочий режим включён, сэр.", "summary": "начало работы: программы из workspace и фокус"},
         {"name": "Бобик сдох", "phrases": ["протокол бобик сдох"],
          "steps": ["close_all", "minimize_all", "media_pause", "lock"], "reply": "Бобик сдох, сэр.",
-         "summary": "конец работы: закрыть все окна, пауза, блокировка"},
+         "summary": "конец работы: закрыть окна кроме защищённых, пауза, блокировка"},
         {"name": "Взлом Пентагона", "phrases": ["протокол взлом пентагона"], "steps": ["hacker_windows"], "reply": "Доступ получен, сэр.",
          "summary": "зелёные окна «хакера», закрыть — «отмена протокола»"},
     ],
     "workspace": [],        # programs, folders and URLs «launch» opens: paths, URLs or command lines
     "close_apps": [],       # process names «close_apps» asks to close, e.g. "telegram", "chrome"
+    # Process names «close_all» never closes, in addition to Jarvis and the shell. Stem is compared
+    # (so "Grok Bot", "Grok Bot.exe" and a full path are the same). Default keeps the Grok Bot app.
+    "close_all_protect": ["Grok Bot"],
     "protocol_hacker_windows": 6,
     # Owner-only additions kept out of git, relative to the Jarvis home (see merge_local).
     "protocols_local_file": "secrets/protocols.local.json",

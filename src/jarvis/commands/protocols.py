@@ -134,7 +134,9 @@ def _close_apps(run: Run, step: Step) -> None:
 
 
 def _close_all(run: Run, step: Step) -> None:
-    closed = run.backend.close_windows({os.getpid(), os.getppid()})
+    raw = step.params.get("protect") or run.ctx.cfg.get("close_all_protect") or []
+    keep = [str(x) for x in raw] if isinstance(raw, list) else []
+    closed = run.backend.close_windows({os.getpid(), os.getppid()}, keep)
     log.info("protocol close_all: asked %d windows to close", closed)
 
 
