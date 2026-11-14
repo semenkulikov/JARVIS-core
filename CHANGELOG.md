@@ -3,6 +3,12 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
 Номера версий — [семантические](https://semver.org/lang/ru/).
 
+## [3.26.3] — 2026-11-14
+
+### Исправлено
+
+- `process_stems` для `close_all_protect` разбирает путь Windows через `PureWindowsPath`, чтобы имя процесса совпадало и на Linux CI, и на ноутбуке.
+
 ## [3.26.2] — 2026-11-14
 
 ### Добавлено
@@ -208,6 +214,7 @@
 - Тесты без моделей, звука и сети. Проверка запускается на Windows и Linux.
 - Документация на русском, README на двух языках, шаблоны задач, `pyproject.toml` с версией и ruff.
 
+[3.26.3]: https://github.com/semenkulikov/JARVIS-core/compare/v3.26.2...v3.26.3
 [3.26.2]: https://github.com/semenkulikov/JARVIS-core/compare/v3.26.1...v3.26.2
 [3.26.1]: https://github.com/semenkulikov/JARVIS-core/compare/v3.26.0...v3.26.1
 [3.26.0]: https://github.com/semenkulikov/JARVIS-core/compare/v3.25.0...v3.26.0
