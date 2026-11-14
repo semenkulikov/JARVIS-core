@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable
 
 from jarvis.adapters import laptop as LAPTOP
@@ -30,8 +30,11 @@ PROTECTED_PROCESSES = frozenset({"python", "pythonw", "py", "pyw", "cmd", "power
 
 
 def process_stems(names: Iterable[Any]) -> set[str]:
-    """Lower-case process stems (no path, no «.exe») from a config list of names or paths."""
-    return {Path(str(n).strip().lower()).stem for n in names if str(n).strip()}
+    """Lower-case process stems (no path, no «.exe») from a config list of names or paths.
+
+    ``PureWindowsPath`` so a Windows path in config is the same stem on Linux CI as on Windows.
+    """
+    return {PureWindowsPath(str(n).strip().lower()).stem for n in names if str(n).strip()}
 CREATE_NEW_CONSOLE = 0x00000010
 # Default-terminal console owner used by Windows 11 when Windows Terminal is selected.
 WT_DELEGATION_CONSOLE = "2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69"

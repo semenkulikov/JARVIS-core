@@ -425,7 +425,12 @@ def test_wt_launch_args_skips_new_window_on_a_cold_start():
 
 def test_process_stems_normalize_names_and_paths():
     from jarvis.adapters.system import process_stems, SHELL_PROCESSES
-    assert process_stems(["Grok Bot", "Grok Bot.exe", r"C:\Program Files\Grok Bot\Grok Bot.exe"]) == {"grok bot"}
+    assert process_stems([
+        "Grok Bot",
+        "Grok Bot.exe",
+        r"C:\Program Files\Grok Bot\Grok Bot.exe",
+        "C:/Program Files/Grok Bot/Grok Bot.exe",
+    ]) == {"grok bot"}
     assert process_stems(["  "]) == set()
     assert "python" in SHELL_PROCESSES and "pythonw" in SHELL_PROCESSES
 
